@@ -1,0 +1,682 @@
+"""Representation of transforms.
+
+Transforms are essentially functions with learnable parameters."""
+
+# Copyright 2011 Matt Shannon
+
+# This file is part of armspeech.
+# See `License` for details of license and warranty.
+
+
+from __future__ import division
+
+from mathhelp import logDet
+from minimize import solveByMinimize
+from lazy import lazyproperty
+
+import math
+from numpy import *
+import mylinalg as mla
+
+# (FIXME : current parsing potentially involves _a lot_ of list copying.
+#   Refactor?  (Probably never limiting factor in time or memory though.))
+
+# FIXME : some of the asserts below should really be exceptions?
+
+def parseConcat(parsers, params):
+    outs = []
+    paramsLeft = params
+    for parser in parsers:
+        out, paramsLeft = parser(paramsLeft)
+        outs.append(out)
+    return outs, paramsLeft
+
+class DerivativeNotPositiveError(Exception):
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __str__(self):
+        return str(self.msg)
+
+class Transform(object):
+    """Function of one argument with learnable parameters.
+
+    Used to transform input to conditional distributions.
+    """
+
+    # (FIXME : should probably extend tree structure to transforms)
+    def children(self):
+        return []
+    def mapChildren(self, mapChild):
+        return self
+    def createAccG(self, createAccChild):
+        # (FIXME : ugly import!)
+        import transform_acc as xfa
+        return xfa.DerivInputTransformAccG(inputTransform = self, tag = self.tag)
+    def paramsSingle(self):
+        return self.params
+    def paramsChildren(self, paramsChild):
+        return []
+    def parseSingle(self, params):
+        return self.parse(params)
+    def parseChildren(self, params, parseChild):
+        return self, params
+    def parseAll(self, params):
+        transform, paramsLeft = self.parse(params)
+        if len(paramsLeft) != 0:
+            raise RuntimeError('extra parameters left after parsing complete')
+        return transform
+    def withTag(self, tag):
+        """Set tag and return self.
+
+        This is intended to be used immediately after object creation, such as:
+
+            transform = SomeTransform([2.0, 3.0, 4.0]).withTag('hi')
+
+        This is particularly important here since Transforms should be immutable.
+        """
+        self.tag = tag
+        return self
+
+class ConstantTransform(Transform):
+    def __init__(self, value, tag = None):
+        self.value = value
+        self.tag = tag
+    def __repr__(self):
+        return 'ConstantTransform('+repr(self.value)+', tag = '+repr(self.tag)+')'
+    @property
+    def params(self):
+        return array([])
+    def parse(self, params):
+        return ConstantTransform(self.value, tag = self.tag), params
+    def __call__(self, x):
+        return self.value
+    def deriv(self, x):
+        return zeros(shape(x) + shape(self.value))
+    def derivParams(self, x):
+        return zeros(shape(self.params) + shape(self.value))
+
+class IdentityTransform(Transform):
+    def __init__(self, tag = None):
+        self.tag = tag
+    def __repr__(self):
+        return 'IdentityTransform(tag = '+repr(self.tag)+')'
+    @property
+    def params(self):
+        return array([])
+    def parse(self, params):
+        return IdentityTransform(tag = self.tag), params
+    def __call__(self, x):
+        return x
+    def deriv(self, x):
+        if shape(x) == ():
+            return 1.0
+        else:
+            assert x.ndim == 1
+            return eye(len(x))
+    def derivDeriv(self, x):
+        assert shape(x) == ()
+        return 0.0
+    def derivParams(self, x):
+        if shape(x) == ():
+            return array([])
+        else:
+            return eye(0, len(x))
+    def derivParamsDeriv(self, x):
+        assert shape(x) == ()
+        return array([])
+    def logJac(self, x):
+        return 0.0
+    def logJacDeriv(self, x):
+        return zeros(shape(x))
+    def logJacDerivParams(self, x):
+        return array([])
+    def inv(self, y):
+        return y
+
+class DotProductTransform(Transform):
+    def __init__(self, params, tag = None):
+        self.params = params
+        self.tag = tag
+    def __repr__(self):
+        return 'DotProductTransform('+repr(self.params)+', tag = '+repr(self.tag)+')'
+    def parse(self, params):
+        n = len(self.params)
+        return DotProductTransform(params[:n], tag = self.tag), params[n:]
+    def __call__(self, x):
+        assert x.ndim == 1
+        return dot(self.params, x)
+    def deriv(self, x):
+        assert x.ndim == 1
+        return self.params
+    def derivParams(self, x):
+        assert x.ndim == 1
+        return x
+
+class LinearTransform(Transform):
+    def __init__(self, mat, tag = None):
+        assert mat.ndim == 2
+        self.mat = mat
+        self.tag = tag
+    def __repr__(self):
+        dimIn, dimOut = shape(self.mat)
+        if dimIn == 0 or dimOut == 0:
+            reprMat = 'eye('+str(dimIn)+', '+str(dimOut)+')'
+        else:
+            reprMat = repr(self.mat)
+        return 'LinearTransform('+reprMat+', tag = '+repr(self.tag)+')'
+    @property
+    def params(self):
+        return reshape(self.mat, (-1,))
+    def parse(self, params):
+        n = len(self.params)
+        matNew = reshape(params[:n], shape(self.mat))
+        return LinearTransform(matNew, tag = self.tag), params[n:]
+    def __call__(self, x):
+        assert x.ndim == 1
+        return dot(x, self.mat)
+    def deriv(self, x):
+        assert x.ndim == 1
+        return self.mat
+    def derivParams(self, x):
+        dimIn, dimOut = shape(self.mat)
+        assert shape(x) == (dimIn,)
+        if dimIn == 0 or dimOut == 0:
+            return eye(0, dimOut)
+        else:
+            return concatenate([ eye(dimOut) * xp for xp in x ], axis = 0)
+    @lazyproperty
+    def logDetMat(self):
+        return logDet(self.mat)
+    @lazyproperty
+    def invMat(self):
+        return mla.inv(self.mat)
+    def logJac(self, x):
+        assert x.ndim == 1
+        return self.logDetMat
+    def logJacDeriv(self, x):
+        assert x.ndim == 1
+        return zeros(shape(x))
+    def logJacDerivParams(self, x):
+        assert x.ndim == 1
+        return reshape(transpose(self.invMat), (-1,))
+    def inv(self, y):
+        assert y.ndim == 1
+        # FIXME : store some factorization instead of inverse and use that instead to compute x for any given y?
+        return dot(y, self.invMat)
+
+class FrozenTransform(Transform):
+    """prevents params of transform from being exposed, so they won't be re-estimated"""
+    def __init__(self, transform, tag = None):
+        self.transform = transform
+        self.tag = tag
+    def __repr__(self):
+        return 'FrozenTransform('+repr(self.transform)+', tag = '+repr(self.tag)+')'
+    def __call__(self, x):
+        return self.transform(x)
+    def deriv(self, x):
+        return self.transform.deriv(x)
+    def logJac(self, x):
+        return self.transform.logJac(x)
+    def logJacDeriv(self, x):
+        return self.transform.logJacDeriv(x)
+    def inv(self, x):
+        return self.transform.inv(x)
+
+class InvertedTransform(Transform):
+    def __init__(self, transform, tag = None):
+        self.transform = transform
+        self.tag = tag
+    def __repr__(self):
+        return 'InvertedTransform('+repr(self.transform)+', tag = '+repr(self.tag)+')'
+    @property
+    def params(self):
+        return self.transform.params
+    def parse(self, params):
+        xf, paramsLeft = self.transform.parse(params)
+        return InvertedTransform(xf, tag = self.tag), paramsLeft
+    def __call__(self, y):
+        return self.transform.inv(y)
+    def deriv(self, y):
+        derivOrig = self.transform.deriv(self.transform.inv(y))
+        if shape(derivOrig) == ():
+            return 1.0 / derivOrig
+        else:
+            return mla.inv(derivOrig)
+    def derivParams(self, y):
+        # FIXME : replace with a right division or something?  (but N.B. matrices not vectors, so possible?)
+        return -dot(
+            self.transform.derivParams(self.transform.inv(y)),
+            self.deriv(y)
+        )
+    def logJac(self, y):
+        return -self.transform.logJac(self.transform.inv(y))
+    def logJacDeriv(self, y):
+        return -dot(
+            self.transform.logJacDeriv(self.transform.inv(y)),
+            self.deriv(y)
+        )
+    def logJacDerivParams(self, y):
+        return -dot(
+            self.derivParams(y),
+            self.transform.logJacDeriv(self.transform.inv(y))
+        ) - self.transform.logJacDerivParams(self.transform.inv(y))
+    def inv(self, x):
+        return self.transform(x)
+
+class AddBias(Transform):
+    def __init__(self, tag = None):
+        self.tag = tag
+    def __repr__(self):
+        return 'AddBias(tag = '+repr(self.tag)+')'
+    def __call__(self, x):
+        assert x.ndim == 1
+        return append(x, 1.0)
+    def deriv(self, x):
+        assert x.ndim == 1
+        n = len(x)
+        return eye(n, n + 1)
+
+class MinusPrev(Transform):
+    def __init__(self, tag = None):
+        self.tag = tag
+    def __repr__(self):
+        return 'MinusPrev(tag = '+repr(self.tag)+')'
+    def __call__(self, x):
+        assert x.ndim == 1
+        assert len(x) >= 1
+        return -x[-1]
+    def deriv(self, x):
+        assert x.ndim == 1
+        assert len(x) >= 1
+        v = zeros(shape(x))
+        v[-1] = -1.0
+        return v
+
+class Msd01ToVector(Transform):
+    def __init__(self, tag = None):
+        self.tag = tag
+    def __repr__(self):
+        return 'Msd01ToVector(tag = '+repr(self.tag)+')'
+    def __call__(self, input):
+        out = []
+        for comp, x in input:
+            if comp == 0:
+                out.extend([1.0, 0.0])
+            else:
+                out.extend([0.0, x])
+        return array(out)
+
+class VectorizeTransform(Transform):
+    def __init__(self, transform1D, tag = None):
+        self.transform1D = transform1D
+        self.tag = tag
+    def __repr__(self):
+        return 'VectorizeTransform('+repr(self.transform1D)+', tag = '+repr(self.tag)+')'
+    @property
+    def params(self):
+        return self.transform1D.params
+    def parse(self, params):
+        xf, paramsLeft = self.transform1D.parse(params)
+        return VectorizeTransform(xf, tag = self.tag), paramsLeft
+    def __call__(self, x):
+        assert x.ndim == 1
+        return array(map(self.transform1D, x))
+    def deriv(self, x):
+        assert x.ndim == 1
+        return diag(map(self.transform1D.deriv, x))
+    def derivParams(self, x):
+        assert x.ndim == 1
+        if len(x) == 0:
+            return eye(len(self.params), 0)
+        else:
+            return transpose(map(self.transform1D.derivParams, x))
+    def logJac(self, x):
+        assert x.ndim == 1
+        return sum(map(self.transform1D.logJac, x))
+    def logJacDeriv(self, x):
+        assert x.ndim == 1
+        return map(self.transform1D.logJacDeriv, x)
+    def logJacDerivParams(self, x):
+        assert x.ndim == 1
+        if len(x) == 0:
+            return zeros(shape(self.params))
+        else:
+            return sum(map(self.transform1D.logJacDerivParams, x), axis = 0)
+    def inv(self, y):
+        assert y.ndim == 1
+        return array(map(self.transform1D.inv, y))
+
+class Transform1D(Transform):
+    def logJac(self, x):
+        return log(abs(self.deriv(x)))
+    def logJacDeriv(self, x):
+        return self.derivDeriv(x) / self.deriv(x)
+    def logJacDerivParams(self, x):
+        return self.derivParamsDeriv(x) / self.deriv(x)
+    def inv(self, y, length = -100):
+        # (FIXME : could consider different starting points (e.g. 0.0))
+        def F(x):
+            return self(x), array([self.deriv(x)])
+        return solveByMinimize(F, y, y, length = length)
+
+class PolynomialTransform1D(Transform1D):
+    def __init__(self, params, tag = None):
+        self.params = params
+        self.tag = tag
+    def __repr__(self):
+        return 'PolynomialTransform1D('+repr(self.params)+', tag = '+repr(self.tag)+')'
+    def parse(self, params):
+        n = len(self.params)
+        return PolynomialTransform1D(params[:n], tag = self.tag), params[n:]
+    def __call__(self, x):
+        return sum(
+            coeff * x ** power
+            for power, coeff in enumerate(self.params)
+        )
+    def deriv(self, x):
+        return sum(
+            coeff * (power + 1) * x ** power
+            for power, coeff in enumerate(self.params[1:])
+        )
+    def derivDeriv(self, x):
+        return sum(
+            coeff * (power + 1) * (power + 2) * x ** power
+            for power, coeff in enumerate(self.params[2:])
+        )
+    def derivParams(self, x):
+        return array([
+            x ** power
+            for power, coeff in enumerate(self.params)
+        ])
+    def derivParamsDeriv(self, x):
+        return array([
+            power * x ** (power - 1) if power != 0 else 0.0
+            for power, coeff in enumerate(self.params)
+        ])
+
+class ScaledSinhTransform1D(Transform1D):
+    """scaled sinh transform (scaling parameterized slightly oddly, since mainly for testing)"""
+    def __init__(self, a, tag = None):
+        self.a = a
+        self.tag = tag
+    def __repr__(self):
+        return 'ScaledSinhTransform1D('+repr(self.a)+', tag = '+repr(self.tag)+')'
+    @property
+    def params(self):
+        return [self.a]
+    def parse(self, params):
+        aNew = params[0]
+        return ScaledSinhTransform1D(aNew, tag = self.tag), params[1:]
+    def __call__(self, x):
+        return self.a * sinh(self.a * x)
+    def deriv(self, x):
+        return self.a * self.a * cosh(self.a * x)
+    def derivDeriv(self, x):
+        return self.a * self.a * self.a * sinh(self.a * x)
+    def derivParams(self, x):
+        return array([sinh(self.a * x) + self.a * x * cosh(self.a * x)])
+    def derivParamsDeriv(self, x):
+        return array([2.0 * self.a * cosh(self.a * x) + self.a * self.a * x * sinh(self.a * x)])
+    def inv(self, y):
+        return arcsinh(y / self.a) / self.a
+
+class TanhTransformLogParam1D(Transform1D):
+    def __init__(self, params, tag = None):
+        self.params = params
+        self.tag = tag
+
+        p, q, c = params
+        a = math.exp(p)
+        b = math.exp(q)
+        self.tt = TanhTransform1D([a, b, c])
+        self.derivParamsConvert = array([a, b, 1.0])
+    def __repr__(self):
+        return 'TanhTransformLogParam1D('+repr(self.params)+', tag = '+repr(self.tag)+')'
+    def parse(self, params):
+        n = len(self.params)
+        return TanhTransformLogParam1D(params[:n], tag = self.tag), params[n:]
+    def __call__(self, x):
+        return self.tt(x)
+    def deriv(self, x):
+        return self.tt.deriv(x)
+    def derivDeriv(self, x):
+        return self.tt.derivDeriv(x)
+    def derivParams(self, x):
+        return self.tt.derivParams(x) * self.derivParamsConvert
+    def derivParamsDeriv(self, x):
+        return self.tt.derivParamsDeriv(x) * self.derivParamsConvert
+    def logJacDerivParams(self, x):
+        """(override for mild efficiency improvement)"""
+        return self.tt.logJacDerivParams(x) * self.derivParamsConvert
+    def inv(self, y):
+        return self.tt.inv(y)
+
+class TanhTransform1D(Transform1D):
+    def __init__(self, params, warn = False, tag = None):
+        self.params = params
+        self.warn = warn
+        self.tag = tag
+
+        self.a, self.b, self.c = params
+        if warn and self.a <= 0.0:
+            print 'NOTE: a =', self.a, '<= 0.0'
+        if warn and self.b <= 0.0:
+            print 'NOTE: b =', self.b, '<= 0.0'
+    def __repr__(self):
+        return 'TanhTransform1D('+repr(self.params)+', warn = '+repr(self.warn)+', tag = '+repr(self.tag)+')'
+    def parse(self, params):
+        n = len(self.params)
+        return TanhTransform1D(params[:n], warn = self.warn, tag = self.tag), params[n:]
+    def __call__(self, x):
+        th = tanh(self.b * (x - self.c))
+        return self.a * th
+    def deriv(self, x):
+        ch = cosh(self.b * (x - self.c))
+        sh2 = 1.0 / ch / ch
+        return self.a * self.b * sh2
+    def derivDeriv(self, x):
+        ch = cosh(self.b * (x - self.c))
+        th = tanh(self.b * (x - self.c))
+        sh2 = 1.0 / ch / ch
+        return -2.0 * self.a * self.b * self.b * sh2 * th
+    def derivParams(self, x):
+        ch = cosh(self.b * (x - self.c))
+        th = tanh(self.b * (x - self.c))
+        sh2 = 1.0 / ch / ch
+        return array([
+            th,
+            self.a * (x - self.c) * sh2,
+            -self.a * self.b * sh2
+        ])
+    def derivParamsDeriv(self, x):
+        ch = cosh(self.b * (x - self.c))
+        th = tanh(self.b * (x - self.c))
+        sh2 = 1.0 / ch / ch
+        return array([
+            self.b * sh2,
+            self.a * sh2 * (1.0 - 2.0 * self.b * (x - self.c) * th),
+            2.0 * self.a * self.b * self.b * sh2 * th
+        ])
+    def logJacDerivParams(self, x):
+        """(override for mild efficiency improvement)"""
+        th = tanh(self.b * (x - self.c))
+        return array([
+            1.0 / self.a,
+            1.0 / self.b - (x - self.c) * th * 2.0,
+            self.b * th * 2.0
+        ])
+    def inv(self, y):
+        return arctanh(y / self.a) / self.b + self.c
+
+class SumTransform1D(Transform1D):
+    def __init__(self, transforms, tag = None):
+        self.transforms = transforms
+        self.tag = tag
+    def __repr__(self):
+        return 'SumTransform1D('+repr(self.transforms)+', tag = '+repr(self.tag)+')'
+    @property
+    def params(self):
+        return concatenate([ transform.params for transform in self.transforms ])
+    def parse(self, params):
+        xfs, paramsLeft = parseConcat([ transform.parse for transform in self.transforms ], params)
+        return SumTransform1D(xfs, tag = self.tag), paramsLeft
+    def __call__(self, x):
+        return sum(transform(x) for transform in self.transforms)
+    def deriv(self, x):
+        return sum(transform.deriv(x) for transform in self.transforms)
+    def derivDeriv(self, x):
+        return sum(transform.derivDeriv(x) for transform in self.transforms)
+    def derivParams(self, x):
+        return concatenate([ transform.derivParams(x) for transform in self.transforms ])
+    def derivParamsDeriv(self, x):
+        return concatenate([ transform.derivParamsDeriv(x) for transform in self.transforms ])
+
+class OutputTransform(object):
+    """Input-dependent invertible transform of output.
+
+    An output transform takes an input and an output and returns a transformed
+    output.
+    For any given input the function from output to transformed output is
+    invertible.
+    """
+
+    def atInput(self, input, tag = None):
+        return TransformAtInput(self, input, tag = tag)
+    # (FIXME : should probably extend tree structure to transforms)
+    def children(self):
+        return []
+    def mapChildren(self, mapChild):
+        return self
+    def createAccG(self, createAccChild):
+        # (FIXME : ugly import!)
+        import transform_acc as xfa
+        return xfa.DerivOutputTransformAccG(outputTransform = self, tag = self.tag)
+    def paramsSingle(self):
+        return self.params
+    def paramsChildren(self, paramsChild):
+        return []
+    def parseSingle(self, params):
+        return self.parse(params)
+    def parseChildren(self, params, parseChild):
+        return self, params
+    def parseAll(self, params):
+        transform, paramsLeft = self.parse(params)
+        if len(paramsLeft) != 0:
+            raise RuntimeError('extra parameters left after parsing complete')
+        return transform
+    def withTag(self, tag):
+        """Set tag and return self.
+
+        This is intended to be used immediately after object creation, such as:
+
+            outputTransform = SomeOutputTransform([2.0, 3.0, 4.0]).withTag('hi')
+
+        This is particularly important here since OutputTransforms should be immutable.
+        """
+        self.tag = tag
+        return self
+
+class TransformAtInput(Transform):
+    def __init__(self, outputTransform, input, tag = None):
+        self.outputTransform = outputTransform
+        self.input = input
+        self.tag = tag
+    def __repr__(self):
+        return 'TransformAtInput('+repr(self.outputTransform)+', '+repr(self.input)+', tag = '+repr(self.tag)+')'
+    @property
+    def params(self):
+        return self.outputTransform.params
+    def parse(self, params):
+        xf, paramsLeft = self.outputTransform.parse(params)
+        return TransformAtInput(xf, self.input, tag = self.tag), paramsLeft
+    def __call__(self, x):
+        return self.outputTransform(self.input, x)
+    def deriv(self, x):
+        return self.outputTransform.deriv(self.input, x)
+    def derivParams(self, x):
+        return self.outputTransform.derivParams(self.input, x)
+    def logJac(self, x):
+        return self.outputTransform.logJac(self.input, x)
+    def logJacDeriv(self, x):
+        return self.outputTransform.logJacDeriv(self.input, x)
+    def logJacDerivParams(self, x):
+        return self.outputTransform.logJacDerivParams(self.input, x)
+    def inv(self, y):
+        return self.outputTransform.inv(self.input, y)
+
+class SimpleOutputTransform(OutputTransform):
+    """Output transform that is input-independent.
+
+    For 1D transforms, may wish to set checkDerivPositive1D to check derivative
+    is positive everywhere it is evaluated (this gives no guarantees about its
+    behaviour elsewhere).
+    """
+    def __init__(self, transform, checkDerivPositive1D = False, tag = None):
+        self.transform = transform
+        self.checkDerivPositive1D = checkDerivPositive1D
+        self.tag = tag
+    def __repr__(self):
+        return 'SimpleOutputTransform('+repr(self.transform)+', checkDerivPositive1D = '+repr(self.checkDerivPositive1D)+', tag = '+repr(self.tag)+')'
+    @property
+    def params(self):
+        return self.transform.params
+    def parse(self, params):
+        xf, paramsLeft = self.transform.parse(params)
+        return SimpleOutputTransform(xf, checkDerivPositive1D = self.checkDerivPositive1D, tag = self.tag), paramsLeft
+    def __call__(self, input, realOutput):
+        return self.transform(realOutput)
+    def deriv(self, input, realOutput):
+        ret = self.transform.deriv(realOutput)
+        if self.checkDerivPositive1D and ret <= 0.0:
+            raise DerivativeNotPositiveError('derivative '+repr(ret)+' should be > 0.0')
+        return ret
+    def derivInput(self, input, realOutput):
+        return zeros(shape(input))
+    def derivParams(self, input, realOutput):
+        return self.transform.derivParams(realOutput)
+    def logJac(self, input, realOutput):
+        return self.transform.logJac(realOutput)
+    def logJacDeriv(self, input, realOutput):
+        return self.transform.logJacDeriv(realOutput)
+    def logJacDerivInput(self, input, realOutput):
+        return zeros(shape(input))
+    def logJacDerivParams(self, input, realOutput):
+        return self.transform.logJacDerivParams(realOutput)
+    def inv(self, input, modelledOutput):
+        return self.transform.inv(modelledOutput)
+
+class ShiftOutputTransform(OutputTransform):
+    def __init__(self, shift, tag = None):
+        self.shift = shift
+        self.tag = tag
+    def __repr__(self):
+        return 'ShiftOutputTransform('+repr(self.shift)+', tag = '+repr(self.tag)+')'
+    @property
+    def params(self):
+        return self.shift.params
+    def parse(self, params):
+        xf, paramsLeft = self.shift.parse(params)
+        return ShiftOutputTransform(xf, tag = self.tag), paramsLeft
+    def __call__(self, input, realOutput):
+        return realOutput + self.shift(input)
+    def deriv(self, input, realOutput):
+        if shape(realOutput) == ():
+            return 1.0
+        else:
+            assert realOutput.ndim == 1
+            return eye(len(realOutput))
+    def derivInput(self, input, realOutput):
+        return self.shift.deriv(input)
+    def derivParams(self, input, realOutput):
+        return self.shift.derivParams(input)
+    def logJac(self, input, realOutput):
+        return 0.0
+    def logJacDeriv(self, input, realOutput):
+        return zeros(shape(realOutput))
+    def logJacDerivInput(self, input, realOutput):
+        return zeros(shape(input))
+    def logJacDerivParams(self, input, realOutput):
+        return zeros(shape(self.params))
+    def inv(self, input, modelledOutput):
+        return modelledOutput - self.shift(input)

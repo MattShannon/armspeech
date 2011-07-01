@@ -1,0 +1,13 @@
+
+^data/labels($|/)
+
+^data/mgc($|/)
+
+^data/lf0($|/)
+
+^data/bap($|/)
+
+^out\.
+
+^[^/]*\.log$
+
