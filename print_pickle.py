@@ -20,5 +20,5 @@ def main(args):
         obj = pickle.load(f)
     print obj
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main(sys.argv)

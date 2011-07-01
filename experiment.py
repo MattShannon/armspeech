@@ -558,5 +558,5 @@ def main(rawArgs):
         print 'rm -r', outDir
         sys.exit(1)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main(sys.argv)

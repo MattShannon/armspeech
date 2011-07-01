@@ -87,7 +87,7 @@ def main(args):
     job.run()
     print 'distribute: job', job.name, '(', jobLocation, ') finished at', datetime.now(), 'on', os.environ['HOSTNAME']
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     try:
         main(sys.argv)
     except:
