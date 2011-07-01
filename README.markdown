@@ -45,7 +45,8 @@ To set-up this directory:
   `data/bap` and `data/labels/full` (e.g. copied from the HTS demo)
 - if you want to generate audio, add an appropriate `scripts/Config.pm` file
   (e.g. copied from the HTS demo)
-- make `experiment.py` and `print_pickle.py` executable (use `chmod u+x`)
+- if necessary make `experiment.py` and `print_pickle.py` executable (use
+  `chmod u+x`)
 
 You can then run example experiments using:
 
