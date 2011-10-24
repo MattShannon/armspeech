@@ -43,7 +43,7 @@ class ThreshQuestion(Question):
         return labelValue <= self.thresh
 
 def getSubsetQuestions(labelKey, namedSubsets):
-    return [ SubsetQuestion(labelKey, subset, labelKey+'-'+subsetName) for subsetName, subset in namedSubsets ]
+    return [ SubsetQuestion(labelKey, subset, labelKey+' is '+subsetName) for subsetName, subset in namedSubsets ]
 def getEqualityQuestions(labelKey, values):
     return [ EqualityQuestion(labelKey, value) for value in values ]
 def getThreshQuestions(labelKey, threshes):

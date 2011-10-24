@@ -174,7 +174,7 @@ namedPhoneSubsetList = [
     ['Back_Fricative', [ch,jh,sh,zh]],
     ['Affricate_Consonant', [ch,jh]],
     ['Not_Affricate', [dh,f,s,sh,th,v,z,zh]],
-    ['silences', [pau,h_hash,brth]],
+    ['silence', [pau,h_hash,brth]],
     ['aa', [aa]],
     ['ae', [ae]],
     ['ah', [ah]],
