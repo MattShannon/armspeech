@@ -14,39 +14,45 @@ from __future__ import division
 import questions as ques
 import phoneset_cmu
 
-def getMonophoneQuestions():
-    return ques.getSubsetQuestions('phone', phoneset_cmu.namedPhoneSubsets)
-def getTriphoneQuestions():
-    return (
-        ques.getSubsetQuestions('l_phone', phoneset_cmu.namedPhoneSubsets) +
-        ques.getSubsetQuestions('phone', phoneset_cmu.namedPhoneSubsets) +
-        ques.getSubsetQuestions('r_phone', phoneset_cmu.namedPhoneSubsets)
+def getSubsetQG(labelKey, namedSubsets):
+    return (ques.AttrLabelValuer(labelKey), ques.getSubsetQuestions(namedSubsets))
+def getEqualityQG(labelKey, values):
+    return (ques.AttrLabelValuer(labelKey), ques.getEqualityQuestions(values))
+def getThreshQG(labelKey, threshes):
+    return (ques.AttrLabelValuer(labelKey), ques.getThreshQuestions(threshes))
+def getSubsetQGs(labelKeys, namedSubsets):
+    questions = ques.getSubsetQuestions(namedSubsets)
+    return [ (ques.AttrLabelValuer(labelKey), questions) for labelKey in labelKeys ]
+
+def getMonophoneQuestionGroups():
+    return getSubsetQGs(
+        ['phone'],
+        phoneset_cmu.namedPhoneSubsets
     )
-def getQuinphoneQuestions():
-    return (
-        ques.getSubsetQuestions('ll_phone', phoneset_cmu.namedPhoneSubsets) +
-        ques.getSubsetQuestions('l_phone', phoneset_cmu.namedPhoneSubsets) +
-        ques.getSubsetQuestions('phone', phoneset_cmu.namedPhoneSubsets) +
-        ques.getSubsetQuestions('r_phone', phoneset_cmu.namedPhoneSubsets) +
-        ques.getSubsetQuestions('rr_phone', phoneset_cmu.namedPhoneSubsets)
+def getTriphoneQuestionGroups():
+    return getSubsetQGs(
+        ['l_phone', 'phone', 'r_phone'],
+        phoneset_cmu.namedPhoneSubsets
     )
-def getQuestions():
-    questionLists = [
-        ques.getSubsetQuestions('ll_phone', phoneset_cmu.namedPhoneSubsets),
-        ques.getSubsetQuestions('l_phone', phoneset_cmu.namedPhoneSubsets),
-        ques.getSubsetQuestions('phone', phoneset_cmu.namedPhoneSubsets),
-        ques.getSubsetQuestions('r_phone', phoneset_cmu.namedPhoneSubsets),
-        ques.getSubsetQuestions('rr_phone', phoneset_cmu.namedPhoneSubsets),
-        ques.getEqualityQuestions('seg_fw', [None] + range(1, 8)),
-        ques.getThreshQuestions('seg_fw', range(1, 8)),
-        ques.getEqualityQuestions('seg_bw', [None] + range(1, 8)),
-        ques.getThreshQuestions('seg_bw', range(0, 8)),
+def getQuinphoneQuestionGroups():
+    return getSubsetQGs(
+        ['ll_phone', 'l_phone', 'phone', 'r_phone', 'rr_phone'],
+        phoneset_cmu.namedPhoneSubsets
+    )
+def getFullContextQuestionGroups():
+    quinphoneQuestionGroups = getQuinphoneQuestionGroups()
+    otherQuestionGroups = [
+        getEqualityQG('seg_fw', [None] + range(1, 8)),
+        getThreshQG('seg_fw', range(1, 8)),
+        getEqualityQG('seg_bw', [None] + range(1, 8)),
+        getThreshQG('seg_bw', range(0, 8)),
         # FIXME : add more questions here
-        [
-            ques.EqualityQuestion('c_syl_vowel', None),
-            ques.EqualityQuestion('c_syl_vowel', 'novowel')
-        ],
-        ques.getSubsetQuestions('c_syl_vowel', phoneset_cmu.namedVowelSubsets),
+        (ques.AttrLabelValuer('c_syl_vowel'),
+            [
+                ques.EqualityQuestion(None),
+                ques.EqualityQuestion('novowel')
+            ] + ques.getSubsetQuestions(phoneset_cmu.namedVowelSubsets)
+        ),
         # FIXME : add more questions here
     ]
-    return [ question for questionList in questionLists for question in questionList ]
+    return quinphoneQuestionGroups + otherQuestionGroups

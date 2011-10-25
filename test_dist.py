@@ -12,11 +12,10 @@ from dist import *
 from model import *
 from summarizer import VectorSeqSummarizer
 from mathhelp import logSum
-import phoneset_baby
-import questions_baby
 from iterhelp import chunkList
 
 import test_transform
+import test_dist_questions
 
 import unittest
 import sys
@@ -129,25 +128,42 @@ def gen_shared_DiscreteDist(keys = ['a', 'b', 'c'], dimIn = 3):
     return dist, getInputGen()
 
 def gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = 3):
-    phoneList = phoneset_baby.phoneList
-    questionList = questions_baby.getQuestions()
+    labels = test_dist_questions.phoneList
+    questionGroups = test_dist_questions.getQuestionGroups()
 
-    def decisionTree(phonesLeft):
-        questionsLeft = []
-        for question in questionList:
-            yesSize = len(phonesLeft & question.phoneSubset)
-            if 0 < yesSize < len(phonesLeft):
-                questionsLeft.append(question)
+    def decisionTree(labelsLeft):
+        fullQuestionsLeft = []
+        for labelValuer, questions in questionGroups:
+            for question in questions:
+                yesNonEmpty = False
+                noNonEmpty = False
+                for label in labelsLeft:
+                    if question(labelValuer(label)):
+                        yesNonEmpty = True
+                    else:
+                        noNonEmpty = True
+                    if yesNonEmpty and noNonEmpty:
+                        break
+                if yesNonEmpty and noNonEmpty:
+                    fullQuestionsLeft.append((labelValuer, question))
 
-        if random.random() > splitProb or not questionsLeft:
+        if random.random() > splitProb or not fullQuestionsLeft:
             return DecisionTreeLeaf(gen_LinearGaussian(dimIn)[0])
         else:
-            question = random.choice(questionsLeft)
-            return DecisionTreeNode(question, decisionTree(phonesLeft & question.phoneSubset), decisionTree(phonesLeft - question.phoneSubset))
+            fullQuestion = random.choice(fullQuestionsLeft)
+            labelValuer, question = fullQuestion
+            labelsLeftYes = []
+            labelsLeftNo = []
+            for label in labelsLeft:
+                if question(labelValuer(label)):
+                    labelsLeftYes.append(label)
+                else:
+                    labelsLeftNo.append(label)
+            return DecisionTreeNode(fullQuestion, decisionTree(labelsLeftYes), decisionTree(labelsLeftNo))
     def getInputGen():
         while True:
-            yield random.choice(phoneList), randn(dimIn)
-    return decisionTree(frozenset(phoneList)).withTag(randTag()), getInputGen()
+            yield random.choice(labels), randn(dimIn)
+    return decisionTree(labels).withTag(randTag()), getInputGen()
 
 def gen_MappedInputDist(dimIn = 3, dimOut = 2):
     transform = test_transform.gen_genericTransform([dimIn], [dimOut])
@@ -563,19 +579,23 @@ class TestDist(unittest.TestCase):
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
 
-    def test_decisionTreeCluster(self, eps = 1e-8, numDists = 20):
-        if deepTest:
-            for distIndex in range(numDists):
-                dimIn = randint(0, 5)
-                dist, inputGen = gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = dimIn)
-                def train(training):
-                    acc = AutoGrowingDiscreteAcc(createAcc = lambda: LinearGaussianAcc(inputLength = dimIn))
-                    totalOcc = 0.0
-                    for input, output, occ in training:
-                        acc.add(input, output, occ)
-                        totalOcc += occ
-                    mdlThresh = 0.5 * (dimIn + 1) * log(totalOcc)
-                    return acc.decisionTreeCluster(questions_baby.getQuestions(), thresh = mdlThresh, minOcc = 0.0, verbosity = 0)
+    def test_decisionTreeCluster(self, eps = 1e-8, numDists = 20, numPoints = 100):
+        for distIndex in range(numDists):
+            dimIn = randint(0, 5)
+            dist, inputGen = gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = dimIn)
+            def train(training):
+                acc = AutoGrowingDiscreteAcc(createAcc = lambda: LinearGaussianAcc(inputLength = dimIn))
+                totalOcc = 0.0
+                for input, output, occ in training:
+                    acc.add(input, output, occ)
+                    totalOcc += occ
+                mdlThresh = 0.5 * (dimIn + 1) * log(totalOcc + 1.0)
+                return acc.decisionTreeCluster(test_dist_questions.getQuestionGroups(), thresh = mdlThresh, minOcc = 0.0, verbosity = 0)
+            if True:
+                # check decision tree clustering runs at all
+                training = [ (input, dist.synth(input), exp(randn())) for input, index in zip(inputGen, range(numPoints)) ]
+                estDist, estLogLike, estOcc = train(training)
+            if deepTest:
                 check_est(dist, train, inputGen, hasParams = True)
 
     def test_MappedInputDist(self, eps = 1e-8, numDists = 20, numPoints = 100):

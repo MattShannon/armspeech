@@ -15,7 +15,6 @@ import nodetree
 from dist import *
 from model import *
 from summarizer import *
-import questions as ques
 from transform import *
 import draw
 from timing import timed, printTime
@@ -313,8 +312,7 @@ def main(rawArgs):
                 for time in range(startTime, endTime):
                     yield label
 
-        questions = questions_htsDemo.getQuestions()
-        questionGroups = ques.groupQuestions(questions)
+        questionGroups = questions_htsDemo.getFullContextQuestionGroups()
 
         acc = MappedInputAcc(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
             SequenceAcc(10,

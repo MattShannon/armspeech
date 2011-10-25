@@ -810,15 +810,16 @@ class AutoGrowingDiscreteAcc(Acc):
             indent += extra2
 
         getBestSplit = timed(self.decisionTreeGetBestSplit, msg = 'cluster:'+indent+'choose split took') if verbosity >= 3 else self.decisionTreeGetBestSplit
-        bestQuestion, bestLogLike, bestEstimatedYes, bestEstimatedNo = getBestSplit(questionGroups, minOcc, labelList, logLikeLeaf, occNode)
+        bestFullQuestion, bestLogLike, bestEstimatedYes, bestEstimatedNo = getBestSplit(questionGroups, minOcc, labelList, logLikeLeaf, occNode)
 
-        if bestQuestion != None and (bestLogLike - logLikeLeaf > thresh or maxOcc != None and occNode > maxOcc):
+        if bestFullQuestion != None and (bestLogLike - logLikeLeaf > thresh or maxOcc != None and occNode > maxOcc):
+            bestLabelValuer, bestQuestion = bestFullQuestion
             if verbosity >= 2:
-                print 'cluster:'+indent+'question', bestQuestion.name, '( delta =', bestLogLike - logLikeLeaf, ')'
+                print 'cluster:'+indent+'question (', bestLabelValuer.shortRepr()+' '+bestQuestion.shortRepr(), ')', '( delta =', bestLogLike - logLikeLeaf, ')'
             labelListYes = []
             labelListNo = []
             for label in labelList:
-                if bestQuestion(label):
+                if bestQuestion(bestLabelValuer(label)):
                     labelListYes.append(label)
                 else:
                     labelListNo.append(label)
@@ -830,34 +831,34 @@ class AutoGrowingDiscreteAcc(Acc):
             logLike = logLikeYes + logLikeNo
             occ = occYes + occNo
             assert_allclose(occ, occNode)
-            return DecisionTreeNode(bestQuestion, distYes, distNo), logLike, occ
+            return DecisionTreeNode(bestFullQuestion, distYes, distNo), logLike, occ
         else:
             if verbosity >= 2:
                 print 'cluster:'+indent+'leaf'
             return DecisionTreeLeaf(distLeaf), logLikeLeaf, occNode
 
     def decisionTreeGetBestSplit(self, questionGroups, minOcc, labelList, logLikeLeaf, occNode):
-        # (FIXME : could probably get even more of a speed-up for EqualityQuestion
-        #   and ThreshQuestion by doing clever stuff with subtracting accs (i.e.
+        # (N.B. Could probably get a further speed-up (over and above that
+        #   obtained by using question groups) for EqualityQuestion and
+        #   ThreshQuestion by doing clever stuff with subtracting accs (i.e.
         #   adding accs with negative occupancies).
         #   However not at all clear this would worth it in terms of speed-up
         #   achieved vs implementation complexity / fragility.
         # )
-        bestQuestion = None
+        bestFullQuestion = None
         bestLogLike = logLikeLeaf
         bestEstimatedYes = None
         bestEstimatedNo = None
-        for labelKey, questions in questionGroups:
+        for labelValuer, questions in questionGroups:
             accFor = defaultdict(self.createAcc)
             for label in labelList:
-                labelValue = getattr(label, labelKey)
+                labelValue = labelValuer(label)
                 addAcc(accFor[labelValue], self.accDict[label])
             for question in questions:
-                assert question.labelKey == labelKey
                 yes = self.createAcc()
                 no = self.createAcc()
                 for labelValue, acc in accFor.iteritems():
-                    if question.isYes(labelValue):
+                    if question(labelValue):
                         addAcc(yes, acc)
                     else:
                         addAcc(no, acc)
@@ -867,19 +868,19 @@ class AutoGrowingDiscreteAcc(Acc):
                     distNoLeaf, logLikeNoLeaf, occNo = defaultEstimate(no)
                     assert_allclose(occYes + occNo, occNode)
                     logLike = logLikeYesLeaf + logLikeNoLeaf
-                    if bestQuestion == None or logLike > bestLogLike:
-                        bestQuestion = question
+                    if bestFullQuestion == None or logLike > bestLogLike:
+                        bestFullQuestion = labelValuer, question
                         bestLogLike = logLike
                         bestEstimatedYes = distYesLeaf, logLikeYesLeaf, occYes
                         bestEstimatedNo = distNoLeaf, logLikeNoLeaf, occNo
-        return bestQuestion, bestLogLike, bestEstimatedYes, bestEstimatedNo
+        return bestFullQuestion, bestLogLike, bestEstimatedYes, bestEstimatedNo
 
 class DecisionTreeAcc(Acc):
     pass
 
 class DecisionTreeAccNode(DecisionTreeAcc):
-    def __init__(self, question, accYes, accNo, tag = None):
-        self.question = question
+    def __init__(self, fullQuestion, accYes, accNo, tag = None):
+        self.fullQuestion = fullQuestion
         self.accYes = accYes
         self.accNo = accNo
         self.tag = tag
@@ -893,13 +894,14 @@ class DecisionTreeAccNode(DecisionTreeAcc):
 
     def add(self, input, output, occ = 1.0):
         label, acInput = input
-        if self.question(label):
+        labelValuer, question = self.fullQuestion
+        if question(labelValuer(label)):
             self.accYes.add(input, output, occ)
         else:
             self.accNo.add(input, output, occ)
 
     def addAccSingle(self, acc):
-        assert self.question == acc.question
+        assert self.fullQuestion == acc.fullQuestion
 
     def logLikeSingle(self):
         return 0.0
@@ -912,7 +914,7 @@ class DecisionTreeAccNode(DecisionTreeAcc):
         distNo, logLikeNo, occNo = estimateChild(self.accNo)
         logLike = logLikeYes + logLikeNo
         occ = occYes + occNo
-        return DecisionTreeNode(self.question, distYes, distNo, tag = self.tag), logLike, occ
+        return DecisionTreeNode(self.fullQuestion, distYes, distNo, tag = self.tag), logLike, occ
 
 class DecisionTreeAccLeaf(DecisionTreeAcc):
     def __init__(self, acc, tag = None):
@@ -1854,48 +1856,52 @@ class DecisionTree(Dist):
     pass
 
 class DecisionTreeNode(DecisionTree):
-    def __init__(self, question, distYes, distNo, tag = None):
-        self.question = question
+    def __init__(self, fullQuestion, distYes, distNo, tag = None):
+        self.fullQuestion = fullQuestion
         self.distYes = distYes
         self.distNo = distNo
         self.tag = tag
 
     def __repr__(self):
-        return 'DecisionTreeNode('+repr(self.question)+', '+repr(self.distYes)+', '+repr(self.distNo)+', tag = '+repr(self.tag)+')'
+        return 'DecisionTreeNode('+repr(self.fullQuestion)+', '+repr(self.distYes)+', '+repr(self.distNo)+', tag = '+repr(self.tag)+')'
 
     def children(self):
         return [self.distYes, self.distNo]
 
     def mapChildren(self, mapChild):
-        return DecisionTreeNode(self.question, mapChild(self.distYes), mapChild(self.distNo), tag = self.tag)
+        return DecisionTreeNode(self.fullQuestion, mapChild(self.distYes), mapChild(self.distNo), tag = self.tag)
 
     def logProb(self, input, output):
         label, acInput = input
-        if self.question(label):
+        labelValuer, question = self.fullQuestion
+        if question(labelValuer(label)):
             return self.distYes.logProb(input, output)
         else:
             return self.distNo.logProb(input, output)
 
     def logProbDerivInput(self, input, output):
         label, acInput = input
-        if self.question(label):
+        labelValuer, question = self.fullQuestion
+        if question(labelValuer(label)):
             return self.distYes.logProbDerivInput(input, output)
         else:
             return self.distNo.logProbDerivInput(input, output)
 
     def logProbDerivOutput(self, input, output):
         label, acInput = input
-        if self.question(label):
+        labelValuer, question = self.fullQuestion
+        if question(labelValuer(label)):
             return self.distYes.logProbDerivOutput(input, output)
         else:
             return self.distNo.logProbDerivOutput(input, output)
 
     def createAcc(self, createAccChild):
-        return DecisionTreeAccNode(self.question, createAccChild(self.distYes), createAccChild(self.distNo), tag = self.tag)
+        return DecisionTreeAccNode(self.fullQuestion, createAccChild(self.distYes), createAccChild(self.distNo), tag = self.tag)
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
         label, acInput = input
-        if self.question(label):
+        labelValuer, question = self.fullQuestion
+        if question(labelValuer(label)):
             return self.distYes.synth(input, method, actualOutput)
         else:
             return self.distNo.synth(input, method, actualOutput)
@@ -1913,7 +1919,7 @@ class DecisionTreeNode(DecisionTree):
         paramsLeft = params
         distYes, paramsLeft = parseChild(self.distYes, paramsLeft)
         distNo, paramsLeft = parseChild(self.distNo, paramsLeft)
-        return DecisionTreeNode(self.question, distYes, distNo, tag = self.tag), paramsLeft
+        return DecisionTreeNode(self.fullQuestion, distYes, distNo, tag = self.tag), paramsLeft
 
 class DecisionTreeLeaf(DecisionTree):
     def __init__(self, dist, tag = None):

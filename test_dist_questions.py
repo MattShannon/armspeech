@@ -1,4 +1,4 @@
-"""Very simple phoneset for testing purposes."""
+"""Example decision tree questions used for testing."""
 
 # Copyright 2011 Matt Shannon
 
@@ -7,6 +7,8 @@
 
 
 from __future__ import division
+
+import questions as ques
 
 a = 'a'
 b = 'b'
@@ -32,3 +34,6 @@ namedPhoneSubsetList = [
     ['silence', [sil]],
 ]
 namedPhoneSubsets = [ (subsetName, frozenset(subsetList)) for subsetName, subsetList in namedPhoneSubsetList ]
+
+def getQuestionGroups():
+    return [(ques.IdLabelValuer(), ques.getSubsetQuestions(namedPhoneSubsets))]
