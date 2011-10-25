@@ -11,7 +11,6 @@ from __future__ import division
 import mathhelp
 
 import unittest
-import sys
 import numpy as np
 import numpy.linalg as la
 from numpy.random import randn, randint
@@ -68,6 +67,9 @@ class TestMathHelp(unittest.TestCase):
                 sample = mathhelp.sampleDiscrete(valueProbList)
                 count[sample] += 1
             assert_allclose(count / numSamples, probs, rtol = 1e-2, atol = 1e-2)
+
+def suite():
+    return unittest.TestLoader().loadTestsFromTestCase(TestMathHelp)
 
 if __name__ == '__main__':
     unittest.main()

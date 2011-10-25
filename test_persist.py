@@ -29,6 +29,8 @@ class TempSimpleRepo(persist.SimpleRepo):
 class ShouldNotPickle(object):
     pass
 
+_createShouldNotPickle = ShouldNotPickle
+
 class TestPersist(unittest.TestCase):
     def test_pickling(self):
         d = dict()
@@ -45,9 +47,15 @@ class TestPersist(unittest.TestCase):
         repo.remove()
     def test_shouldNotPickle(self):
         repo = TempSimpleRepo()
-        obj = ShouldNotPickle()
+        obj = _createShouldNotPickle()
         self.assertRaises(pickle.PicklingError, persist.savePickle, repo.newLocation(), obj)
         repo.remove()
+
+def suite(createShouldNotPickle = None):
+    global _createShouldNotPickle
+    if createShouldNotPickle != None:
+        _createShouldNotPickle = createShouldNotPickle
+    return unittest.TestLoader().loadTestsFromTestCase(TestPersist)
 
 if __name__ == '__main__':
     unittest.main()

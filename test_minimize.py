@@ -67,5 +67,8 @@ class TestMinimize(unittest.TestCase):
             a = randn(1)
             checkSolve(cubic, a, x0)
 
+def suite():
+    return unittest.TestLoader().loadTestsFromTestCase(TestMinimize)
+
 if __name__ == '__main__':
     unittest.main()

@@ -25,6 +25,8 @@ from numpy.random import randn, randint
 import numpy.linalg as la
 from scipy import stats
 
+_deepTest = False
+
 def logProb_frames(dist, trainData):
     lp = 0.0
     frames = 0
@@ -447,9 +449,6 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
         paramsAfter = ps.params(dist)
         assert_allclose(logProbsAfter, logProbsBefore, rtol = 1e-10, msg = 'looks like parsing affected the original distribution, which should never happen')
 
-# FIXME : make more configurable (e.g. from command line)
-deepTest = False
-
 class TestDist(unittest.TestCase):
     def test_Memo_random_subset(self, its = 10000):
         """Memo class random subsets should be equally likely to include each element"""
@@ -471,7 +470,7 @@ class TestDist(unittest.TestCase):
             dimIn = randint(1 if bias else 0, 5)
             dist, inputGen = gen_LinearGaussian(dimIn, bias = bias)
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivInputCheck = True, logProbDerivOutputCheck = True)
-            if deepTest:
+            if _deepTest:
                 initEstDist = gen_LinearGaussian(dimIn)[0]
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
@@ -485,7 +484,7 @@ class TestDist(unittest.TestCase):
             dimIn = randint(0, 5)
             dist, inputGen = gen_StudentDist(dimIn)
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, hasEM = False, logProbDerivInputCheck = True, logProbDerivOutputCheck = True, checkAdditional = checkAdditional)
-            if deepTest:
+            if _deepTest:
                 initEstDist = gen_StudentDist(dimIn)[0]
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
 
@@ -494,7 +493,7 @@ class TestDist(unittest.TestCase):
             numClasses = randint(1, 5)
             dist, inputGen = gen_ConstantClassifier(numClasses)
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivInputCheck = True)
-            if deepTest:
+            if _deepTest:
                 initEstDist = gen_ConstantClassifier(numClasses)[0]
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
@@ -507,14 +506,14 @@ class TestDist(unittest.TestCase):
             dimIn = randint(1 if bias else 0, 5)
             dist, inputGen = gen_BinaryLogisticClassifier(dimIn, bias = bias)
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivInputCheck = True)
-            if deepTest:
+            if _deepTest:
                 # (useZeroCoeff since it seems to alleviate BinaryLogisticClassifier's convergence issues)
                 initEstDist = gen_BinaryLogisticClassifier(dimIn, bias = bias, useZeroCoeff = True)[0]
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
 
     def test_estimateInitialMixtureOfTwoExperts(self, eps = 1e-8, numDists = 3):
-        if deepTest:
+        if _deepTest:
             for distIndex in range(numDists):
                 dimIn = randint(1, 5)
                 dist, inputGen = gen_MixtureOfTwoExperts(dimIn, bias = True)
@@ -533,7 +532,7 @@ class TestDist(unittest.TestCase):
             dimIn = randint(0, 5)
             dist, inputGen = gen_MixtureDist(dimIn)
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivInputCheck = True, logProbDerivOutputCheck = True)
-            if deepTest:
+            if _deepTest:
                 check_est(dist, getTrainEM(dist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(dist), inputGen, hasParams = True)
 
@@ -542,7 +541,7 @@ class TestDist(unittest.TestCase):
             dimIn = randint(0, 5)
             dist, inputGen = gen_IdentifiableMixtureDist(dimIn)
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivInputCheck = True)
-            if deepTest:
+            if _deepTest:
                 initEstDist = gen_IdentifiableMixtureDist(dimIn, blcUseZeroCoeff = True)[0]
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
@@ -553,7 +552,7 @@ class TestDist(unittest.TestCase):
             depth = randint(0, 5)
             dist, inputGen = gen_VectorDist(order, depth)
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints)
-            if deepTest:
+            if _deepTest:
                 initEstDist = gen_VectorDist(order, depth)[0]
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
@@ -564,7 +563,7 @@ class TestDist(unittest.TestCase):
             dimIn = randint(0, 5)
             dist, inputGen = gen_DiscreteDist(keys, dimIn)
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivOutputCheck = True)
-            if deepTest:
+            if _deepTest:
                 initEstDist = gen_DiscreteDist(keys, dimIn)[0]
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
@@ -574,7 +573,7 @@ class TestDist(unittest.TestCase):
             dimIn = randint(0, 5)
             dist, inputGen = gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = dimIn)
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivOutputCheck = True)
-            if deepTest:
+            if _deepTest:
                 initEstDist = randomizeParams(dist)
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
@@ -595,7 +594,7 @@ class TestDist(unittest.TestCase):
                 # check decision tree clustering runs at all
                 training = [ (input, dist.synth(input), exp(randn())) for input, index in zip(inputGen, range(numPoints)) ]
                 estDist, estLogLike, estOcc = train(training)
-            if deepTest:
+            if _deepTest:
                 check_est(dist, train, inputGen, hasParams = True)
 
     def test_MappedInputDist(self, eps = 1e-8, numDists = 20, numPoints = 100):
@@ -607,7 +606,7 @@ class TestDist(unittest.TestCase):
                 dimOut = randint(0, 5)
             dist, inputGen = gen_MappedInputDist(dimIn, dimOut)
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivInputCheck = True, logProbDerivOutputCheck = True)
-            if deepTest:
+            if _deepTest:
                 initEstDist = randomizeParams(dist)
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
@@ -617,7 +616,7 @@ class TestDist(unittest.TestCase):
             dimInput = randint(0, 5)
             dist, inputGen = gen_MappedOutputDist(dimInput)
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivInputCheck = True, logProbDerivOutputCheck = True)
-            if deepTest:
+            if _deepTest:
                 initEstDist = randomizeParams(dist)
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
@@ -631,7 +630,7 @@ class TestDist(unittest.TestCase):
                 dimOut = randint(0, 5)
             dist, inputGen = gen_TransformedInputDist(dimIn, dimOut)
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivInputCheck = True, logProbDerivOutputCheck = True)
-            if deepTest:
+            if _deepTest:
                 initEstDist = randomizeParams(dist)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
 
@@ -640,7 +639,7 @@ class TestDist(unittest.TestCase):
             dimInput = randint(0, 5)
             dist, inputGen = gen_TransformedOutputDist(dimInput)
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivInputCheck = True, logProbDerivOutputCheck = True)
-            if deepTest:
+            if _deepTest:
                 initEstDist = randomizeParams(dist)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
 
@@ -650,7 +649,7 @@ class TestDist(unittest.TestCase):
             dimInputs = [ randint(0, 5) for i in range(numInputs) ]
             dist, inputGen = gen_nestedTransformDist(dimInputs)
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivInputCheck = True, logProbDerivOutputCheck = True)
-            if deepTest:
+            if _deepTest:
                 initEstDist = randomizeParams(dist)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
 
@@ -659,7 +658,7 @@ class TestDist(unittest.TestCase):
             dimIn = randint(0, 5)
             dist, inputGen = gen_PassThruDist(dimIn)
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivInputCheck = True, logProbDerivOutputCheck = True)
-            if deepTest:
+            if _deepTest:
                 initEstDist = gen_PassThruDist(dimIn)[0]
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
@@ -670,7 +669,7 @@ class TestDist(unittest.TestCase):
             dimIn = randint(0, 5)
             dist, inputGen = gen_DebugDist(maxOcc = maxOcc, dimIn = dimIn)
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, iid = True, unitOcc = True, logProbDerivInputCheck = True, logProbDerivOutputCheck = True)
-            if deepTest:
+            if _deepTest:
                 initEstDist = gen_DebugDist(maxOcc = maxOcc, dimIn = dimIn)[0]
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True, iid = True, unitOcc = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True, iid = True, unitOcc = True)
@@ -682,7 +681,7 @@ class TestDist(unittest.TestCase):
             dimIn = randint(0, 5)
             dist, inputGen = gen_shared_DiscreteDist(keys, dimIn)
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivOutputCheck = True)
-            if deepTest:
+            if _deepTest:
                 initEstDist = gen_shared_DiscreteDist(keys, dimIn)[0]
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
@@ -859,6 +858,11 @@ def testMixtureOfTwoExpertsInitialization():
     pylab.xlim(-10.0, 10.0)
     pylab.ylim(-10.0, 10.0)
     pylab.show()
+
+def suite(deepTest = False):
+    global _deepTest
+    _deepTest = deepTest
+    return unittest.TestLoader().loadTestsFromTestCase(TestDist)
 
 if __name__ == '__main__':
     unittest.main()

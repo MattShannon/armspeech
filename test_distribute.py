@@ -74,5 +74,8 @@ class TestDistribute(unittest.TestCase):
 
         repo.remove()
 
+def suite():
+    return unittest.TestLoader().loadTestsFromTestCase(TestDistribute)
+
 if __name__ == '__main__':
     unittest.main()

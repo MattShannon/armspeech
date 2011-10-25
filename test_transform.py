@@ -382,5 +382,11 @@ class TestOutputTransform(unittest.TestCase):
             xf = gen_ShiftOutputTransform(shapeInput = shapeInput, shapeOutput = shapeOutput)
             checkOutputTransform(xf, shapeInput, shapeOutput, hasParams = True, eps = eps, its = itsPerTransform, checkAdditional = checkAdditional)
 
+def suite():
+    return unittest.TestSuite([
+        unittest.TestLoader().loadTestsFromTestCase(TestTransform),
+        unittest.TestLoader().loadTestsFromTestCase(TestOutputTransform),
+    ])
+
 if __name__ == '__main__':
     unittest.main()
