@@ -864,15 +864,19 @@ class AutoGrowingDiscreteAcc(Acc):
                         addAcc(no, acc)
                 assert_allclose(yes.occ + no.occ, occNode)
                 if yes.occ > minOcc and no.occ > minOcc:
-                    distYesLeaf, logLikeYesLeaf, occYes = defaultEstimate(yes)
-                    distNoLeaf, logLikeNoLeaf, occNo = defaultEstimate(no)
-                    assert_allclose(occYes + occNo, occNode)
-                    logLike = logLikeYesLeaf + logLikeNoLeaf
-                    if bestFullQuestion == None or logLike > bestLogLike:
-                        bestFullQuestion = labelValuer, question
-                        bestLogLike = logLike
-                        bestEstimatedYes = distYesLeaf, logLikeYesLeaf, occYes
-                        bestEstimatedNo = distNoLeaf, logLikeNoLeaf, occNo
+                    try:
+                        distYesLeaf, logLikeYesLeaf, occYes = defaultEstimate(yes)
+                        distNoLeaf, logLikeNoLeaf, occNo = defaultEstimate(no)
+                    except EstimationError:
+                        pass
+                    else:
+                        assert_allclose(occYes + occNo, occNode)
+                        logLike = logLikeYesLeaf + logLikeNoLeaf
+                        if bestFullQuestion == None or logLike > bestLogLike:
+                            bestFullQuestion = labelValuer, question
+                            bestLogLike = logLike
+                            bestEstimatedYes = distYesLeaf, logLikeYesLeaf, occYes
+                            bestEstimatedNo = distNoLeaf, logLikeNoLeaf, occNo
         return bestFullQuestion, bestLogLike, bestEstimatedYes, bestEstimatedNo
 
 class DecisionTreeAcc(Acc):
