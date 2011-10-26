@@ -19,7 +19,7 @@ import shutil
 
 class TempSimpleRepo(persist.SimpleRepo):
     def __init__(self):
-        self.base = tempfile.mkdtemp()
+        self.base = tempfile.mkdtemp(prefix = 'armspeech.')
     def remove(self):
         shutil.rmtree(self.base)
     def __del__(self):
