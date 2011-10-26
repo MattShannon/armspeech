@@ -33,10 +33,13 @@ def suite(deepTest = False):
     ])
 
 def main(rawArgs):
-    parser = argparse.ArgumentParser(description = 'Runs all tests for armspeech.')
+    parser = argparse.ArgumentParser(
+        description = 'Runs all tests for armspeech.',
+        formatter_class = argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument(
         '--verbosity', dest = 'verbosity', type = int, default = 1, metavar = 'VERB',
-        help = 'verbosity level (default: 1)'
+        help = 'verbosity level'
     )
     parser.add_argument(
         '--deep', dest = 'deepTest', action = 'store_true',
