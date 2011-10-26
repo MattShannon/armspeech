@@ -8,10 +8,11 @@
 
 from __future__ import division
 
-from dist import *
-from timing import *
+import dist as d
+from minimize import minimize
+from armspeech.util.timing import timed
 
-def trainEM(distInit, accumulate, createAcc = defaultCreateAcc, estimate = defaultEstimate, deltaThresh = 1e-8, minIterations = 1, maxIterations = None, beforeAcc = None, afterAcc = None, afterEst = None, monotone = False, verbosity = 0):
+def trainEM(distInit, accumulate, createAcc = d.defaultCreateAcc, estimate = d.defaultEstimate, deltaThresh = 1e-8, minIterations = 1, maxIterations = None, beforeAcc = None, afterAcc = None, afterEst = None, monotone = False, verbosity = 0):
     assert minIterations >= 1
     assert maxIterations == None or maxIterations >= minIterations
 
@@ -31,7 +32,7 @@ def trainEM(distInit, accumulate, createAcc = defaultCreateAcc, estimate = defau
     estimateSub = timed(estimateSubCore) if verbosity >= 2 else estimateSubCore
 
     it = 0
-    dist, logLikePrev, deltaPrev, occ = estimateSub(distInit, log(0.0))
+    dist, logLikePrev, deltaPrev, occ = estimateSub(distInit, float('-inf'))
     if afterEst != None:
         afterEst(dist = dist, it = it)
     it += 1
@@ -51,7 +52,7 @@ def trainEM(distInit, accumulate, createAcc = defaultCreateAcc, estimate = defau
             print 'trainEM: did NOT converge at thresh', deltaThresh, 'in', it, 'iterations'
     return dist, logLikePrev, occ
 
-def trainCG(distInit, accumulate, ps = defaultParamSpec, length = -50, verbosity = 0):
+def trainCG(distInit, accumulate, ps = d.defaultParamSpec, length = -50, verbosity = 0):
     def negLogLike_derivParams(params):
         dist = ps.parseAll(distInit, params)
         acc = ps.createAccG(dist)
@@ -82,7 +83,7 @@ def trainCG(distInit, accumulate, ps = defaultParamSpec, length = -50, verbosity
 
     return dist, logLike, occ
 
-def trainCGandEM(distInit, accumulate, ps = defaultParamSpec, createAccEM = defaultCreateAcc, estimate = defaultEstimate, iterations = 5, length = -50, afterEst = None, verbosity = 0):
+def trainCGandEM(distInit, accumulate, ps = d.defaultParamSpec, createAccEM = d.defaultCreateAcc, estimate = d.defaultEstimate, iterations = 5, length = -50, afterEst = None, verbosity = 0):
     assert iterations >= 1
 
     dist = distInit
@@ -106,6 +107,6 @@ def trainCGandEM(distInit, accumulate, ps = defaultParamSpec, createAccEM = defa
     return dist, trainLogLike, trainOcc
 
 def mixupLinearGaussianEstimatePartial(acc, estimateChild):
-    if isinstance(acc, LinearGaussianAcc):
+    if isinstance(acc, d.LinearGaussianAcc):
         return acc.estimateInitialMixtureOfTwoExperts()
-mixupLinearGaussianEstimate = getEstimate([mixupLinearGaussianEstimatePartial, defaultEstimatePartial])
+mixupLinearGaussianEstimate = d.getEstimate([mixupLinearGaussianEstimatePartial, d.defaultEstimatePartial])

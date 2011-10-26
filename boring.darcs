@@ -1,15 +1,9 @@
 
-^data/labels($|/)
-
-^data/mgc($|/)
-
-^data/lf0($|/)
-
-^data/bap($|/)
+^expt_hts_demo/data/
 
 ^scripts/Config\.pm$
 
-^out\.
+^expt_hts_demo/out\.
 
-^[^/]*\.log$
+^expt_hts_demo/[^/]*\.log$
 

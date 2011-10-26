@@ -8,18 +8,19 @@
 
 from __future__ import division
 
-from transform import *
-from mathhelp import logDet
+import transform as xf
+from armspeech.util.mathhelp import logDet
 
 import unittest
-from numpy import *
+import math
 import random
+import numpy as np
 from numpy.random import randn, randint
 
 # FIXME : add explicit tests for transform_acc
 
 def assert_allclose(actual, desired, rtol = 1e-7, atol = 1e-14, msg = 'items not almost equal'):
-    if shape(actual) != shape(desired) or not allclose(actual, desired, rtol, atol):
+    if np.shape(actual) != np.shape(desired) or not np.allclose(actual, desired, rtol, atol):
         raise AssertionError(msg+'\n ACTUAL:  '+repr(actual)+'\n DESIRED: '+repr(desired))
 
 def randTag():
@@ -45,7 +46,7 @@ def gen_genericTransform(shapeIn, shapeOut):
         return gen_DotProductTransform(shapeIn = shapeIn)
     else:
         if shapeIn == shapeOut and randint(0, 5) != 0:
-            return VectorizeTransform(gen_genericTransform1D()).withTag(randTag())
+            return xf.VectorizeTransform(gen_genericTransform1D()).withTag(randTag())
         else:
             return gen_LinearTransform(shapeIn = shapeIn, shapeOut = shapeOut)
 def gen_genericInvertibleTransform(shape):
@@ -59,19 +60,19 @@ def gen_genericInvertibleTransform(shape):
         if randint(0, 2) == 0:
             return gen_InvertibleLinearTransform(shape = shape)
         else:
-            return VectorizeTransform(gen_genericInvertibleTransform1D()).withTag(randTag())
+            return xf.VectorizeTransform(gen_genericInvertibleTransform1D()).withTag(randTag())
 def gen_ConstantTransform(shapeIn, shapeOut):
     value = randn(*shapeOut)
-    return ConstantTransform(value).withTag(randTag())
+    return xf.ConstantTransform(value).withTag(randTag())
 def gen_DotProductTransform(shapeIn):
     assert len(shapeIn) == 1
     params = randn(*shapeIn)
-    return DotProductTransform(params).withTag(randTag())
+    return xf.DotProductTransform(params).withTag(randTag())
 def gen_LinearTransform(shapeIn, shapeOut):
     assert len(shapeIn) == 1
     assert len(shapeOut) == 1
     mat = randn(shapeIn[0], shapeOut[0])
-    return LinearTransform(mat).withTag(randTag())
+    return xf.LinearTransform(mat).withTag(randTag())
 def gen_InvertibleLinearTransform(shape):
     assert len(shape) == 1
     dim = shape[0]
@@ -79,28 +80,28 @@ def gen_InvertibleLinearTransform(shape):
     while not invertible:
         mat = randn(dim, dim)
         invertible = (logDet(mat) > float('-inf'))
-    return LinearTransform(mat).withTag(randTag())
+    return xf.LinearTransform(mat).withTag(randTag())
 def gen_genericTransform1D():
     params = randn(3)
-    return PolynomialTransform1D(params).withTag(randTag())
+    return xf.PolynomialTransform1D(params).withTag(randTag())
 def gen_genericInvertibleTransform1D():
     return gen_ScaledSinhTransform1D()
 def gen_PolynomialTransform1D():
     params = randn(randint(0, 10))
-    return PolynomialTransform1D(params).withTag(randTag())
+    return xf.PolynomialTransform1D(params).withTag(randTag())
 def gen_ScaledSinhTransform1D():
     a = randn()
-    return ScaledSinhTransform1D(a).withTag(randTag())
+    return xf.ScaledSinhTransform1D(a).withTag(randTag())
 def gen_TanhTransformLogParam1D():
     params = randn(3)
-    return TanhTransformLogParam1D(params).withTag(randTag())
+    return xf.TanhTransformLogParam1D(params).withTag(randTag())
 def gen_TanhTransform1D():
     params = randn(3)
-    return TanhTransform1D(params, warn = False).withTag(randTag())
+    return xf.TanhTransform1D(params, warn = False).withTag(randTag())
 def gen_SumTransform1D():
     return gen_InvertibleSumOfTanhLogParam1D()
 def gen_InvertibleSumOfTanhLogParam1D(numTanh = 3):
-    return SumTransform1D([ gen_TanhTransformLogParam1D() if i > 0 else IdentityTransform() for i in range(numTanh + 1) ]).withTag(randTag())
+    return xf.SumTransform1D([ gen_TanhTransformLogParam1D() if i > 0 else xf.IdentityTransform() for i in range(numTanh + 1) ]).withTag(randTag())
 def gen_InvertibleSumOfTanh1D(numTanh = 3, tricky = False):
     """
     if tricky is set at least one component transform will have negative derivative
@@ -111,38 +112,38 @@ def gen_InvertibleSumOfTanh1D(numTanh = 3, tricky = False):
         if not tricky or numTanh == 0 or any([ transform.a * transform.b < 0.0 for transform in transforms ]):
             derivLowerBound = 1.0 + sum(min(transform.a * transform.b, 0.0) for transform in transforms)
             if derivLowerBound > 0.0:
-                return SumTransform1D([ IdentityTransform() ] + transforms).withTag(randTag())
+                return xf.SumTransform1D([ xf.IdentityTransform() ] + transforms).withTag(randTag())
 def gen_SumOfTanh1D(numTanh = 3):
-    return SumTransform1D([ gen_TanhTransform1D() if i > 0 else IdentityTransform() for i in range(numTanh + 1) ]).withTag(randTag())
+    return xf.SumTransform1D([ gen_TanhTransform1D() if i > 0 else xf.IdentityTransform() for i in range(numTanh + 1) ]).withTag(randTag())
 
 def check_deriv(transform, x, eps):
-    delta = randn(*shape(x)) * eps
+    delta = randn(*np.shape(x)) * eps
     numericDelta = transform(x + delta) - transform(x)
-    analyticDelta = dot(delta, transform.deriv(x))
+    analyticDelta = np.dot(delta, transform.deriv(x))
     assert_allclose(analyticDelta, numericDelta, rtol = 1e-4)
 def check_derivDeriv(transform, x, eps):
-    assert shape(x) == ()
+    assert np.shape(x) == ()
     delta = randn() * eps
     numericDelta = transform.deriv(x + delta) - transform.deriv(x)
-    analyticDelta = dot(delta, transform.derivDeriv(x))
+    analyticDelta = np.dot(delta, transform.derivDeriv(x))
     assert_allclose(analyticDelta, numericDelta, rtol = 1e-4)
 def check_derivParams(transform, x, eps):
     params = transform.params
-    paramsDelta = randn(*shape(params)) * eps
+    paramsDelta = randn(*np.shape(params)) * eps
     numericDelta = transform.parseAll(params + paramsDelta)(x) - transform(x)
-    analyticDelta = dot(paramsDelta, transform.derivParams(x))
+    analyticDelta = np.dot(paramsDelta, transform.derivParams(x))
     assert_allclose(analyticDelta, numericDelta, rtol = 1e-4)
 def check_derivParamsDeriv(transform, x, eps):
-    assert shape(x) == ()
+    assert np.shape(x) == ()
     delta = randn() * eps
     numericDelta = transform.derivParams(x + delta) - transform.derivParams(x)
-    analyticDelta = dot(delta, transform.derivParamsDeriv(x))
+    analyticDelta = np.dot(delta, transform.derivParamsDeriv(x))
     assert_allclose(analyticDelta, numericDelta, rtol = 1e-4)
 def computeLogJac(transform, x):
-    shapeOut = shape(x)
+    shapeOut = np.shape(x)
     deriv = transform.deriv(x)
     if len(shapeOut) == 0:
-        return log(abs(deriv))
+        return math.log(abs(deriv))
     elif len(shapeOut) == 1:
         return logDet(deriv)
     else:
@@ -150,18 +151,18 @@ def computeLogJac(transform, x):
 def check_logJac(transform, x, eps):
     numericLJ = computeLogJac(transform, x)
     analyticLJ = transform.logJac(x)
-    assert shape(analyticLJ) == ()
+    assert np.shape(analyticLJ) == ()
     assert_allclose(numericLJ, analyticLJ)
 def check_logJacDeriv(transform, x, eps):
-    delta = randn(*shape(x)) * eps
+    delta = randn(*np.shape(x)) * eps
     numericDelta = transform.logJac(x + delta) - transform.logJac(x)
-    analyticDelta = dot(delta, transform.logJacDeriv(x))
+    analyticDelta = np.dot(delta, transform.logJacDeriv(x))
     assert_allclose(analyticDelta, numericDelta, rtol = 1e-4)
 def check_logJacDerivParams(transform, x, eps):
     params = transform.params
-    paramsDelta = randn(*shape(params)) * eps
+    paramsDelta = randn(*np.shape(params)) * eps
     numericDeltaLJ = transform.parseAll(params + paramsDelta).logJac(x) - transform.logJac(x)
-    analyticDeltaLJ = dot(transform.logJacDerivParams(x), paramsDelta)
+    analyticDeltaLJ = np.dot(transform.logJacDerivParams(x), paramsDelta)
     assert_allclose(analyticDeltaLJ, numericDeltaLJ, rtol = 1e-4)
 def check_inv(transform, x, y):
     """(N.B. x and y not supposed to correspond to each other)"""
@@ -172,7 +173,7 @@ def check_inv(transform, x, y):
 
 def checkTransform(transform, shapeIn, invertible, hasParams, is1D, eps, its, checkAdditional = None):
     assert transform.tag != None
-    transformEvaled = eval(repr(transform))
+    transformEvaled = xf.eval_local(repr(transform))
     assert transformEvaled.tag == transform.tag
     assert repr(transform) == repr(transformEvaled)
     if hasParams:
@@ -211,29 +212,29 @@ class TestTransform(unittest.TestCase):
         for it in range(its):
             shapeIn = shapeRand()
             shapeOut = shapeRand()
-            xf = gen_ConstantTransform(shapeIn = shapeIn, shapeOut = shapeOut)
-            checkTransform(xf, shapeIn, invertible = False, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
+            axf = gen_ConstantTransform(shapeIn = shapeIn, shapeOut = shapeOut)
+            checkTransform(axf, shapeIn, invertible = False, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
     def test_IdentityTransform(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         def checkAdditional(transform, x, eps):
             assert_allclose(transform(x), x)
         for it in range(its):
-            xf = IdentityTransform().withTag(randTag())
+            axf = xf.IdentityTransform().withTag(randTag())
             shapeIn = shapeRand()
-            checkTransform(xf, shapeIn, invertible = True, hasParams = True, is1D = False, eps = eps, its = itsPerTransform, checkAdditional = checkAdditional)
+            checkTransform(axf, shapeIn, invertible = True, hasParams = True, is1D = False, eps = eps, its = itsPerTransform, checkAdditional = checkAdditional)
     def test_DotProductTransform(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         for it in range(its):
             shapeIn = shapeRand(ranks = [1])
-            xf = gen_DotProductTransform(shapeIn = shapeIn)
-            checkTransform(xf, shapeIn, invertible = False, hasParams = True, is1D = False, eps = eps, its = itsPerTransform)
+            axf = gen_DotProductTransform(shapeIn = shapeIn)
+            checkTransform(axf, shapeIn, invertible = False, hasParams = True, is1D = False, eps = eps, its = itsPerTransform)
     def test_LinearTransform(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         for it in range(its):
             shapeIn = shapeRand(ranks = [1])
             shapeOut = shapeRand(ranks = [1])
-            xf = gen_LinearTransform(shapeIn = shapeIn, shapeOut = shapeOut)
-            checkTransform(xf, shapeIn, invertible = False, hasParams = True, is1D = False, eps = eps, its = itsPerTransform)
+            axf = gen_LinearTransform(shapeIn = shapeIn, shapeOut = shapeOut)
+            checkTransform(axf, shapeIn, invertible = False, hasParams = True, is1D = False, eps = eps, its = itsPerTransform)
             shape = shapeRand(ranks = [1])
-            xf = gen_InvertibleLinearTransform(shape = shape)
-            checkTransform(xf, shape, invertible = True, hasParams = True, is1D = False, eps = eps, its = itsPerTransform)
+            axf = gen_InvertibleLinearTransform(shape = shape)
+            checkTransform(axf, shape, invertible = True, hasParams = True, is1D = False, eps = eps, its = itsPerTransform)
     def test_FrozenTransform(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         for it in range(its):
             shapeIn = shapeRand()
@@ -241,38 +242,38 @@ class TestTransform(unittest.TestCase):
                 shapeOut = shapeIn
             else:
                 shapeOut = shapeRand()
-            xfSub = gen_genericTransform(shapeIn = shapeIn, shapeOut = shapeOut)
-            xf = FrozenTransform(xfSub).withTag(randTag())
-            checkTransform(xf, shapeIn, invertible = False, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
+            axfSub = gen_genericTransform(shapeIn = shapeIn, shapeOut = shapeOut)
+            axf = xf.FrozenTransform(axfSub).withTag(randTag())
+            checkTransform(axf, shapeIn, invertible = False, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
             shape = shapeRand()
-            xfSub = gen_genericInvertibleTransform(shape = shape)
-            xf = FrozenTransform(xfSub).withTag(randTag())
-            checkTransform(xf, shape, invertible = True, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
+            axfSub = gen_genericInvertibleTransform(shape = shape)
+            axf = xf.FrozenTransform(axfSub).withTag(randTag())
+            checkTransform(axf, shape, invertible = True, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
     def test_InvertedTransform(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         for it in range(its):
             shape = shapeRand()
-            xfSub = gen_genericInvertibleTransform(shape = shape)
-            xf = InvertedTransform(xfSub).withTag(randTag())
-            checkTransform(xf, shape, invertible = True, hasParams = True, is1D = False, eps = eps, its = itsPerTransform)
+            axfSub = gen_genericInvertibleTransform(shape = shape)
+            axf = xf.InvertedTransform(axfSub).withTag(randTag())
+            checkTransform(axf, shape, invertible = True, hasParams = True, is1D = False, eps = eps, its = itsPerTransform)
     def test_AddBias(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         for it in range(its):
-            xf = AddBias().withTag(randTag())
+            axf = xf.AddBias().withTag(randTag())
             shapeIn = [randint(0, 10)]
-            checkTransform(xf, shapeIn, invertible = False, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
+            checkTransform(axf, shapeIn, invertible = False, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
     def test_MinusPrev(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         for it in range(its):
-            xf = MinusPrev().withTag(randTag())
+            axf = xf.MinusPrev().withTag(randTag())
             shapeIn = [randint(1, 10)]
-            checkTransform(xf, shapeIn, invertible = False, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
+            checkTransform(axf, shapeIn, invertible = False, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
     # FIXME : add test for Msd01ToVector
     def test_VectorizeTransform(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         def checkAdditional(transform, x, eps):
-            assert_allclose(transform(x), array(map(transform.transform1D, x)))
+            assert_allclose(transform(x), np.array(map(transform.transform1D, x)))
         for it in range(its):
-            F = VectorizeTransform(gen_genericTransform1D()).withTag(randTag())
+            F = xf.VectorizeTransform(gen_genericTransform1D()).withTag(randTag())
             shapeIn = shapeRand([1])
             checkTransform(F, shapeIn, invertible = False, hasParams = True, is1D = False, eps = eps, its = itsPerTransform, checkAdditional = checkAdditional)
-            F = VectorizeTransform(gen_genericInvertibleTransform1D()).withTag(randTag())
+            F = xf.VectorizeTransform(gen_genericInvertibleTransform1D()).withTag(randTag())
             shapeIn = shapeRand([1])
             checkTransform(F, shapeIn, invertible = True, hasParams = True, is1D = False, eps = eps, its = itsPerTransform, checkAdditional = checkAdditional)
     def test_PolynomialTransform1D(self, eps = 1e-8, its = 50, itsPerTransform = 10):
@@ -305,26 +306,26 @@ def gen_genericOutputTransform(shapeInput, shapeOutput):
     # FIXME : something more general?
     return gen_ShiftOutputTransform(shapeInput = shapeInput, shapeOutput = shapeOutput)
 def gen_SimpleOutputTransform(shapeInput, shapeOutput):
-    xf = gen_genericInvertibleTransform(shape = shapeOutput)
+    axf = gen_genericInvertibleTransform(shape = shapeOutput)
     checkDerivPositive1D = (len(shapeOutput) == 0 and randint(0, 2) == 0)
-    return SimpleOutputTransform(xf, checkDerivPositive1D = checkDerivPositive1D).withTag(randTag())
+    return xf.SimpleOutputTransform(axf, checkDerivPositive1D = checkDerivPositive1D).withTag(randTag())
 def gen_ShiftOutputTransform(shapeInput, shapeOutput):
-    xf = gen_genericTransform(shapeIn = shapeInput, shapeOut = shapeOutput)
-    return ShiftOutputTransform(xf).withTag(randTag())
+    axf = gen_genericTransform(shapeIn = shapeInput, shapeOut = shapeOutput)
+    return xf.ShiftOutputTransform(axf).withTag(randTag())
 
 def check_derivInput(outputTransform, input, x, eps):
-    delta = randn(*shape(input)) * eps
+    delta = randn(*np.shape(input)) * eps
     numericDelta = outputTransform(input + delta, x) - outputTransform(input, x)
-    analyticDelta = dot(delta, outputTransform.derivInput(input, x))
+    analyticDelta = np.dot(delta, outputTransform.derivInput(input, x))
     assert_allclose(analyticDelta, numericDelta, rtol = 1e-4)
 def check_logJacDerivInput(outputTransform, input, x, eps):
-    delta = randn(*shape(input)) * eps
+    delta = randn(*np.shape(input)) * eps
     numericDelta = outputTransform.logJac(input + delta, x) - outputTransform.logJac(input, x)
-    analyticDelta = dot(delta, outputTransform.logJacDerivInput(input, x))
+    analyticDelta = np.dot(delta, outputTransform.logJacDerivInput(input, x))
     assert_allclose(analyticDelta, numericDelta, rtol = 1e-4)
 
 def checkOutputTransform(outputTransform, shapeInput, shapeOutput, hasParams, eps, its, checkAdditional = None):
-    outputTransformEvaled = eval(repr(outputTransform))
+    outputTransformEvaled = xf.eval_local(repr(outputTransform))
     assert repr(outputTransform) == repr(outputTransformEvaled)
     if hasParams:
         params = outputTransform.params
@@ -363,13 +364,13 @@ class TestOutputTransform(unittest.TestCase):
         for it in range(its):
             shapeInput = shapeRand()
             shapeOutput = shapeRand()
-            xf = gen_SimpleOutputTransform(shapeInput = shapeInput, shapeOutput = shapeOutput)
-            checkOutputTransform(xf, shapeInput, shapeOutput, hasParams = True, eps = eps, its = itsPerTransform, checkAdditional = checkAdditional)
+            axf = gen_SimpleOutputTransform(shapeInput = shapeInput, shapeOutput = shapeOutput)
+            checkOutputTransform(axf, shapeInput, shapeOutput, hasParams = True, eps = eps, its = itsPerTransform, checkAdditional = checkAdditional)
     def test_checkDerivPositive1D_for_SimpleOutputTransform(self):
-        outputTransform = SimpleOutputTransform(TanhTransform1D([1.0, 0.5, 0.0]), checkDerivPositive1D = True)
+        outputTransform = xf.SimpleOutputTransform(xf.TanhTransform1D([1.0, 0.5, 0.0]), checkDerivPositive1D = True)
         assert outputTransform.deriv([], 0.0) > 0.0
-        outputTransform = SimpleOutputTransform(TanhTransform1D([-1.0, 0.5, 0.0]), checkDerivPositive1D = True)
-        self.assertRaises(DerivativeNotPositiveError, outputTransform.deriv, [], 0.0)
+        outputTransform = xf.SimpleOutputTransform(xf.TanhTransform1D([-1.0, 0.5, 0.0]), checkDerivPositive1D = True)
+        self.assertRaises(xf.DerivativeNotPositiveError, outputTransform.deriv, [], 0.0)
     def test_ShiftOutputTransform(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         def checkAdditional(outputTransform, input, x, eps):
             assert_allclose(outputTransform(input, x), x + outputTransform.shift(input))
@@ -379,8 +380,8 @@ class TestOutputTransform(unittest.TestCase):
                 shapeOutput = shapeInput
             else:
                 shapeOutput = shapeRand()
-            xf = gen_ShiftOutputTransform(shapeInput = shapeInput, shapeOutput = shapeOutput)
-            checkOutputTransform(xf, shapeInput, shapeOutput, hasParams = True, eps = eps, its = itsPerTransform, checkAdditional = checkAdditional)
+            axf = gen_ShiftOutputTransform(shapeInput = shapeInput, shapeOutput = shapeOutput)
+            checkOutputTransform(axf, shapeInput, shapeOutput, hasParams = True, eps = eps, its = itsPerTransform, checkAdditional = checkAdditional)
 
 def suite():
     return unittest.TestSuite([

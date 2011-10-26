@@ -11,7 +11,7 @@
 
 from __future__ import division
 
-import labels as lab
+import armspeech.speech.labels as lab
 
 phonePat = r'[a-z]+'
 phoneOrNonePat = r'(x|[a-z]+)'

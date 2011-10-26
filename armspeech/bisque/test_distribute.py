@@ -8,7 +8,7 @@
 
 from __future__ import division
 
-from dist import LinearGaussian
+from armspeech.modelling.dist import LinearGaussian
 import persist
 import distribute
 import test_persist

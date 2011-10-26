@@ -41,20 +41,21 @@ armspeech has the following dependencies:
 
 To set-up this directory:
 
-- add appropriate directories or symlinks for `data/mgc`, `data/lf0`,
-  `data/bap` and `data/labels/full` (e.g. copied from the HTS demo)
+- add appropriate directories or symlinks for `expt_hts_demo/data/mgc`,
+  `expt_hts_demo/data/lf0`, `expt_hts_demo/data/bap` and
+  `expt_hts_demo/data/labels/full` (e.g. copied from the HTS demo)
 - if you want to generate audio, add an appropriate `scripts/Config.pm` file
   (e.g. copied from the HTS demo)
-- if necessary make `experiment.py` and `print_pickle.py` executable (use
-  `chmod u+x`)
+- if necessary make `print_pickle.py`, `run_expt_hts_demo.sh` and `run_tests.sh`
+  executable (use `chmod u+x`)
 
 You can then run example experiments using:
 
-    ./experiment.py
+    ./run_expt_hts_demo.sh
 
-For now it is intended that new experiments will clone this repository using
-git and customize this directory directly, rather than using this directory as
-a library.
+Currently `expt_hts_demo` uses the `armspeech` python package as a library, but
+the latter is not intended to be a fully-fledged package suitable for separate
+distribution.
 This may change as the code matures.
 
 

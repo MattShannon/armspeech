@@ -8,19 +8,21 @@
 
 from __future__ import division
 
-from dist import *
-from model import *
-from summarizer import VectorSeqSummarizer
-from mathhelp import logSum
-from iterhelp import chunkList
+import nodetree
+import dist as d
+import train as trn
+import summarizer
+from armspeech.util.mathhelp import logSum
+from armspeech.util.iterhelp import chunkList
 
 import test_transform
 import test_dist_questions
 
 import unittest
 import sys
-from numpy import *
+import math
 import random
+import numpy as np
 from numpy.random import randn, randint
 import numpy.linalg as la
 from scipy import stats
@@ -36,7 +38,7 @@ def logProb_frames(dist, trainData):
     return lp, frames
 
 def assert_allclose(actual, desired, rtol = 1e-7, atol = 1e-14, msg = 'items not almost equal'):
-    if shape(actual) != shape(desired) or not allclose(actual, desired, rtol, atol):
+    if np.shape(actual) != np.shape(desired) or not np.allclose(actual, desired, rtol, atol):
         raise AssertionError(msg+'\n ACTUAL:  '+repr(actual)+'\n DESIRED: '+repr(desired))
 
 def randTag():
@@ -57,27 +59,27 @@ def simpleInputGen(dimIn, bias = False):
 def gen_LinearGaussian(dimIn = 3, bias = False):
     coeff = randn(dimIn)
     variance = math.exp(randn())
-    dist = LinearGaussian(coeff, variance).withTag(randTag())
+    dist = d.LinearGaussian(coeff, variance).withTag(randTag())
     return dist, simpleInputGen(dimIn, bias = bias)
 
 def gen_StudentDist(dimIn = 3):
     df = math.exp(randn() + 1.0)
     precision = math.exp(randn())
-    dist = StudentDist(df, precision).withTag(randTag())
+    dist = d.StudentDist(df, precision).withTag(randTag())
     return dist, simpleInputGen(dimIn)
 
 def gen_ConstantClassifier(numClasses = 5):
     logProbs = randn(numClasses)
     logProbs -= logSum(logProbs)
-    dist = ConstantClassifier(logProbs).withTag(randTag())
+    dist = d.ConstantClassifier(logProbs).withTag(randTag())
     return dist, simpleInputGen(0)
 
 def gen_BinaryLogisticClassifier(dimIn = 3, bias = False, useZeroCoeff = False):
     if useZeroCoeff:
-        w = zeros([dimIn])
+        w = np.zeros([dimIn])
     else:
         w = randn(dimIn)
-    dist = BinaryLogisticClassifier(w).withTag(randTag())
+    dist = d.BinaryLogisticClassifier(w).withTag(randTag())
     return dist, simpleInputGen(dimIn, bias = bias)
 
 def gen_MixtureDist(dimIn):
@@ -87,21 +89,21 @@ def gen_MixtureOfTwoExperts(dimIn = 3, bias = False):
     blc, blcGen = gen_BinaryLogisticClassifier(dimIn, bias = bias)
     dist0 = gen_LinearGaussian(dimIn)[0]
     dist1 = gen_LinearGaussian(dimIn)[0]
-    dist = MixtureDist(blc, [dist0, dist1]).withTag(randTag())
+    dist = d.MixtureDist(blc, [dist0, dist1]).withTag(randTag())
     return dist, blcGen
 
 def gen_IdentifiableMixtureDist(dimIn = 3, blcUseZeroCoeff = False):
     blc, blcGen = gen_BinaryLogisticClassifier(dimIn, useZeroCoeff = blcUseZeroCoeff)
-    dist0 = FixedValueDist(None)
+    dist0 = d.FixedValueDist(None)
     dist1 = gen_LinearGaussian(dimIn)[0]
-    dist = IdentifiableMixtureDist(blc, [dist0, dist1]).withTag(randTag())
+    dist = d.IdentifiableMixtureDist(blc, [dist0, dist1]).withTag(randTag())
     return dist, blcGen
 
 def gen_VectorDist(order = 10, depth = 3):
     depths = dict([ (outIndex, depth) for outIndex in range(order) ])
-    vectorSummarizer = VectorSeqSummarizer(order, depths)
+    vectorSummarizer = summarizer.VectorSeqSummarizer(order, depths)
     dist = vectorSummarizer.createDist(False, lambda outIndex:
-        MappedInputDist(array,
+        d.MappedInputDist(np.array,
             gen_LinearGaussian(depths[outIndex])[0]
         )
     ).withTag(randTag())
@@ -111,7 +113,7 @@ def gen_VectorDist(order = 10, depth = 3):
     return dist, getInputGen()
 
 def gen_DiscreteDist(keys = ['a', 'b', 'c'], dimIn = 3):
-    dist = createDiscreteDist(keys, lambda key:
+    dist = d.createDiscreteDist(keys, lambda key:
         gen_LinearGaussian(dimIn)[0]
     ).withTag(randTag())
     def getInputGen():
@@ -121,7 +123,7 @@ def gen_DiscreteDist(keys = ['a', 'b', 'c'], dimIn = 3):
 
 def gen_shared_DiscreteDist(keys = ['a', 'b', 'c'], dimIn = 3):
     subDist = gen_LinearGaussian(dimIn)[0]
-    dist = createDiscreteDist(keys, lambda key:
+    dist = d.createDiscreteDist(keys, lambda key:
         subDist
     ).withTag(randTag())
     def getInputGen():
@@ -150,7 +152,7 @@ def gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = 3):
                     fullQuestionsLeft.append((labelValuer, question))
 
         if random.random() > splitProb or not fullQuestionsLeft:
-            return DecisionTreeLeaf(gen_LinearGaussian(dimIn)[0])
+            return d.DecisionTreeLeaf(gen_LinearGaussian(dimIn)[0])
         else:
             fullQuestion = random.choice(fullQuestionsLeft)
             labelValuer, question = fullQuestion
@@ -161,7 +163,7 @@ def gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = 3):
                     labelsLeftYes.append(label)
                 else:
                     labelsLeftNo.append(label)
-            return DecisionTreeNode(fullQuestion, decisionTree(labelsLeftYes), decisionTree(labelsLeftNo))
+            return d.DecisionTreeNode(fullQuestion, decisionTree(labelsLeftYes), decisionTree(labelsLeftNo))
     def getInputGen():
         while True:
             yield random.choice(labels), randn(dimIn)
@@ -170,22 +172,22 @@ def gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = 3):
 def gen_MappedInputDist(dimIn = 3, dimOut = 2):
     transform = test_transform.gen_genericTransform([dimIn], [dimOut])
     subDist = gen_LinearGaussian(dimOut)[0]
-    return MappedInputDist(transform, subDist).withTag(randTag()), simpleInputGen(dimIn)
+    return d.MappedInputDist(transform, subDist).withTag(randTag()), simpleInputGen(dimIn)
 
 def gen_MappedOutputDist(dimInput = 3):
     outputTransform = test_transform.gen_genericOutputTransform([dimInput], [])
     subDist, inputGen = gen_LinearGaussian(dimInput)
-    return MappedOutputDist(outputTransform, subDist).withTag(randTag()), inputGen
+    return d.MappedOutputDist(outputTransform, subDist).withTag(randTag()), inputGen
 
 def gen_TransformedInputDist(dimIn = 3, dimOut = 2):
     transform = test_transform.gen_genericTransform([dimIn], [dimOut])
     subDist = gen_LinearGaussian(dimOut)[0]
-    return TransformedInputDist(transform, subDist).withTag(randTag()), simpleInputGen(dimIn)
+    return d.TransformedInputDist(transform, subDist).withTag(randTag()), simpleInputGen(dimIn)
 
 def gen_TransformedOutputDist(dimInput = 3):
     outputTransform = test_transform.gen_genericOutputTransform([dimInput], [])
     subDist, inputGen = gen_LinearGaussian(dimInput)
-    return TransformedOutputDist(outputTransform, subDist).withTag(randTag()), inputGen
+    return d.TransformedOutputDist(outputTransform, subDist).withTag(randTag()), inputGen
 
 def gen_nestedTransformDist(dimInputs = [3, 4, 2]):
     assert len(dimInputs) >= 1
@@ -194,30 +196,30 @@ def gen_nestedTransformDist(dimInputs = [3, 4, 2]):
     if randint(0, 2) == 0:
         outputTransform = test_transform.gen_genericOutputTransform([dimIn], [])
         if randint(0, 2) == 0:
-            dist = MappedOutputDist(outputTransform, dist)
+            dist = d.MappedOutputDist(outputTransform, dist)
         else:
-            dist = TransformedOutputDist(outputTransform, dist)
+            dist = d.TransformedOutputDist(outputTransform, dist)
     for dimIn, dimOut in reversed(zip(dimInputs, dimInputs[1:])):
         transform = test_transform.gen_genericTransform([dimIn], [dimOut])
         if randint(0, 2) == 0:
-            dist = MappedInputDist(transform, dist)
+            dist = d.MappedInputDist(transform, dist)
         else:
-            dist = TransformedInputDist(transform, dist)
+            dist = d.TransformedInputDist(transform, dist)
         if randint(0, 2) == 0:
             outputTransform = test_transform.gen_genericOutputTransform([dimIn], [])
             if randint(0, 2) == 0:
-                dist = MappedOutputDist(outputTransform, dist)
+                dist = d.MappedOutputDist(outputTransform, dist)
             else:
-                dist = TransformedOutputDist(outputTransform, dist)
+                dist = d.TransformedOutputDist(outputTransform, dist)
     return dist.withTag(randTag()), simpleInputGen(dimInputs[0])
 
 def gen_PassThruDist(dimIn = 3):
     subDist, inputGen = gen_LinearGaussian(dimIn)
-    return PassThruDist(subDist).withTag(randTag()), inputGen
+    return d.PassThruDist(subDist).withTag(randTag()), inputGen
 
 def gen_DebugDist(maxOcc = None, dimIn = 3):
     subDist, inputGen = gen_LinearGaussian(dimIn)
-    return DebugDist(maxOcc, subDist).withTag(randTag()), inputGen
+    return d.DebugDist(maxOcc, subDist).withTag(randTag()), inputGen
 
 def iidLogProb(dist, training):
     logProb = 0.0
@@ -226,23 +228,23 @@ def iidLogProb(dist, training):
     return logProb
 
 def trainedAcc(dist, training):
-    acc = defaultCreateAcc(dist)
+    acc = d.defaultCreateAcc(dist)
     for input, output, occ in training:
         acc.add(input, output, occ)
     return acc
 
-def trainedAccG(dist, training, ps = defaultParamSpec):
+def trainedAccG(dist, training, ps = d.defaultParamSpec):
     acc = ps.createAccG(dist)
     for input, output, occ in training:
         acc.add(input, output, occ)
     return acc
 
-def randomizeParams(dist, ps = defaultParamSpec):
-    return ps.parseAll(dist, randn(*shape(ps.params(dist))))
+def randomizeParams(dist, ps = d.defaultParamSpec):
+    return ps.parseAll(dist, randn(*np.shape(ps.params(dist))))
 
 def reparse(dist, ps):
     params = ps.params(dist)
-    assert len(shape(params)) == 1
+    assert len(np.shape(params)) == 1
     distParsed = ps.parseAll(dist, params)
     paramsParsed = ps.params(distParsed)
     assert_allclose(paramsParsed, params)
@@ -250,15 +252,15 @@ def reparse(dist, ps):
     return distParsed
 
 def check_logProbDerivInput(dist, input, output, eps):
-    inputDelta = randn(*shape(input)) * eps
+    inputDelta = randn(*np.shape(input)) * eps
     numericDelta = dist.logProb(input + inputDelta, output) - dist.logProb(input, output)
-    analyticDelta = dot(inputDelta, dist.logProbDerivInput(input, output))
+    analyticDelta = np.dot(inputDelta, dist.logProbDerivInput(input, output))
     assert_allclose(analyticDelta, numericDelta, rtol = 1e-4)
 
 def check_logProbDerivOutput(dist, input, output, eps):
-    outputDelta = randn(*shape(output)) * eps
+    outputDelta = randn(*np.shape(output)) * eps
     numericDelta = dist.logProb(input, output + outputDelta) - dist.logProb(input, output)
-    analyticDelta = dot(outputDelta, dist.logProbDerivOutput(input, output))
+    analyticDelta = np.dot(outputDelta, dist.logProbDerivOutput(input, output))
     assert_allclose(analyticDelta, numericDelta, rtol = 1e-4)
 
 def check_addAcc(dist, trainingAll, ps):
@@ -270,7 +272,7 @@ def check_addAcc(dist, trainingAll, ps):
     accs = [ trainedAccG(dist, trainingPart, ps = ps) for trainingPart in trainingParts ]
     accFull = accs[0]
     for acc in accs[1:]:
-        addAcc(accFull, acc)
+        d.addAcc(accFull, acc)
     logLikeFull = accFull.logLike()
     derivParamsFull = ps.derivParams(accFull)
 
@@ -291,13 +293,13 @@ def check_derivParams(dist, training, ps, eps):
     acc = trainedAccG(dist, training, ps = ps)
     logLike = acc.logLike()
     derivParams = ps.derivParams(acc)
-    paramsDelta = randn(*shape(params)) * eps
+    paramsDelta = randn(*np.shape(params)) * eps
     distNew = ps.parseAll(dist, params + paramsDelta)
     logLikeNew = trainedAccG(distNew, training, ps = ps).logLike()
     assert_allclose(ps.params(distNew), params + paramsDelta)
 
     numericDelta = logLikeNew - logLike
-    analyticDelta = dot(derivParams, paramsDelta)
+    analyticDelta = np.dot(derivParams, paramsDelta)
     assert_allclose(analyticDelta, numericDelta, rtol = 1e-4, atol = 1e-10)
 
 def getTrainEM(initEstDist, verbosity = 0):
@@ -305,18 +307,18 @@ def getTrainEM(initEstDist, verbosity = 0):
         def accumulate(acc):
             for input, output, occ in training:
                 acc.add(input, output, occ)
-        dist, logLike, occ = trainEM(initEstDist, accumulate, deltaThresh = 1e-9, verbosity = verbosity)
+        dist, logLike, occ = trn.trainEM(initEstDist, accumulate, deltaThresh = 1e-9, verbosity = verbosity)
         assert initEstDist.tag != None
         assert dist.tag == initEstDist.tag
         return dist, logLike, occ
     return doTrainEM
 
-def getTrainCG(initEstDist, ps = defaultParamSpec, verbosity = 0):
+def getTrainCG(initEstDist, ps = d.defaultParamSpec, verbosity = 0):
     def doTrainCG(training):
         def accumulate(acc):
             for input, output, occ in training:
                 acc.add(input, output, occ)
-        dist, logLike, occ = trainCG(initEstDist, accumulate, ps = ps, length = -500, verbosity = verbosity)
+        dist, logLike, occ = trn.trainCG(initEstDist, accumulate, ps = ps, length = -500, verbosity = verbosity)
         assert initEstDist.tag != None
         assert dist.tag == initEstDist.tag
         return dist, logLike, occ
@@ -327,13 +329,13 @@ def getTrainFromAcc(createAcc):
         acc = createAcc()
         for input, output, occ in training:
             acc.add(input, output, occ)
-        dist, logLike, occ = defaultEstimate(acc)
+        dist, logLike, occ = d.defaultEstimate(acc)
         assert acc.tag != None
         assert dist.tag == acc.tag
         return dist, logLike, occ
     return doTrainFromAcc
 
-def check_est(trueDist, train, inputGen, hasParams, iid = True, unitOcc = False, ps = defaultParamSpec, logLikeThresh = 2e-2, tslpThresh = 2e-2, testSetSize = 50, initTrainingSetSize = 100, trainingSetMult = 5, maxTrainingSetSize = 100000):
+def check_est(trueDist, train, inputGen, hasParams, iid = True, unitOcc = False, ps = d.defaultParamSpec, logLikeThresh = 2e-2, tslpThresh = 2e-2, testSetSize = 50, initTrainingSetSize = 100, trainingSetMult = 5, maxTrainingSetSize = 100000):
     """Check estimation of distribution using expectation-maximization.
 
     (N.B. set train to getTrainEM(trueDist) instead of
@@ -343,14 +345,14 @@ def check_est(trueDist, train, inputGen, hasParams, iid = True, unitOcc = False,
     assert iid == True
 
     inputsTest = [ input for input, index in zip(inputGen, range(testSetSize)) ]
-    testSet = [ (input, trueDist.synth(input), 1.0 if unitOcc else exp(randn())) for input in inputsTest ]
+    testSet = [ (input, trueDist.synth(input), 1.0 if unitOcc else math.exp(randn())) for input in inputsTest ]
     testOcc = sum(occ for input, output, occ in testSet)
 
     training = []
 
     def extendTrainingSet(trainingSetSizeDelta):
         inputsNew = [ input for input, index in zip(inputGen, range(trainingSetSizeDelta)) ]
-        trainingNew = [ (input, trueDist.synth(input), 1.0 if unitOcc else exp(randn())) for input in inputsNew ]
+        trainingNew = [ (input, trueDist.synth(input), 1.0 if unitOcc else math.exp(randn())) for input in inputsNew ]
         training.extend(trainingNew)
 
     converged = False
@@ -368,8 +370,8 @@ def check_est(trueDist, train, inputGen, hasParams, iid = True, unitOcc = False,
             newAcc = trainedAccG(estDist, training, ps = ps)
             assert_allclose(newAcc.occ, estOcc)
             derivParams = ps.derivParams(newAcc)
-            assert_allclose(derivParams / estOcc, zeros([len(derivParams)]), atol = 1e-4)
-        if not isfinite(estLogLike):
+            assert_allclose(derivParams / estOcc, np.zeros([len(derivParams)]), atol = 1e-4)
+        if math.isinf(estLogLike):
             print 'NOTE: singularity in likelihood function (training set size =', len(training), ', occ '+repr(estOcc)+', estDist =', estDist, ', estLogLike =', estLogLike, ')'
         if abs(trueLogProb - estLogLike) / estOcc < logLikeThresh and abs(tslpTrue - tslpEst) / testOcc < tslpThresh:
             converged = True
@@ -380,27 +382,27 @@ def getTrainingSet(dist, inputGen, typicalSize, iid, unitOcc):
     trainingSetSize = random.choice([0, 1, 2, typicalSize - 1, typicalSize, typicalSize + 1, 2 * typicalSize - 1, 2 * typicalSize, 2 * typicalSize + 1])
     inputs = [ input for input, index in zip(inputGen, range(trainingSetSize)) ]
     if iid:
-        trainingSet = [ (input, dist.synth(input), 1.0 if unitOcc else exp(randn())) for input in inputs ]
+        trainingSet = [ (input, dist.synth(input), 1.0 if unitOcc else math.exp(randn())) for input in inputs ]
     else:
         assert unitOcc == True
         # (FIXME : potentially very slow.  Could rewrite some of GP stuff to do this better if necessary.)
         updatedDist = dist
         trainingSet = []
         for inputNew in inputs:
-            acc = defaultCreateAcc(updatedDist)
+            acc = d.defaultCreateAcc(updatedDist)
             for input, output, occ in trainingSet:
                 acc.add(input, output, occ)
-            updatedDist = defaultEstimate(acc)[0]
+            updatedDist = d.defaultEstimate(acc)[0]
             trainingSet.append((inputNew, updatedDist.synth(inputNew), 1.0))
     assert len(trainingSet) == trainingSetSize
     return trainingSet
 
-def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = False, hasEM = True, ps = defaultParamSpec, logProbDerivInputCheck = False, logProbDerivOutputCheck = False, checkAdditional = None):
+def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = False, hasEM = True, ps = d.defaultParamSpec, logProbDerivInputCheck = False, logProbDerivOutputCheck = False, checkAdditional = None):
     # (FIXME : add pickle test)
     # (FIXME : add eval test)
     assert dist.tag != None
     if hasEM:
-        assert defaultCreateAcc(dist).tag == dist.tag
+        assert d.defaultCreateAcc(dist).tag == dist.tag
     assert ps.createAccG(dist).tag == dist.tag
 
     training = getTrainingSet(dist, inputGen, typicalSize = numPoints, iid = iid, unitOcc = unitOcc)
@@ -421,7 +423,7 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
     if hasParams:
         distParsed = reparse(dist, ps)
     for input, output in points:
-        if isfinite(dist.logProb(input, output)):
+        if not math.isinf(dist.logProb(input, output)):
             if checkAdditional != None:
                 checkAdditional(dist, input, output, eps)
             lp = dist.logProb(input, output)
@@ -454,9 +456,9 @@ class TestDist(unittest.TestCase):
         """Memo class random subsets should be equally likely to include each element"""
         for n in range(0, 5):
             for k in range(n + 1):
-                count = zeros(n)
+                count = np.zeros(n)
                 for rep in xrange(its):
-                    acc = Memo(maxOcc = k)
+                    acc = d.Memo(maxOcc = k)
                     for i in xrange(n):
                         acc.add(i, i)
                     for i in acc.outputs:
@@ -474,12 +476,12 @@ class TestDist(unittest.TestCase):
                 initEstDist = gen_LinearGaussian(dimIn)[0]
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
-                createAcc = lambda: LinearGaussianAcc(inputLength = dimIn).withTag(randTag())
+                createAcc = lambda: d.LinearGaussianAcc(inputLength = dimIn).withTag(randTag())
                 check_est(dist, getTrainFromAcc(createAcc), inputGen, hasParams = True)
 
     def test_StudentDist(self, eps = 1e-8, numDists = 50, numPoints = 100):
         def checkAdditional(dist, input, output, eps):
-            assert_allclose(dist.logProb(input, output), log(stats.t.pdf(output, dist.df, scale = 1.0 / sqrt(dist.precision))))
+            assert_allclose(dist.logProb(input, output), math.log(stats.t.pdf(output, dist.df, scale = 1.0 / math.sqrt(dist.precision))))
         for distIndex in range(numDists):
             dimIn = randint(0, 5)
             dist, inputGen = gen_StudentDist(dimIn)
@@ -497,7 +499,7 @@ class TestDist(unittest.TestCase):
                 initEstDist = gen_ConstantClassifier(numClasses)[0]
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
-                createAcc = lambda: ConstantClassifierAcc(numClasses = numClasses).withTag(randTag())
+                createAcc = lambda: d.ConstantClassifierAcc(numClasses = numClasses).withTag(randTag())
                 check_est(dist, getTrainFromAcc(createAcc), inputGen, hasParams = True)
 
     def test_BinaryLogisticClassifier(self, eps = 1e-8, numDists = 50, numPoints = 100):
@@ -521,10 +523,10 @@ class TestDist(unittest.TestCase):
                     def accumulate(acc):
                         for input, output, occ in training:
                             acc.add(input, output, occ)
-                    acc = LinearGaussianAcc(inputLength = dimIn)
+                    acc = d.LinearGaussianAcc(inputLength = dimIn)
                     accumulate(acc)
                     initDist, initLogLike, initOcc = acc.estimateInitialMixtureOfTwoExperts()
-                    return trainEM(initDist, accumulate, deltaThresh = 1e-9)
+                    return trn.trainEM(initDist, accumulate, deltaThresh = 1e-9)
                 check_est(dist, train, inputGen, hasParams = True)
 
     def test_MixtureDist(self, eps = 1e-8, numDists = 10, numPoints = 100):
@@ -583,16 +585,16 @@ class TestDist(unittest.TestCase):
             dimIn = randint(0, 5)
             dist, inputGen = gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = dimIn)
             def train(training):
-                acc = AutoGrowingDiscreteAcc(createAcc = lambda: LinearGaussianAcc(inputLength = dimIn))
+                acc = d.AutoGrowingDiscreteAcc(createAcc = lambda: d.LinearGaussianAcc(inputLength = dimIn))
                 totalOcc = 0.0
                 for input, output, occ in training:
                     acc.add(input, output, occ)
                     totalOcc += occ
-                mdlThresh = 0.5 * (dimIn + 1) * log(totalOcc + 1.0)
+                mdlThresh = 0.5 * (dimIn + 1) * math.log(totalOcc + 1.0)
                 return acc.decisionTreeCluster(test_dist_questions.getQuestionGroups(), thresh = mdlThresh, minOcc = 0.0, verbosity = 0)
             if True:
                 # check decision tree clustering runs at all
-                training = [ (input, dist.synth(input), exp(randn())) for input, index in zip(inputGen, range(numPoints)) ]
+                training = [ (input, dist.synth(input), math.exp(randn())) for input, index in zip(inputGen, range(numPoints)) ]
                 estDist, estLogLike, estOcc = train(training)
             if _deepTest:
                 check_est(dist, train, inputGen, hasParams = True)
@@ -694,18 +696,18 @@ class TestDist(unittest.TestCase):
 def testBinaryLogisticClassifier():
     def inputGen(num):
         for i in range(num):
-            yield append(randn(dim), 1.0)
+            yield np.append(randn(dim), 1.0)
 
     dim = 2
-    blcTrue = BinaryLogisticClassifier(randn(dim + 1))
+    blcTrue = d.BinaryLogisticClassifier(randn(dim + 1))
     num = 10000
     trainData = list((input, blcTrue.synth(input)) for input in inputGen(num))
     def accumulate(acc):
         for input, output in trainData:
             acc.add(input, output)
 
-    blc = BinaryLogisticClassifier(zeros([dim + 1]))
-    blc, trainLogLike, trainOcc = trainEM(blc, accumulate, deltaThresh = 1e-10, minIterations = 10, verbosity = 2)
+    blc = d.BinaryLogisticClassifier(np.zeros([dim + 1]))
+    blc, trainLogLike, trainOcc = trn.trainEM(blc, accumulate, deltaThresh = 1e-10, minIterations = 10, verbosity = 2)
     print 'training log likelihood =', trainLogLike / trainOcc, '('+str(trainOcc)+' frames)'
     trainLogProb, trainOcc = logProb_frames(blc, trainData)
     print 'train set log prob =', trainLogProb / trainOcc, '('+str(trainOcc)+' frames)'
@@ -736,18 +738,18 @@ def testBinaryLogisticClassifierFunGraph():
         normal = w / mag
         perpDist = -w0 / mag
         bdyPoint = normal * perpDist
-        bdyPointProb = blc.prob(append(bdyPoint, 1.0), 0)
+        bdyPointProb = blc.prob(np.append(bdyPoint, 1.0), 0)
         if abs(bdyPointProb - 0.5) > 1e-10:
             raise RuntimeError('value at bdyPoint should be 0.5 but is '+str(bdyPointProb))
         return mag, normal, bdyPoint
     dim = 2
     wTrue = randn(dim + 1)
-    blcTrue = BinaryLogisticClassifier(wTrue)
+    blcTrue = d.BinaryLogisticClassifier(wTrue)
     print 'DEBUG: wTrue =', wTrue
     print
     def inputGen(num):
         for i in range(num):
-            yield append(randn(dim), 1.0)
+            yield np.append(randn(dim), 1.0)
 
     num = 3000
     trainData = list((input, blcTrue.synth(input)) for input in inputGen(num))
@@ -761,8 +763,8 @@ def testBinaryLogisticClassifierFunGraph():
 
     def plotBdy(blc):
         mag, normal, bdyPoint = location(blc)
-        dir = array([normal[1], -normal[0]])
-        if abs(dot(dir, normal)) > 1e-10:
+        dir = np.array([normal[1], -normal[0]])
+        if abs(np.dot(dir, normal)) > 1e-10:
             raise RuntimeError('dir and normal are not perpendicular (should never happen)')
         xBdy, yBdy = zip(*[bdyPoint - 5 * dir, bdyPoint + 5 * dir])
         xBdy0, yBdy0 = zip(*[bdyPoint - normal / mag - 5 * dir, bdyPoint - normal / mag + 5 * dir])
@@ -785,8 +787,8 @@ def testBinaryLogisticClassifierFunGraph():
     plotData()
     plotBdy(blcTrue)
 
-    blc = BinaryLogisticClassifier(zeros([dim + 1]))
-    blc, trainLogLike, trainOcc = trainEM(blc, accumulate, deltaThresh = 1e-4, minIterations = 10, maxIterations = 50, afterEst = afterEst, verbosity = 2)
+    blc = d.BinaryLogisticClassifier(np.zeros([dim + 1]))
+    blc, trainLogLike, trainOcc = trn.trainEM(blc, accumulate, deltaThresh = 1e-4, minIterations = 10, maxIterations = 50, afterEst = afterEst, verbosity = 2)
     print 'DEBUG: w estimated final =', blc.coeff
     print 'training log likelihood =', trainLogLike / trainOcc, '('+str(trainOcc)+' frames)'
     trainLogProb, trainOcc = logProb_frames(blc, trainData)
@@ -806,7 +808,7 @@ def testMixtureOfTwoExpertsInitialization():
         normal = w / mag
         perpDist = -w0 / mag
         bdyPoint = normal * perpDist
-        bdyPointProb = blc.prob(append(bdyPoint, 1.0), 0)
+        bdyPointProb = blc.prob(np.append(bdyPoint, 1.0), 0)
         if abs(bdyPointProb - 0.5) > 1e-10:
             raise RuntimeError('value at bdyPoint should be 0.5 but is '+str(bdyPointProb))
         return mag, normal, bdyPoint
@@ -820,7 +822,7 @@ def testMixtureOfTwoExpertsInitialization():
             bias.append(randn(dim) * 3.0)
         for i in range(num):
             classIndex = randint(0, numClasses)
-            yield append(dot(transform[classIndex], randn(dim)) + bias[classIndex], 1.0)
+            yield np.append(np.dot(transform[classIndex], randn(dim)) + bias[classIndex], 1.0)
 
     num = 10000
     trainData = list((input, randn()) for input in inputGen(num))
@@ -830,8 +832,8 @@ def testMixtureOfTwoExpertsInitialization():
 
     def plotBdy(blc):
         mag, normal, bdyPoint = location(blc)
-        dir = array([normal[1], -normal[0]])
-        if abs(dot(dir, normal)) > 1e-10:
+        dir = np.array([normal[1], -normal[0]])
+        if abs(np.dot(dir, normal)) > 1e-10:
             raise RuntimeError('dir and normal are not perpendicular (should never happen)')
         xBdy, yBdy = zip(*[bdyPoint - 5 * dir, bdyPoint + 5 * dir])
         xBdy0, yBdy0 = zip(*[bdyPoint - normal / mag - 5 * dir, bdyPoint - normal / mag + 5 * dir])
@@ -848,7 +850,7 @@ def testMixtureOfTwoExpertsInitialization():
 
     plotData()
 
-    acc = LinearGaussianAcc(inputLength = dim + 1)
+    acc = d.LinearGaussianAcc(inputLength = dim + 1)
     accumulate(acc)
     dist, trainLogLike, trainOcc = acc.estimateInitialMixtureOfTwoExperts()
     blc = dist.classDist

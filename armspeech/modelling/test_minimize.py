@@ -12,35 +12,35 @@ from minimize import checkGrad, solveToMinimize, solveByMinimize, minimize
 
 import unittest
 import math
-from numpy import *
+import numpy as np
 from numpy.random import randn, randint
 import numpy.linalg as la
 
 # FIXME : add tests for other minimize.py stuff (some manual tests currently exist in other files?)
 
-def id(x):
-    s = shape(x)
+def identity(x):
+    s = np.shape(x)
     if len(s) == 0:
         return x, 1.0
     elif len(s) == 1:
-        return x, eye(len(x))
+        return x, np.eye(len(x))
     else:
         raise RuntimeError('function called on tensor of rank >= 2')
 
 def cubic1D(x):
-    assert len(shape(x)) == 0
-    return x * x * x + x, array([3 * x * x + 1])
+    assert len(np.shape(x)) == 0
+    return x * x * x + x, np.array([3 * x * x + 1])
 
 def cubic(x):
-    assert len(shape(x)) == 1
-    return x * x * x + x, array([3 * x * x + 1])
+    assert len(np.shape(x)) == 1
+    return x * x * x + x, np.array([3 * x * x + 1])
 
 class TestMinimize(unittest.TestCase):
     def test_solveToMinimize(self, its = 100, numPoints = 10):
         for it in range(its):
             dim = randint(0, 10)
             a = randn(dim)
-            checkGrad(solveToMinimize(id, a), dim, numPoints = numPoints)
+            checkGrad(solveToMinimize(identity, a), dim, numPoints = numPoints)
         for it in range(its):
             x0 = randn()
             a = randn()
@@ -57,7 +57,7 @@ class TestMinimize(unittest.TestCase):
             dim = randint(0, 10)
             x0 = randn(dim)
             a = randn(dim)
-            checkSolve(id, a, x0)
+            checkSolve(identity, a, x0)
         for it in range(its):
             x0 = randn()
             a = randn()

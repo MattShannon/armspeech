@@ -10,7 +10,9 @@ Summarizers condense (summarize) past input."""
 
 from __future__ import division
 
-from dist import *
+import dist as d
+
+import numpy as np
 
 class ContextualVectorSummarizer(object):
     def __init__(self, vectorSummarizer):
@@ -41,11 +43,11 @@ class VectorSeqSummarizer(object):
 
     def createDist(self, contextual, createDistForIndex):
         vectorSummarizer = ContextualVectorSummarizer(self) if contextual else self
-        return createVectorDist(self.order, sorted(self.depths.keys()), vectorSummarizer, createDistForIndex)
+        return d.createVectorDist(self.order, sorted(self.depths.keys()), vectorSummarizer, createDistForIndex)
 
     def createAcc(self, contextual, createAccForIndex):
         vectorSummarizer = ContextualVectorSummarizer(self) if contextual else self
-        return createVectorAcc(self.order, sorted(self.depths.keys()), vectorSummarizer, createAccForIndex)
+        return d.createVectorAcc(self.order, sorted(self.depths.keys()), vectorSummarizer, createAccForIndex)
 
 class IndexSpecSummarizer(object):
     def __init__(self, outIndices, fromOffset, toOffset, order, depth, powers = [1]):
@@ -77,7 +79,7 @@ class IndexSpecSummarizer(object):
         for index in range(inFromIndex, min(outIndex, inUntilIndex)):
             for power in self.powers:
                 summary.append(partialOutput[index] ** power)
-        return array(summary)
+        return np.array(summary)
 
     def vectorLength(self, outIndex):
         inFromIndex, inUntilIndex = self.limits[outIndex]
@@ -86,8 +88,8 @@ class IndexSpecSummarizer(object):
 
     def createDist(self, contextual, createDistForIndex):
         vectorSummarizer = ContextualVectorSummarizer(self) if contextual else self
-        return createVectorDist(self.order, self.outIndices, vectorSummarizer, createDistForIndex)
+        return d.createVectorDist(self.order, self.outIndices, vectorSummarizer, createDistForIndex)
 
     def createAcc(self, contextual, createAccForIndex):
         vectorSummarizer = ContextualVectorSummarizer(self) if contextual else self
-        return createVectorAcc(self.order, self.outIndices, vectorSummarizer, createAccForIndex)
+        return d.createVectorAcc(self.order, self.outIndices, vectorSummarizer, createAccForIndex)

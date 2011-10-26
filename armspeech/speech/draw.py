@@ -8,7 +8,7 @@
 
 from __future__ import division
 
-import dist as d
+import armspeech.modelling.dist as d
 
 import math
 import numpy as np

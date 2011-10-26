@@ -15,8 +15,7 @@ from __future__ import division
 
 import persist
 import distribute
-import dist as d
-from model import defaultCreateAcc, defaultEstimate
+import armspeech.modelling.dist as d
 
 class DebugJob(distribute.Job):
     def __init__(self, repo, name):
@@ -76,7 +75,7 @@ class AccJob(distribute.Job):
     def run(self):
         dist = persist.loadPickle(self.distIn.location)
 
-        acc = defaultCreateAcc(dist)
+        acc = d.defaultCreateAcc(dist)
         for input, output in self.corpus:
             acc.add(input, output)
 
@@ -92,7 +91,7 @@ class EstimateJob(distribute.Job):
     def run(self):
         acc = persist.loadPickle(self.accIn.location)
 
-        dist, trainLogLike, trainOcc = defaultEstimate(acc)
+        dist, trainLogLike, trainOcc = d.defaultEstimate(acc)
 
         persist.savePickle(self.distOut.location, dist)
 
@@ -113,6 +112,6 @@ class SplitEstimateJob(distribute.Job):
         for acc in accs[1:]:
             d.addAcc(accFull, acc)
 
-        dist, trainLogLike, trainOcc = defaultEstimate(accFull)
+        dist, trainLogLike, trainOcc = d.defaultEstimate(accFull)
 
         persist.savePickle(self.distOut.location, dist)

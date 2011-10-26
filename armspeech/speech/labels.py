@@ -10,7 +10,7 @@ from __future__ import division
 from __future__ import with_statement
 
 import re
-import collectionshelp
+from armspeech.util import collectionshelp
 
 def readHtkLabFile(labFile, framePeriod, decode = lambda labelString: labelString):
     """Reads HTK-style label file."""
@@ -22,6 +22,7 @@ def readHtkLabFile(labFile, framePeriod, decode = lambda labelString: labelStrin
         label = decode(labelString)
         yield startTime, endTime, label
 
+# (FIXME : this should probably be moved into modelling subpackage)
 def checkAlignment(alignment, allowZeroDur = True):
     """Checks alignment is in order, contiguous and non-overlapping."""
     if alignment:

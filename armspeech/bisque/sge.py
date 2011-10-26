@@ -20,7 +20,7 @@ import os
 import sys
 import subprocess
 from subprocess import PIPE
-import subprocesshelp
+from armspeech.util import subprocesshelp
 import threading
 import time
 

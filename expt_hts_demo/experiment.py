@@ -11,16 +11,16 @@
 from __future__ import division
 from __future__ import with_statement
 
-import nodetree
-from dist import *
-from model import *
-from summarizer import *
-from transform import *
-import draw
-from timing import timed, printTime
+from armspeech.modelling import nodetree
+import armspeech.modelling.dist as d
+import armspeech.modelling.train as trn
+from armspeech.modelling import summarizer
+import armspeech.modelling.transform as xf
+from armspeech.speech import draw
+from armspeech.util.timing import timed, printTime
 
 import phoneset_cmu
-import questions_htsDemo
+import questions_hts_demo
 import corpus_arctic
 
 import getopt
@@ -28,7 +28,8 @@ import os
 import sys
 import tempfile
 import traceback
-from numpy import *
+import math
+import numpy as np
 
 import matplotlib
 matplotlib.use('Agg')
@@ -71,11 +72,11 @@ def main(rawArgs):
     if len(args) != 0:
         raise RuntimeError('this program takes no non-optional arguments')
 
-    dataDir = opts.get('--dataDir', 'data')
-    labDir = opts.get('--labDir', 'data/labels/full')
+    dataDir = opts.get('--dataDir', 'expt_hts_demo/data')
+    labDir = opts.get('--labDir', 'expt_hts_demo/data/labels/full')
     scriptsDir = opts.get('--scriptsDir', 'scripts')
 
-    outDir = opts.get('--outDir', tempfile.mkdtemp(dir = '.', prefix = 'out.'))
+    outDir = opts.get('--outDir', tempfile.mkdtemp(dir = 'expt_hts_demo', prefix = 'out.'))
     synthOutDir = os.path.join(outDir, 'synth')
     distOutDir = os.path.join(outDir, 'dist')
     figOutDir = os.path.join(outDir, 'fig')
@@ -91,10 +92,10 @@ def main(rawArgs):
     mgcStream, lf0Stream, bapStream = corpus.streams
     mgcStreamDepth, lf0StreamDepth, bapStreamDepth = 3, 2, 3
     streamDepths = {0: mgcStreamDepth, 1: lf0StreamDepth, 2: bapStreamDepth }
-    frameSummarizer = VectorSeqSummarizer(order = len(corpus.streams), depths = streamDepths)
+    frameSummarizer = summarizer.VectorSeqSummarizer(order = len(corpus.streams), depths = streamDepths)
 
-    mgcSummarizer = IndexSpecSummarizer([0], fromOffset = 0, toOffset = 0, order = mgcStream.order, depth = mgcStreamDepth)
-    bapSummarizer = IndexSpecSummarizer([], fromOffset = 0, toOffset = 0, order = bapStream.order, depth = bapStreamDepth)
+    mgcSummarizer = summarizer.IndexSpecSummarizer([0], fromOffset = 0, toOffset = 0, order = mgcStream.order, depth = mgcStreamDepth)
+    bapSummarizer = summarizer.IndexSpecSummarizer([], fromOffset = 0, toOffset = 0, order = bapStream.order, depth = bapStreamDepth)
 
 
     def reportTrainLogLike(trainLogLike, trainOcc):
@@ -108,27 +109,27 @@ def main(rawArgs):
         print
 
     def evaluateSynthesize(dist, corpus, exptTag, afterSynth = None):
-        corpus.synthComplete(dist, corpus.synthUttIds, SynthMethod.Sample, synthOutDir, exptTag+'.sample', afterSynth = afterSynth)
-        corpus.synthComplete(dist, corpus.synthUttIds, SynthMethod.Meanish, synthOutDir, exptTag+'.meanish', afterSynth = afterSynth)
+        corpus.synthComplete(dist, corpus.synthUttIds, d.SynthMethod.Sample, synthOutDir, exptTag+'.sample', afterSynth = afterSynth)
+        corpus.synthComplete(dist, corpus.synthUttIds, d.SynthMethod.Meanish, synthOutDir, exptTag+'.meanish', afterSynth = afterSynth)
 
     def mixup(dist, accumulate):
-        acc = defaultCreateAcc(dist)
+        acc = d.defaultCreateAcc(dist)
         accumulate(acc)
-        dist, trainLogLike, trainOcc = mixupLinearGaussianEstimate(acc)
+        dist, trainLogLike, trainOcc = trn.mixupLinearGaussianEstimate(acc)
         reportTrainLogLike(trainLogLike, trainOcc)
-        dist, trainLogLike, trainOcc = trainEM(dist, accumulate, deltaThresh = 1e-4, minIterations = 4, maxIterations = 8, verbosity = 2)
+        dist, trainLogLike, trainOcc = trn.trainEM(dist, accumulate, deltaThresh = 1e-4, minIterations = 4, maxIterations = 8, verbosity = 2)
         reportTrainLogLike(trainLogLike, trainOcc)
         return dist
 
     def convertToStudentResiduals(dist, studentTag = None, debugTag = None, subtractMeanTag = None):
         def studentResidualsMapPartial(dist, mapChild):
-            if isinstance(dist, LinearGaussian):
-                subDist = StudentDist(df = 10000.0, precision = 1.0 / dist.variance).withTag(studentTag)
+            if isinstance(dist, d.LinearGaussian):
+                subDist = d.StudentDist(df = 10000.0, precision = 1.0 / dist.variance).withTag(studentTag)
                 if debugTag != None:
-                    subDist = DebugDist(None, subDist).withTag(debugTag)
-                subtractMeanTransform = ShiftOutputTransform(DotProductTransform(-dist.coeff)).withTag(subtractMeanTag)
-                distNew = TransformedOutputDist(subtractMeanTransform,
-                    MappedInputDist(ConstantTransform(array([])),
+                    subDist = d.DebugDist(None, subDist).withTag(debugTag)
+                subtractMeanTransform = xf.ShiftOutputTransform(xf.DotProductTransform(-dist.coeff)).withTag(subtractMeanTag)
+                distNew = d.TransformedOutputDist(subtractMeanTransform,
+                    d.MappedInputDist(xf.ConstantTransform(np.array([])),
                         subDist
                     )
                 )
@@ -139,22 +140,22 @@ def main(rawArgs):
 
     def convertToTransformedGaussianResiduals(dist, residualTransformTag = None, debugTag = None, subtractMeanTag = None):
         def transformedGaussianResidualsMapPartial(dist, mapChild):
-            if isinstance(dist, LinearGaussian):
-                residualTransform = SimpleOutputTransform(SumTransform1D([
-                    IdentityTransform()
-                ,   TanhTransform1D(array([0.0, 0.5, -1.0]))
-                ,   TanhTransform1D(array([0.0, 0.5, 0.0]))
-                ,   TanhTransform1D(array([0.0, 0.5, 1.0]))
+            if isinstance(dist, d.LinearGaussian):
+                residualTransform = xf.SimpleOutputTransform(xf.SumTransform1D([
+                    xf.IdentityTransform()
+                ,   xf.TanhTransform1D(np.array([0.0, 0.5, -1.0]))
+                ,   xf.TanhTransform1D(np.array([0.0, 0.5, 0.0]))
+                ,   xf.TanhTransform1D(np.array([0.0, 0.5, 1.0]))
                 ]), checkDerivPositive1D = True).withTag(residualTransformTag)
 
-                subDist = TransformedOutputDist(residualTransform,
-                    LinearGaussian(array([]), dist.variance)
+                subDist = d.TransformedOutputDist(residualTransform,
+                    d.LinearGaussian(np.array([]), dist.variance)
                 )
                 if debugTag != None:
-                    subDist = DebugDist(None, subDist).withTag(debugTag)
-                subtractMeanTransform = ShiftOutputTransform(DotProductTransform(-dist.coeff)).withTag(subtractMeanTag)
-                distNew = TransformedOutputDist(subtractMeanTransform,
-                    MappedInputDist(ConstantTransform(array([])),
+                    subDist = d.DebugDist(None, subDist).withTag(debugTag)
+                subtractMeanTransform = xf.ShiftOutputTransform(xf.DotProductTransform(-dist.coeff)).withTag(subtractMeanTag)
+                distNew = d.TransformedOutputDist(subtractMeanTransform,
+                    d.MappedInputDist(xf.ConstantTransform(np.array([])),
                         subDist
                     )
                 )
@@ -171,8 +172,8 @@ def main(rawArgs):
             alignmentToDraw = [ (start * corpus.framePeriod, end * corpus.framePeriod, label.phone) for start, end, label in alignment ]
             partitionedLabelSeqs = (draw.partitionSeq(alignmentToDraw, 2) if includeGivenLabels else []) + [ labelSeqSub for labelSeq in extraLabelSeqs for labelSeqSub in draw.partitionSeq(labelSeq, 2) ]
 
-            trueSeqTime = (array(range(len(trueOutput))) + 0.5) * corpus.framePeriod
-            synthSeqTime = (array(range(len(synthOutput))) + 0.5) * corpus.framePeriod
+            trueSeqTime = (np.array(range(len(trueOutput))) + 0.5) * corpus.framePeriod
+            synthSeqTime = (np.array(range(len(synthOutput))) + 0.5) * corpus.framePeriod
 
             for mgcIndex in mgcSummarizer.outIndices:
                 trueSeq = [ frame[streamIndex][mgcIndex] for frame in trueOutput ]
@@ -193,32 +194,32 @@ def main(rawArgs):
                 for time in range(startTime, endTime):
                     yield phone
 
-        acc = MappedInputAcc(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
-            SequenceAcc(10,
-                createDiscreteAcc(phoneset.phoneList, lambda phone:
+        acc = d.MappedInputAcc(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
+            d.SequenceAcc(10,
+                d.createDiscreteAcc(phoneset.phoneList, lambda phone:
                     frameSummarizer.createAcc(False, lambda streamIndex:
                         {
                             0:
                                 mgcSummarizer.createAcc(False, lambda outIndex:
-                                    MappedInputAcc(AddBias(),
-                                        LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1)
+                                    d.MappedInputAcc(xf.AddBias(),
+                                        d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1)
                                     )
                                 )
                         ,   1:
-                                #MappedInputAcc(Msd01ToVector(),
-                                #    MappedInputAcc(AddBias(),
-                                #        IdentifiableMixtureAcc(
-                                #            BinaryLogisticClassifierAcc(BinaryLogisticClassifier(zeros([ 2 * lf0StreamDepth + 1 ]))),
+                                #d.MappedInputAcc(xf.Msd01ToVector(),
+                                #    d.MappedInputAcc(xf.AddBias(),
+                                #        d.IdentifiableMixtureAcc(
+                                #            d.BinaryLogisticClassifierAcc(d.BinaryLogisticClassifier(np.zeros([ 2 * lf0StreamDepth + 1 ]))),
                                 #            [
-                                #                FixedValueAcc(None),
-                                #                LinearGaussianAcc(inputLength = 2 * lf0StreamDepth + 1)
+                                #                d.FixedValueAcc(None),
+                                #                d.LinearGaussianAcc(inputLength = 2 * lf0StreamDepth + 1)
                                 #            ]
                                 #        )
                                 #    )
                                 #)
-                                OracleAcc()
+                                d.OracleAcc()
                         ,   2:
-                                OracleAcc()
+                                d.OracleAcc()
                         }[streamIndex]
                     )
                 )
@@ -227,7 +228,7 @@ def main(rawArgs):
 
         timed(corpus.accumulate)(acc)
 
-        dist, trainLogLike, trainOcc = timed(defaultEstimate)(acc)
+        dist, trainLogLike, trainOcc = timed(d.defaultEstimate)(acc)
         reportTrainLogLike(trainLogLike, trainOcc)
         writeDistFile(os.path.join(distOutDir, 'mono.dist'), dist)
         evaluateLogProb(dist, corpus)
@@ -267,24 +268,24 @@ def main(rawArgs):
             assert len(extra) == extraLength
             return phone, (extra, acousticContext)
 
-        acc = MappedInputAcc(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
-            SequenceAcc(10,
-                MappedInputAcc(convertTimingInfo,
-                    createDiscreteAcc(phoneset.phoneList, lambda phone:
+        acc = d.MappedInputAcc(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
+            d.SequenceAcc(10,
+                d.MappedInputAcc(convertTimingInfo,
+                    d.createDiscreteAcc(phoneset.phoneList, lambda phone:
                         frameSummarizer.createAcc(True, lambda streamIndex:
                             {
                                 0:
                                     mgcSummarizer.createAcc(True, lambda outIndex:
-                                        MappedInputAcc(concatenate,
-                                            MappedInputAcc(AddBias(),
-                                                LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + extraLength + 1)
+                                        d.MappedInputAcc(np.concatenate,
+                                            d.MappedInputAcc(xf.AddBias(),
+                                                d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + extraLength + 1)
                                             )
                                         )
                                     )
                             ,   1:
-                                    OracleAcc()
+                                    d.OracleAcc()
                             ,   2:
-                                    OracleAcc()
+                                    d.OracleAcc()
                             }[streamIndex]
                         )
                     )
@@ -294,7 +295,7 @@ def main(rawArgs):
 
         timed(corpus.accumulate)(acc)
 
-        dist, trainLogLike, trainOcc = timed(defaultEstimate)(acc)
+        dist, trainLogLike, trainOcc = timed(d.defaultEstimate)(acc)
         reportTrainLogLike(trainLogLike, trainOcc)
         writeDistFile(os.path.join(distOutDir, 'timinginfo.dist'), dist)
         evaluateLogProb(dist, corpus)
@@ -312,24 +313,24 @@ def main(rawArgs):
                 for time in range(startTime, endTime):
                     yield label
 
-        questionGroups = questions_htsDemo.getFullContextQuestionGroups()
+        questionGroups = questions_hts_demo.getFullContextQuestionGroups()
 
-        acc = MappedInputAcc(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
-            SequenceAcc(10,
+        acc = d.MappedInputAcc(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
+            d.SequenceAcc(10,
                 frameSummarizer.createAcc(True, lambda streamIndex:
                     {
                         0:
-                            AutoGrowingDiscreteAcc(lambda:
+                            d.AutoGrowingDiscreteAcc(lambda:
                                 mgcSummarizer.createAcc(False, lambda outIndex:
-                                    MappedInputAcc(AddBias(),
-                                        LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1)
+                                    d.MappedInputAcc(xf.AddBias(),
+                                        d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1)
                                     )
                                 )
                             )
                     ,   1:
-                            OracleAcc()
+                            d.OracleAcc()
                     ,   2:
-                            OracleAcc()
+                            d.OracleAcc()
                     }[streamIndex]
                 )
             )
@@ -338,9 +339,9 @@ def main(rawArgs):
         timed(corpus.accumulate)(acc)
 
         def decisionTreeClusterEstimatePartial(acc, estimateChild):
-            if isinstance(acc, AutoGrowingDiscreteAcc):
+            if isinstance(acc, d.AutoGrowingDiscreteAcc):
                 return timed(acc.decisionTreeCluster)(questionGroups, thresh = 500.0, minOcc = 10.0, maxOcc = None, verbosity = 3)
-        decisionTreeClusterEstimate = getEstimate([decisionTreeClusterEstimatePartial, defaultEstimatePartial])
+        decisionTreeClusterEstimate = d.getEstimate([decisionTreeClusterEstimatePartial, d.defaultEstimatePartial])
 
         dist, trainLogLike, trainOcc = decisionTreeClusterEstimate(acc)
         print
@@ -384,37 +385,37 @@ def main(rawArgs):
                     yield 'global' if globalPhone else phone
 
         # FIXME : only works if no cross-stream stuff happening.  Make more robust somehow.
-        shiftToPrevTransform = ShiftOutputTransform(MinusPrev())
+        shiftToPrevTransform = xf.ShiftOutputTransform(xf.MinusPrev())
 
         mgcOutputTransform = dict()
         mgcInputTransform = dict()
         for outIndex in mgcSummarizer.outIndices:
             xmin, xmax = corpus.mgcLims[outIndex]
-            bins = linspace(xmin, xmax, numTanhTransforms + 1)
-            binCentres = bins[:-1] + 0.5 * diff(bins)
+            bins = np.linspace(xmin, xmax, numTanhTransforms + 1)
+            binCentres = bins[:-1] + 0.5 * np.diff(bins)
             width = (xmax - xmin) / numTanhTransforms / 2.0
-            tanhOutputTransforms = [ TanhTransform1D(array([0.0, width, binCentre])) for binCentre in binCentres ]
-            outputWarp = SumTransform1D([IdentityTransform()] + tanhOutputTransforms).withTag(('mgcOutputWarp', outIndex))
-            mgcOutputTransform[outIndex] = SimpleOutputTransform(outputWarp, checkDerivPositive1D = True).withTag(('mgcOutputTransform', outIndex))
-            tanhInputTransforms = [ TanhTransform1D(array([0.0, width, binCentre])) for binCentre in binCentres ]
-            inputWarp = SumTransform1D([IdentityTransform()] + tanhInputTransforms).withTag(('mgcInputWarp', outIndex))
-            mgcInputTransform[outIndex] = VectorizeTransform(inputWarp).withTag(('mgcInputTransform', outIndex))
+            tanhOutputTransforms = [ xf.TanhTransform1D(np.array([0.0, width, binCentre])) for binCentre in binCentres ]
+            outputWarp = xf.SumTransform1D([xf.IdentityTransform()] + tanhOutputTransforms).withTag(('mgcOutputWarp', outIndex))
+            mgcOutputTransform[outIndex] = xf.SimpleOutputTransform(outputWarp, checkDerivPositive1D = True).withTag(('mgcOutputTransform', outIndex))
+            tanhInputTransforms = [ xf.TanhTransform1D(np.array([0.0, width, binCentre])) for binCentre in binCentres ]
+            inputWarp = xf.SumTransform1D([xf.IdentityTransform()] + tanhInputTransforms).withTag(('mgcInputWarp', outIndex))
+            mgcInputTransform[outIndex] = xf.VectorizeTransform(inputWarp).withTag(('mgcInputTransform', outIndex))
 
-        dist = MappedInputDist(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
-            SequenceDist(10,
-                createDiscreteDist(phoneList, lambda phone:
+        dist = d.MappedInputDist(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
+            d.SequenceDist(10,
+                d.createDiscreteDist(phoneList, lambda phone:
                     frameSummarizer.createDist(False, lambda streamIndex:
                         {
                             0:
                                 mgcSummarizer.createDist(False, lambda outIndex:
-                                    DebugDist(None,
-                                        TransformedOutputDist(mgcOutputTransform[outIndex],
-                                            TransformedInputDist(mgcInputTransform[outIndex],
-                                                #MappedOutputDist(shiftToPrevTransform,
-                                                    DebugDist(None,
-                                                        MappedInputDist(AddBias(),
+                                    d.DebugDist(None,
+                                        d.TransformedOutputDist(mgcOutputTransform[outIndex],
+                                            d.TransformedInputDist(mgcInputTransform[outIndex],
+                                                #d.MappedOutputDist(shiftToPrevTransform,
+                                                    d.DebugDist(None,
+                                                        d.MappedInputDist(xf.AddBias(),
                                                             # arbitrary dist to get things rolling
-                                                            LinearGaussian(zeros([mgcSummarizer.vectorLength(outIndex) + 1]), 1.0)
+                                                            d.LinearGaussian(np.zeros([mgcSummarizer.vectorLength(outIndex) + 1]), 1.0)
                                                         )
                                                     ).withTag('debug-xfed')
                                                 #)
@@ -423,9 +424,9 @@ def main(rawArgs):
                                     ).withTag(('debug-orig', phone, streamIndex, outIndex))
                                 )
                         ,   1:
-                                OracleDist()
+                                d.OracleDist()
                         ,   2:
-                                OracleDist()
+                                d.OracleDist()
                         }[streamIndex]
                     )
                 )
@@ -434,7 +435,7 @@ def main(rawArgs):
 
         def drawVarious(dist, id, simpleResiduals = False, debugResiduals = False):
             assert not (simpleResiduals and debugResiduals)
-            acc = defaultParamSpec.createAccG(dist)
+            acc = d.defaultParamSpec.createAccG(dist)
             corpus.accumulate(acc)
             streamIndex = 0
             for outIndex in mgcSummarizer.outIndices:
@@ -468,8 +469,8 @@ def main(rawArgs):
                     if simpleResiduals:
                         debugAcc = nodetree.findTaggedNode(accOrig, lambda tag: tag == 'debug-xfed')
                         subDist = nodetree.findTaggedNode(distOrig, lambda tag: tag == 'debug-xfed').dist
-                        residuals = array([ subDist.dist.residual(AddBias()(input), output) for input, output in zip(debugAcc.memo.inputs, debugAcc.memo.outputs) ])
-                        f = lambda x: -0.5 * log(2.0 * pi) - 0.5 * x * x
+                        residuals = np.array([ subDist.dist.residual(xf.AddBias()(input), output) for input, output in zip(debugAcc.memo.inputs, debugAcc.memo.outputs) ])
+                        f = lambda x: -0.5 * math.log(2.0 * math.pi) - 0.5 * x * x
                         outPdf = os.path.join(figOutDir, 'residualLogPdf-'+id+'-'+str(phone)+'-'+streamId+'.pdf')
                         if len(residuals) > 0:
                             draw.drawLogPdf(residuals, bins = 20, fns = [f], outPdf = outPdf, title = outPdf)
@@ -489,7 +490,7 @@ def main(rawArgs):
                         outPdf = os.path.join(figOutDir, 'residualTransform-'+id+'-'+str(phone)+'-'+streamId+'.pdf')
                         draw.drawWarping([residualTransform.transform], outPdf = outPdf, xlims = [-2.5, 2.5], title = outPdf)
 
-        dist, trainLogLike, trainOcc = timed(trainEM)(dist, corpus.accumulate, estimate = defaultEstimate, minIterations = 2, maxIterations = 2)
+        dist, trainLogLike, trainOcc = timed(trn.trainEM)(dist, corpus.accumulate, estimate = d.defaultEstimate, minIterations = 2, maxIterations = 2)
         reportTrainLogLike(trainLogLike, trainOcc)
         writeDistFile(os.path.join(distOutDir, 'xf_init.dist'), dist)
         timed(drawVarious)(dist, id = 'xf_init', simpleResiduals = True)
@@ -502,8 +503,8 @@ def main(rawArgs):
             reportTrainLogLike(logLike, occ)
             #timed(drawVarious)(dist, id = 'xf-it'+str(it))
         # (FIXME : change mgcInputTransform to mgcInputWarp and mgcOutputTransform to mgcOutputWarp once tree structure for transforms is done)
-        mgcWarpParamSpec = getByTagParamSpec(lambda tag: getFirst(tag) == 'mgcInputTransform' or getFirst(tag) == 'mgcOutputTransform')
-        dist, trainLogLike, trainOcc = timed(trainCGandEM)(dist, corpus.accumulate, ps = mgcWarpParamSpec, iterations = 5, length = -25, afterEst = afterEst, verbosity = 2)
+        mgcWarpParamSpec = d.getByTagParamSpec(lambda tag: getFirst(tag) == 'mgcInputTransform' or getFirst(tag) == 'mgcOutputTransform')
+        dist, trainLogLike, trainOcc = timed(trn.trainCGandEM)(dist, corpus.accumulate, ps = mgcWarpParamSpec, iterations = 5, length = -25, afterEst = afterEst, verbosity = 2)
         writeDistFile(os.path.join(distOutDir, 'xf.dist'), dist)
         timed(drawVarious)(dist, id = 'xf', simpleResiduals = True)
         evaluateLogProb(dist, corpus)
@@ -513,17 +514,17 @@ def main(rawArgs):
             print
             print 'USING STUDENT RESIDUALS'
             dist = convertToStudentResiduals(dist, studentTag = 'student', debugTag = 'debug-residual', subtractMeanTag = 'subtractMean')
-            residualParamSpec = getByTagParamSpec(lambda tag: tag == 'student')
-            subtractMeanParamSpec = getByTagParamSpec(lambda tag: tag == 'subtractMean')
+            residualParamSpec = d.getByTagParamSpec(lambda tag: tag == 'student')
+            subtractMeanParamSpec = d.getByTagParamSpec(lambda tag: tag == 'subtractMean')
         else:
             print
             print 'USING TRANSFORMED-GAUSSIAN RESIDUALS'
             dist = convertToTransformedGaussianResiduals(dist, residualTransformTag = 'residualTransform', debugTag = 'debug-residual', subtractMeanTag = 'subtractMean')
-            residualParamSpec = getByTagParamSpec(lambda tag: tag == 'residualTransform')
-            subtractMeanParamSpec = getByTagParamSpec(lambda tag: tag == 'subtractMean')
+            residualParamSpec = d.getByTagParamSpec(lambda tag: tag == 'residualTransform')
+            subtractMeanParamSpec = d.getByTagParamSpec(lambda tag: tag == 'subtractMean')
         timed(drawVarious)(dist, id = 'xf.res_init', debugResiduals = True)
-        dist, trainLogLike, trainOcc = timed(trainCG)(dist, corpus.accumulate, ps = residualParamSpec, length = -50, verbosity = 2)
-        dist, trainLogLike, trainOcc = timed(trainCG)(dist, corpus.accumulate, ps = subtractMeanParamSpec, length = -50, verbosity = 2)
+        dist, trainLogLike, trainOcc = timed(trn.trainCG)(dist, corpus.accumulate, ps = residualParamSpec, length = -50, verbosity = 2)
+        dist, trainLogLike, trainOcc = timed(trn.trainCG)(dist, corpus.accumulate, ps = subtractMeanParamSpec, length = -50, verbosity = 2)
         reportTrainLogLike(trainLogLike, trainOcc)
         writeDistFile(os.path.join(distOutDir, 'xf.res.dist'), dist)
         timed(drawVarious)(dist, id = 'xf.res', debugResiduals = True)
@@ -532,7 +533,7 @@ def main(rawArgs):
 
         print
         print 'ESTIMATING ALL PARAMETERS'
-        dist, trainLogLike, trainOcc = timed(trainCG)(dist, corpus.accumulate, ps = defaultParamSpec, length = -200, verbosity = 2)
+        dist, trainLogLike, trainOcc = timed(trn.trainCG)(dist, corpus.accumulate, ps = d.defaultParamSpec, length = -200, verbosity = 2)
         reportTrainLogLike(trainLogLike, trainOcc)
         writeDistFile(os.path.join(distOutDir, 'xf.res.xf.dist'), dist)
         timed(drawVarious)(dist, id = 'xf.res.xf', debugResiduals = True)

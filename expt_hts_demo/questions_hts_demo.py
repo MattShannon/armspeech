@@ -11,7 +11,7 @@
 
 from __future__ import division
 
-import questions as ques
+import armspeech.modelling.questions as ques
 import phoneset_cmu
 
 def getSubsetQG(labelKey, namedSubsets):

@@ -12,12 +12,12 @@ that is produced by the HTS demo with STRAIGHT.
 
 from __future__ import division
 
-import corpus as cps
-import labels as lab
-import features as feat
-import labels_htsDemo
-import iterhelp
-from timing import timed
+import armspeech.modelling.corpus as cps
+import armspeech.speech.labels as lab
+import armspeech.speech.features as feat
+import labels_hts_demo
+from armspeech.util import iterhelp
+from armspeech.util.timing import timed
 
 import os
 
@@ -48,7 +48,7 @@ class ArcticCorpus(cps.Corpus):
         return list(lab.readHtkLabFile(
             os.path.join(self.labDir, uttId+'.lab'),
             self.framePeriod,
-            decode = labels_htsDemo.parseLabel
+            decode = labels_hts_demo.parseLabel
         ))
     def rawAcousticSeq(self, uttId):
         return list(feat.readAcousticGen(

@@ -8,22 +8,20 @@
 
 from __future__ import division
 
-from mathhelp import logAdd, logSum, sigmoid, sampleDiscrete
+from armspeech.util.mathhelp import logSum, sigmoid, sampleDiscrete
 import nodetree
-from minimize import *
 import transform as xf
-from timing import timed
+from armspeech.util.timing import timed
 
 import math
-import numpy
-from numpy import *
+import numpy as np
 import numpy.linalg as la
-import mylinalg as mla
+import armspeech.util.mylinalg as mla
 from scipy import special
 import random
 import sys
 from itertools import izip
-from iterhelp import contextualizeIter
+from armspeech.util.iterhelp import contextualizeIter
 from collections import deque, defaultdict
 
 # (FIXME : add more checks to validate Dists and Accs on creation (including checking for NaNs))
@@ -35,7 +33,7 @@ from collections import deque, defaultdict
 # FIXME : make estimate return just the dist (seems philosophically better)
 
 def assert_allclose(actual, desired, rtol = 1e-7, atol = 1e-14, msg = 'items not almost equal'):
-    if shape(actual) != shape(desired) or not allclose(actual, desired, rtol, atol):
+    if np.shape(actual) != np.shape(desired) or not np.allclose(actual, desired, rtol, atol):
         raise AssertionError(msg+'\n ACTUAL:  '+repr(actual)+'\n DESIRED: '+repr(desired))
 
 class SynthMethod(object):
@@ -104,9 +102,9 @@ class ParamSpec(object):
         return distNew
 
 def defaultParamsPartial(node, paramsChild):
-    return concatenate([node.paramsSingle(), node.paramsChildren(paramsChild)])
+    return np.concatenate([node.paramsSingle(), node.paramsChildren(paramsChild)])
 def defaultDerivParamsPartial(node, derivParamsChild):
-    return concatenate([node.derivParamsSingle(), node.derivParamsChildren(derivParamsChild)])
+    return np.concatenate([node.derivParamsSingle(), node.derivParamsChildren(derivParamsChild)])
 def defaultParsePartial(node, params, parseChild):
     newNode, paramsLeft = node.parseSingle(params)
     return newNode.parseChildren(paramsLeft, parseChild)
@@ -275,7 +273,7 @@ class AccG(AccCommon):
         abstract
     def derivParamsChildren(self, derivParamsChild):
         children = self.children()
-        return [] if not children else concatenate([ derivParamsChild(child) for child in children ])
+        return [] if not children else np.concatenate([ derivParamsChild(child) for child in children ])
 
 class Acc(AccEM, AccG):
     pass
@@ -297,7 +295,7 @@ class DerivTermAccG(AccG):
 
         self.occ = 0.0
         self.logLikePrev = 0.0
-        self.derivParams = zeros([len(distPrev.paramsSingle())])
+        self.derivParams = np.zeros([len(distPrev.paramsSingle())])
 
     def children(self):
         return []
@@ -373,14 +371,14 @@ class LinearGaussianAcc(TermAcc):
 
         self.occ = 0.0
         self.sumSqr = 0.0
-        self.sumTarget = zeros([inputLength])
-        self.sumOuter = zeros([inputLength, inputLength])
+        self.sumTarget = np.zeros([inputLength])
+        self.sumOuter = np.zeros([inputLength, inputLength])
 
     def add(self, input, output, occ = 1.0):
         self.occ += occ
         self.sumSqr += (output ** 2) * occ
         self.sumTarget += input * output * occ
-        self.sumOuter += outer(input, input) * occ
+        self.sumOuter += np.outer(input, input) * occ
 
     # N.B. assumes distPrev (if present) is the same for self and acc (not checked).
     def addAccSingle(self, acc):
@@ -390,18 +388,18 @@ class LinearGaussianAcc(TermAcc):
         self.sumOuter += acc.sumOuter
 
     def aux(self, coeff, variance):
-        term = self.sumSqr - 2.0 * dot(self.sumTarget, coeff) + dot(dot(self.sumOuter, coeff), coeff)
-        logLike = -0.5 * log(2.0 * pi) * self.occ - 0.5 * log(variance) * self.occ - 0.5 * term / variance
+        term = self.sumSqr - 2.0 * np.dot(self.sumTarget, coeff) + np.dot(np.dot(self.sumOuter, coeff), coeff)
+        logLike = -0.5 * math.log(2.0 * math.pi) * self.occ - 0.5 * math.log(variance) * self.occ - 0.5 * term / variance
         return logLike
 
     def logLikeSingle(self):
         return self.aux(self.distPrev.coeff, self.distPrev.variance)
 
     def auxDerivParams(self, coeff, variance):
-        term = self.sumSqr - 2.0 * dot(self.sumTarget, coeff) + dot(dot(self.sumOuter, coeff), coeff)
-        derivCoeff = (self.sumTarget - dot(self.sumOuter, coeff)) / variance
+        term = self.sumSqr - 2.0 * np.dot(self.sumTarget, coeff) + np.dot(np.dot(self.sumOuter, coeff), coeff)
+        derivCoeff = (self.sumTarget - np.dot(self.sumOuter, coeff)) / variance
         derivLogPrecision = 0.5 * self.occ - 0.5 * term / variance
-        return append(derivCoeff, derivLogPrecision)
+        return np.append(derivCoeff, derivLogPrecision)
 
     def derivParamsSingle(self):
         return self.auxDerivParams(self.distPrev.coeff, self.distPrev.variance)
@@ -415,8 +413,8 @@ class LinearGaussianAcc(TermAcc):
                 sumOuterInv = mla.pinv(self.sumOuter)
             except la.LinAlgError, detail:
                 raise EstimationError('could not compute pseudo-inverse: '+str(detail))
-            coeff = dot(sumOuterInv, self.sumTarget)
-            variance = (self.sumSqr - dot(coeff, self.sumTarget)) / self.occ
+            coeff = np.dot(sumOuterInv, self.sumTarget)
+            variance = (self.sumSqr - np.dot(coeff, self.sumTarget)) / self.occ
             if variance <= 0.0:
                 raise EstimationError('computed variance is zero or negative: '+str(variance))
             auxValue = self.logLikeSingle() if self.distPrev != None else self.aux(coeff, variance)
@@ -442,19 +440,19 @@ class LinearGaussianAcc(TermAcc):
         # FIXME : what about len(self.sumOuter) == 0 case?
         if len(self.sumOuter) == 1:
             # HTK-style mixture incrementing
-            blc = BinaryLogisticClassifier(array([0.0]))
+            blc = BinaryLogisticClassifier(np.array([0.0]))
             dist, logLike, occ = self.estimateSingle()
             mean = dist.coeff[0]
             variance = dist.variance
-            dist0 = LinearGaussian(array([mean - 0.2 * sqrt(variance)]), variance)
-            dist1 = LinearGaussian(array([mean + 0.2 * sqrt(variance)]), variance)
+            dist0 = LinearGaussian(np.array([mean - 0.2 * math.sqrt(variance)]), variance)
+            dist1 = LinearGaussian(np.array([mean + 0.2 * math.sqrt(variance)]), variance)
             return MixtureDist(blc, [dist0, dist1]), logLike, occ
         else:
-            l, U = la.eigh(S - outer(mu, mu))
-            eval, (index, evec) = max(zip(l, enumerate(transpose(U))))
-            w = evec * sigmoidAbscissaAtOneStdev / math.sqrt(eval)
-            w0 = -inner(w, mu)
-            blc = BinaryLogisticClassifier(append(w, w0))
+            l, U = la.eigh(S - np.outer(mu, mu))
+            eigVal, (index, eigVec) = max(zip(l, enumerate(np.transpose(U))))
+            w = eigVec * sigmoidAbscissaAtOneStdev / math.sqrt(eigVal)
+            w0 = -np.dot(w, mu)
+            blc = BinaryLogisticClassifier(np.append(w, w0))
             dist0, logLike, occ = self.estimateSingle()
             dist1, logLike, occ = self.estimateSingle()
             return MixtureDist(blc, [dist0, dist1]), logLike, occ
@@ -468,7 +466,7 @@ class ConstantClassifierAcc(TermAcc):
         self.tag = tag
 
         self.occ = 0.0
-        self.occs = zeros([ numClasses ])
+        self.occs = np.zeros([ numClasses ])
 
     def add(self, input, classIndex, occ = 1.0):
         self.occ += occ
@@ -487,7 +485,7 @@ class ConstantClassifierAcc(TermAcc):
         return self.aux(self.distPrev.logProbs)
 
     def auxDerivParams(self, logProbs):
-        probs = exp(logProbs)
+        probs = np.exp(logProbs)
         return self.occs[:-1] - self.occs[-1] - (probs[:-1] - probs[-1]) * self.occ
 
     def derivParamsSingle(self):
@@ -497,7 +495,7 @@ class ConstantClassifierAcc(TermAcc):
         try:
             if self.occ == 0.0:
                 raise EstimationError('require occ > 0')
-            logProbs = log(self.occs / self.occ)
+            logProbs = np.log(self.occs / self.occ)
             auxValue = self.logLikeSingle() if self.distPrev != None else self.aux(logProbs)
             return ConstantClassifier(logProbs, tag = self.tag), auxValue, self.occ
         except EstimationError, detail:
@@ -514,8 +512,8 @@ class BinaryLogisticClassifierAcc(TermAcc):
 
         dim = len(self.distPrev.coeff)
         self.occ = 0.0
-        self.sumTarget = zeros([dim])
-        self.sumOuter = zeros([dim, dim])
+        self.sumTarget = np.zeros([dim])
+        self.sumOuter = np.zeros([dim, dim])
         self.logLikePrev = 0.0
 
     def add(self, input, classIndex, occ = 1.0):
@@ -523,7 +521,7 @@ class BinaryLogisticClassifierAcc(TermAcc):
             probPrev1 = self.distPrev.prob(input, 1)
             self.occ += occ
             self.sumTarget += input * (probPrev1 - classIndex) * occ
-            self.sumOuter += outer(input, input) * probPrev1 * (1.0 - probPrev1) * occ
+            self.sumOuter += np.outer(input, input) * probPrev1 * (1.0 - probPrev1) * occ
             self.logLikePrev += self.distPrev.logProb(input, classIndex) * occ
 
     # N.B. assumes class 0 in self corresponds to class 0 in acc, etc.
@@ -561,7 +559,7 @@ class BinaryLogisticClassifierAcc(TermAcc):
                 sumOuterInv = mla.pinv(self.sumOuter)
             except la.LinAlgError, detail:
                 raise EstimationError('could not compute pseudo-inverse: '+str(detail))
-            coeff = self.distPrev.coeff - dot(sumOuterInv, self.sumTarget)
+            coeff = self.distPrev.coeff - np.dot(sumOuterInv, self.sumTarget)
             return BinaryLogisticClassifier(coeff, tag = self.tag), self.logLikeSingle(), self.occ
         except EstimationError, detail:
             sys.stderr.write('WARNING: reverting to previous dist due to error during BinaryLogisticClassifier estimation: '+str(detail)+'\n')
@@ -589,14 +587,14 @@ class MixtureAcc(Acc):
     def add(self, input, output, occ = 1.0):
         logProbs = [ self.distPrev.logProbComp(input, comp, output) for comp in range(self.numComps) ]
         logTot = logSum(logProbs)
-        relOccs = exp(logProbs - logTot)
+        relOccs = np.exp(logProbs - logTot)
         assert_allclose(sum(relOccs), 1.0)
         for comp in range(self.numComps):
             relOcc = relOccs[comp]
             if relOcc > 0.0:
                 self.classAcc.add(input, comp, occ * relOcc)
                 self.regAccs[comp].add(input, output, occ * relOcc)
-                self.entropy -= occ * relOcc * log(relOcc)
+                self.entropy -= occ * relOcc * math.log(relOcc)
 
     # N.B. assumes component 0 in self corresponds to component 0 in acc, etc.
     #   Also assumes distPrev is the same for self and acc (not checked).
@@ -1302,7 +1300,7 @@ class Dist(object):
         abstract
     def paramsChildren(self, paramsChild):
         children = self.children()
-        return [] if not children else concatenate([ paramsChild(child) for child in children ])
+        return [] if not children else np.concatenate([ paramsChild(child) for child in children ])
     def parseSingle(self, params):
         abstract
     def parseChildren(self, params, parseChild):
@@ -1348,10 +1346,10 @@ class FixedValueDist(TermDist):
         if output == self.value:
             return 0.0
         else:
-            return log(0.0)
+            return float('-inf')
 
     def logProbDerivInput(self, input, output):
-        return zeros(shape(input))
+        return np.zeros(np.shape(input))
 
     def createAccSingle(self):
         return FixedValueAcc(self.value, tag = self.tag)
@@ -1395,7 +1393,7 @@ class LinearGaussian(TermDist):
         self.coeff = coeff
         self.variance = variance
         self.tag = tag
-        self.gConst = -0.5 * log(2.0 * pi)
+        self.gConst = -0.5 * math.log(2.0 * math.pi)
 
     def __repr__(self):
         return 'LinearGaussian('+repr(self.coeff)+', '+repr(self.variance)+', tag = '+repr(self.tag)+')'
@@ -1404,26 +1402,26 @@ class LinearGaussian(TermDist):
         return LinearGaussian(self.coeff, self.variance, tag = self.tag)
 
     def logProb(self, input, output):
-        mean = dot(self.coeff, input)
-        return self.gConst - 0.5 * log(self.variance) - 0.5 * (output - mean) ** 2 / self.variance
+        mean = np.dot(self.coeff, input)
+        return self.gConst - 0.5 * math.log(self.variance) - 0.5 * (output - mean) ** 2 / self.variance
 
     def logProbDerivInput(self, input, output):
-        mean = dot(self.coeff, input)
+        mean = np.dot(self.coeff, input)
         return self.coeff * (output - mean) / self.variance
 
     def logProbDerivOutput(self, input, output):
-        mean = dot(self.coeff, input)
+        mean = np.dot(self.coeff, input)
         return -(output - mean) / self.variance
 
     def residual(self, input, output):
-        mean = dot(self.coeff, input)
-        return (output - mean) / sqrt(self.variance)
+        mean = np.dot(self.coeff, input)
+        return (output - mean) / math.sqrt(self.variance)
 
     def createAccSingle(self):
         return LinearGaussianAcc(distPrev = self, tag = self.tag)
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
-        mean = dot(self.coeff, input)
+        mean = np.dot(self.coeff, input)
         if method == SynthMethod.Meanish:
             return mean
         elif method == SynthMethod.Sample:
@@ -1432,12 +1430,12 @@ class LinearGaussian(TermDist):
             raise RuntimeError('unknown SynthMethod '+repr(method))
 
     def paramsSingle(self):
-        return append(self.coeff, -log(self.variance))
+        return np.append(self.coeff, -math.log(self.variance))
 
     def parseSingle(self, params):
         n = len(self.coeff)
         coeff = params[:n]
-        variance = exp(-params[n])
+        variance = math.exp(-params[n])
         return LinearGaussian(coeff, variance, tag = self.tag), params[n + 1:]
 
 class StudentDist(TermDist):
@@ -1450,7 +1448,7 @@ class StudentDist(TermDist):
         self.precision = precision
         self.tag = tag
 
-        self.gConst = special.gammaln(0.5) - special.betaln(0.5, 0.5 * self.df) + 0.5 * log(self.precision) - 0.5 * log(self.df) - 0.5 * log(pi)
+        self.gConst = special.gammaln(0.5) - special.betaln(0.5, 0.5 * self.df) + 0.5 * math.log(self.precision) - 0.5 * math.log(self.df) - 0.5 * math.log(math.pi)
 
     def __repr__(self):
         return 'StudentDist('+repr(self.df)+', '+repr(self.precision)+', tag = '+repr(self.tag)+')'
@@ -1459,24 +1457,24 @@ class StudentDist(TermDist):
         return StudentDist(self.df, self.precision, tag = self.tag)
 
     def logProb(self, input, output):
-        assert shape(output) == ()
+        assert np.shape(output) == ()
         a = output * output * self.precision / self.df
-        return self.gConst - 0.5 * (self.df + 1.0) * log(1.0 + a)
+        return self.gConst - 0.5 * (self.df + 1.0) * math.log(1.0 + a)
 
     def logProbDerivInput(self, input, output):
-        assert shape(output) == ()
-        return zeros(shape(input))
+        assert np.shape(output) == ()
+        return np.zeros(np.shape(input))
 
     def logProbDerivOutput(self, input, output):
-        assert shape(output) == ()
+        assert np.shape(output) == ()
         a = output * output * self.precision / self.df
         return -(self.df + 1.0) * output * self.precision / self.df / (1.0 + a)
 
     def logProbDerivParams(self, input, output):
         a = output * output * self.precision / self.df
         K = self.df - (1.0 + self.df) / (1.0 + a)
-        return array([
-            0.5 * K + 0.5 * self.df * (special.psi(0.5 * (self.df + 1.0)) - special.psi(0.5 * self.df) - log(1.0 + a)),
+        return np.array([
+            0.5 * K + 0.5 * self.df * (special.psi(0.5 * (self.df + 1.0)) - special.psi(0.5 * self.df) - math.log(1.0 + a)),
             -0.5 * K
         ])
 
@@ -1491,8 +1489,8 @@ class StudentDist(TermDist):
             return 0.0
         elif method == SynthMethod.Sample:
             while True:
-                out = numpy.random.standard_t(self.df) / sqrt(self.precision)
-                if isinf(out):
+                out = np.random.standard_t(self.df) / math.sqrt(self.precision)
+                if math.isinf(out):
                     print 'NOTE: redoing sample from t-dist since it was', out
                 else:
                     return out
@@ -1500,11 +1498,11 @@ class StudentDist(TermDist):
             raise RuntimeError('unknown SynthMethod '+repr(method))
 
     def paramsSingle(self):
-        return array([ log(self.df), log(self.precision) ])
+        return np.array([ math.log(self.df), math.log(self.precision) ])
 
     def parseSingle(self, params):
-        df = exp(params[0])
-        precision = exp(params[1])
+        df = math.exp(params[0])
+        precision = math.exp(params[1])
         return StudentDist(df, precision, tag = self.tag), params[2:]
 
 class ConstantClassifier(TermDist):
@@ -1525,13 +1523,13 @@ class ConstantClassifier(TermDist):
         return self.logProbs[classIndex]
 
     def logProbDerivInput(self, input, classIndex):
-        return zeros(shape(input))
+        return np.zeros(np.shape(input))
 
     def createAccSingle(self):
         return ConstantClassifierAcc(distPrev = self, tag = self.tag)
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
-        probs = exp(self.logProbs)
+        probs = np.exp(self.logProbs)
         assert_allclose(sum(probs), 1.0)
         if method == SynthMethod.Meanish:
             prob, classIndex = max((prob, classIndex) for classIndex, prob in enumerate(probs))
@@ -1542,17 +1540,17 @@ class ConstantClassifier(TermDist):
             raise RuntimeError('unknown SynthMethod '+repr(method))
 
     def paramsSingle(self):
-        if not all(isfinite(self.logProbs)):
+        if not np.all(np.isfinite(self.logProbs)):
             raise RuntimeError('this parameterization of ConstantClassifier cannot cope with zero (or NaN) probabilities (logProbs = '+repr(self.logProbs)+')')
-        sumZeroLogProbs = self.logProbs - mean(self.logProbs)
+        sumZeroLogProbs = self.logProbs - np.mean(self.logProbs)
         return sumZeroLogProbs[:-1]
 
     def parseSingle(self, params):
         n = len(self.logProbs) - 1
         p = params[:n]
-        if not all(isfinite(p)):
+        if not np.all(np.isfinite(p)):
             raise RuntimeError('invalid parameters for ConstantClassifier: '+repr(p))
-        sumZeroLogProbs = append(p, -sum(p))
+        sumZeroLogProbs = np.append(p, -sum(p))
         assert_allclose(sum(sumZeroLogProbs), 0.0)
         logProbs = sumZeroLogProbs - logSum(sumZeroLogProbs)
         return ConstantClassifier(logProbs, tag = self.tag), params[n:]
@@ -1569,23 +1567,24 @@ class BinaryLogisticClassifier(TermDist):
         return BinaryLogisticClassifier(self.coeff, tag = self.tag)
 
     def logProb(self, input, classIndex):
-        return log(self.prob(input, classIndex))
+        prob = self.prob(input, classIndex)
+        return math.log(prob) if prob != 0.0 else float('-inf')
 
     def prob(self, input, classIndex):
-        prob1 = sigmoid(dot(self.coeff, input))
+        prob1 = sigmoid(np.dot(self.coeff, input))
         if classIndex == 0:
             return 1.0 - prob1
         else:
             return prob1
 
     def logProbDerivInput(self, input, classIndex):
-        return self.coeff * (classIndex - sigmoid(dot(self.coeff, input)))
+        return self.coeff * (classIndex - sigmoid(np.dot(self.coeff, input)))
 
     def createAccSingle(self):
         return BinaryLogisticClassifierAcc(self, tag = self.tag)
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
-        prob1 = sigmoid(dot(self.coeff, input))
+        prob1 = sigmoid(np.dot(self.coeff, input))
         if method == SynthMethod.Meanish:
             if prob1 > 0.5:
                 return 1
@@ -1633,7 +1632,7 @@ class MixtureDist(Dist):
 
     def logProbDerivInput(self, input, output):
         logTot = self.logProb(input, output)
-        return sum((
+        return np.sum((
             (regDist.logProbDerivInput(input, output) + self.classDist.logProbDerivInput(input, comp)) *
             math.exp(self.logProbComp(input, comp, output) - logTot)
             for comp, regDist in enumerate(self.regDists)
@@ -1641,7 +1640,7 @@ class MixtureDist(Dist):
 
     def logProbDerivOutput(self, input, output):
         logTot = self.logProb(input, output)
-        return sum((
+        return np.sum((
             regDist.logProbDerivOutput(input, output) *
             math.exp(self.logProbComp(input, comp, output) - logTot)
             for comp, regDist in enumerate(self.regDists)
@@ -1654,7 +1653,7 @@ class MixtureDist(Dist):
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
         if method == SynthMethod.Meanish:
-            return sum(
+            return np.sum(
                 regDist.synth(input, SynthMethod.Meanish, actualOutput) *
                 math.exp(self.classDist.logProb(input, comp))
                 for comp, regDist in enumerate(self.regDists)
@@ -1997,7 +1996,7 @@ class MappedInputDist(Dist):
         return self.dist.logProb_frames(self.inputTransform(input), output)
 
     def logProbDerivInput(self, input, output):
-        return dot(
+        return np.dot(
             self.inputTransform.deriv(input),
             self.dist.logProbDerivInput(self.inputTransform(input), output)
         )
@@ -2045,13 +2044,13 @@ class MappedOutputDist(Dist):
 
     def logProbDerivInput(self, input, output):
         outputT = self.outputTransform(input, output)
-        return dot(
+        return np.dot(
             self.outputTransform.derivInput(input, output),
             self.dist.logProbDerivOutput(input, outputT)
         ) + self.dist.logProbDerivInput(input, outputT) + self.outputTransform.logJacDerivInput(input, output)
 
     def logProbDerivOutput(self, input, output):
-        return dot(
+        return np.dot(
             self.outputTransform.deriv(input, output),
             self.dist.logProbDerivOutput(input, self.outputTransform(input, output))
         ) + self.outputTransform.logJacDeriv(input, output)
@@ -2097,7 +2096,7 @@ class TransformedInputDist(Dist):
         return self.dist.logProb(self.inputTransform(input), output)
 
     def logProbDerivInput(self, input, output):
-        return dot(
+        return np.dot(
             self.inputTransform.deriv(input),
             self.dist.logProbDerivInput(self.inputTransform(input), output)
         )
@@ -2155,13 +2154,13 @@ class TransformedOutputDist(Dist):
 
     def logProbDerivInput(self, input, output):
         outputT = self.outputTransform(input, output)
-        return dot(
+        return np.dot(
             self.outputTransform.derivInput(input, output),
             self.dist.logProbDerivOutput(input, outputT)
         ) + self.dist.logProbDerivInput(input, outputT) + self.outputTransform.logJacDerivInput(input, output)
 
     def logProbDerivOutput(self, input, output):
-        return dot(
+        return np.dot(
             self.outputTransform.deriv(input, output),
             self.dist.logProbDerivOutput(input, self.outputTransform(input, output))
         ) + self.outputTransform.logJacDeriv(input, output)
