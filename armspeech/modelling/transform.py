@@ -374,20 +374,20 @@ class PolynomialTransform1D(Transform1D):
         n = len(self.params)
         return PolynomialTransform1D(params[:n], tag = self.tag), params[n:]
     def __call__(self, x):
-        return sum(
+        return sum([
             coeff * x ** power
             for power, coeff in enumerate(self.params)
-        )
+        ])
     def deriv(self, x):
-        return sum(
+        return sum([
             coeff * (power + 1) * x ** power
             for power, coeff in enumerate(self.params[1:])
-        )
+        ])
     def derivDeriv(self, x):
-        return sum(
+        return sum([
             coeff * (power + 1) * (power + 2) * x ** power
             for power, coeff in enumerate(self.params[2:])
-        )
+        ])
     def derivParams(self, x):
         return np.array([
             x ** power
@@ -526,11 +526,11 @@ class SumTransform1D(Transform1D):
         xfs, paramsLeft = parseConcat([ transform.parse for transform in self.transforms ], params)
         return SumTransform1D(xfs, tag = self.tag), paramsLeft
     def __call__(self, x):
-        return sum(transform(x) for transform in self.transforms)
+        return sum([ transform(x) for transform in self.transforms ])
     def deriv(self, x):
-        return sum(transform.deriv(x) for transform in self.transforms)
+        return sum([ transform.deriv(x) for transform in self.transforms ])
     def derivDeriv(self, x):
-        return sum(transform.derivDeriv(x) for transform in self.transforms)
+        return sum([ transform.derivDeriv(x) for transform in self.transforms ])
     def derivParams(self, x):
         return np.concatenate([ transform.derivParams(x) for transform in self.transforms ])
     def derivParamsDeriv(self, x):

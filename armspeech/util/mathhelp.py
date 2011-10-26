@@ -57,7 +57,7 @@ def sampleDiscrete(valueProbList, absTol = 1e-6):
 
     N.B. valueProbList should be a sequence type (an iterable), not an iterator.
     """
-    total = sum(prob for value, prob in valueProbList)
+    total = sum([ prob for value, prob in valueProbList ])
     if abs(total - 1.0) > absTol:
         raise RuntimeError('probabilities should sum to 1.0 not '+str(total))
     rand = random.random()

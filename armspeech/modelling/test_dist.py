@@ -346,7 +346,7 @@ def check_est(trueDist, train, inputGen, hasParams, iid = True, unitOcc = False,
 
     inputsTest = [ input for input, index in zip(inputGen, range(testSetSize)) ]
     testSet = [ (input, trueDist.synth(input), 1.0 if unitOcc else math.exp(randn())) for input in inputsTest ]
-    testOcc = sum(occ for input, output, occ in testSet)
+    testOcc = sum([ occ for input, output, occ in testSet ])
 
     training = []
 
@@ -363,7 +363,7 @@ def check_est(trueDist, train, inputGen, hasParams, iid = True, unitOcc = False,
         # N.B. tests both that training has converged and that logLike from estimate agrees with iid logProb from dist
         # (FIXME : might be nice to separate these two criterion)
         assert_allclose(estLogLike, iidLogProb(estDist, training))
-        assert_allclose(estOcc, sum(occ for input, output, occ in training))
+        assert_allclose(estOcc, sum([ occ for input, output, occ in training ]))
         tslpTrue = iidLogProb(trueDist, testSet)
         tslpEst = iidLogProb(estDist, testSet)
         if hasParams:

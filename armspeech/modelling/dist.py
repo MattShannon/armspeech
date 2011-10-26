@@ -253,7 +253,7 @@ class AccCommon(object):
     def logLikeSingle(self):
         abstract
     def logLike(self):
-        return sum( accNode.logLikeSingle() for accNode in accNodeList(self) )
+        return sum([ accNode.logLikeSingle() for accNode in accNodeList(self) ])
     def withTag(self, tag):
         """Set tag and return self.
 
@@ -479,7 +479,7 @@ class ConstantClassifierAcc(TermAcc):
         self.occs += acc.occs
 
     def aux(self, logProbs):
-        return sum(occ * logProb for occ, logProb in zip(self.occs, logProbs) if occ > 0.0)
+        return sum([ occ * logProb for occ, logProb in zip(self.occs, logProbs) if occ > 0.0 ])
 
     def logLikeSingle(self):
         return self.aux(self.distPrev.logProbs)
@@ -581,7 +581,7 @@ class MixtureAcc(Acc):
     @property
     def occ(self):
         occ = self.classAcc.occ
-        assert_allclose(sum( regAcc.occ for regAcc in self.regAccs ), occ)
+        assert_allclose(sum([ regAcc.occ for regAcc in self.regAccs ]), occ)
         return occ
 
     def add(self, input, output, occ = 1.0):
@@ -612,9 +612,9 @@ class MixtureAcc(Acc):
         classDist, logLikeTot, classOcc = estimateChild(self.classAcc)
         regList = [ estimateChild(regAcc) for regAcc in self.regAccs ]
         regDists = [ dist for dist, logLike, occ in regList ]
-        logLikeTot += sum(logLike for dist, logLike, occ in regList)
+        logLikeTot += sum([ logLike for dist, logLike, occ in regList ])
         logLikeTot += self.entropy
-        regsOcc = sum(occ for dist, logLike, occ in regList)
+        regsOcc = sum([ occ for dist, logLike, occ in regList ])
         assert_allclose(regsOcc, classOcc)
         return MixtureDist(classDist, regDists, tag = self.tag), logLikeTot, classOcc
 
@@ -630,7 +630,7 @@ class IdentifiableMixtureAcc(Acc):
     @property
     def occ(self):
         occ = self.classAcc.occ
-        assert_allclose(sum( regAcc.occ for regAcc in self.regAccs ), occ)
+        assert_allclose(sum([ regAcc.occ for regAcc in self.regAccs ]), occ)
         return occ
 
     def add(self, input, output, occ = 1.0):
@@ -651,8 +651,8 @@ class IdentifiableMixtureAcc(Acc):
         classDist, logLikeTot, classOcc = estimateChild(self.classAcc)
         regList = [ estimateChild(regAcc) for regAcc in self.regAccs ]
         regDists = [ dist for dist, logLike, occ in regList ]
-        logLikeTot += sum(logLike for dist, logLike, occ in regList)
-        regsOcc = sum(occ for dist, logLike, occ in regList)
+        logLikeTot += sum([ logLike for dist, logLike, occ in regList ])
+        regsOcc = sum([ occ for dist, logLike, occ in regList ])
         assert_allclose(regsOcc, classOcc)
         return IdentifiableMixtureDist(classDist, regDists, tag = self.tag), logLikeTot, classOcc
 
@@ -724,7 +724,7 @@ class DiscreteAcc(Acc):
 
     @property
     def occ(self):
-        return sum( acc.occ for acc in self.accDict.itervalues() )
+        return sum([ acc.occ for acc in self.accDict.values() ])
 
     def add(self, input, output, occ = 1.0):
         pid, acInput = input
@@ -1625,26 +1625,26 @@ class MixtureDist(Dist):
         return MixtureDist(classDist, regDists, tag = self.tag)
 
     def logProb(self, input, output):
-        return logSum([self.logProbComp(input, comp, output) for comp in range(self.numComps)])
+        return logSum([ self.logProbComp(input, comp, output) for comp in range(self.numComps) ])
 
     def logProbComp(self, input, comp, output):
         return self.classDist.logProb(input, comp) + self.regDists[comp].logProb(input, output)
 
     def logProbDerivInput(self, input, output):
         logTot = self.logProb(input, output)
-        return np.sum((
+        return np.sum([
             (regDist.logProbDerivInput(input, output) + self.classDist.logProbDerivInput(input, comp)) *
             math.exp(self.logProbComp(input, comp, output) - logTot)
             for comp, regDist in enumerate(self.regDists)
-        ), axis = 0)
+        ], axis = 0)
 
     def logProbDerivOutput(self, input, output):
         logTot = self.logProb(input, output)
-        return np.sum((
+        return np.sum([
             regDist.logProbDerivOutput(input, output) *
             math.exp(self.logProbComp(input, comp, output) - logTot)
             for comp, regDist in enumerate(self.regDists)
-        ), axis = 0)
+        ], axis = 0)
 
     def createAcc(self, createAccChild):
         classAcc = createAccChild(self.classDist)
@@ -1653,11 +1653,11 @@ class MixtureDist(Dist):
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
         if method == SynthMethod.Meanish:
-            return np.sum(
+            return np.sum([
                 regDist.synth(input, SynthMethod.Meanish, actualOutput) *
                 math.exp(self.classDist.logProb(input, comp))
                 for comp, regDist in enumerate(self.regDists)
-            )
+            ], axis = 0)
         elif method == SynthMethod.Sample:
             comp = self.classDist.synth(input, method)
             output = self.regDists[comp].synth(input, method, actualOutput)
