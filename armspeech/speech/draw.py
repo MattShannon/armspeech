@@ -49,7 +49,7 @@ def drawLabelledSeq(dataSeqs, labelSeqs, outPdf, figSizeRate = None, fillBetween
             pos = (start + end) / 2.0
             if xmin < pos < xmax:
                 ax.text(pos, height + 0.02, label, transform = trans, horizontalalignment = 'center', verticalalignment = 'center', fontsize = 8)
-            ax.axvspan(xmin = start, xmax = end, ymin = height + 0.0, ymax = height + 0.04, color = color, alpha = 0.5)
+            ax.axvspan(xmin = start, xmax = end, ymin = height + 0.0, ymax = height + 0.04, facecolor = color, alpha = 0.5)
             ax.axvline(x = start, linewidth = 0.1, color = 'black')
 
     ax.set_xlim(xmin, xmax)
