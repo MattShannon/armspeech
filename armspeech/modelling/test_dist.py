@@ -371,7 +371,8 @@ def check_est(trueDist, train, inputGen, hasParams, iid = True, unitOcc = False,
             assert_allclose(newAcc.occ, estOcc)
             derivParams = ps.derivParams(newAcc)
             assert_allclose(derivParams / estOcc, np.zeros([len(derivParams)]), atol = 1e-4)
-        if math.isinf(estLogLike):
+        # (FIXME : math.isinf ~20x faster but only exists in python >= 2.6)
+        if np.isinf(estLogLike):
             print 'NOTE: singularity in likelihood function (training set size =', len(training), ', occ '+repr(estOcc)+', estDist =', estDist, ', estLogLike =', estLogLike, ')'
         if abs(trueLogProb - estLogLike) / estOcc < logLikeThresh and abs(tslpTrue - tslpEst) / testOcc < tslpThresh:
             converged = True
@@ -423,7 +424,8 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
     if hasParams:
         distParsed = reparse(dist, ps)
     for input, output in points:
-        if not math.isinf(dist.logProb(input, output)):
+        # (FIXME : math.isinf ~20x faster but only exists in python >= 2.6)
+        if not np.isinf(dist.logProb(input, output)):
             if checkAdditional != None:
                 checkAdditional(dist, input, output, eps)
             lp = dist.logProb(input, output)
