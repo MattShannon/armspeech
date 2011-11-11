@@ -33,7 +33,7 @@ armspeech has the following dependencies:
   (for example, by the HTS demo)
 - if you want to generate audio, STRAIGHT vocoder (which requires MATLAB)
 - if you want to generate audio, an appropriate HTS demo-style `Config.pm` file
-- python (>= 2.5) with recent numpy, scipy and matplotlib
+- python (>= 2.6) with recent numpy, scipy and matplotlib
 - if using the HTS demo to generate the required files above (recommended),
   you should use the STRAIGHT version of the English speaker dependent training
   demo (which requires HTS, which in turn requires HTK).
@@ -57,6 +57,15 @@ Currently `expt_hts_demo` uses the `armspeech` python package as a library, but
 the latter is not intended to be a fully-fledged package suitable for separate
 distribution.
 This may change as the code matures.
+
+While armspeech officially requires python 2.6, it can be made to run with
+python 2.5 with minimal changes.
+You will need the `argparse` module, since this is not part of the standard
+library for python 2.5.
+If you are not in a position to install argparse properly on your system, a
+quick hack is to
+[download argparse](http://code.google.com/p/argparse/downloads/list) and
+copy `argparse.py` into the directory containing this Readme.
 
 
 License
