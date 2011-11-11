@@ -1,2 +1,2 @@
 #!/bin/bash
-/usr/bin/python -m armspeech.test_armspeech "$@"
+PYTHONPATH=. /usr/bin/python armspeech/test_armspeech.py "$@"
