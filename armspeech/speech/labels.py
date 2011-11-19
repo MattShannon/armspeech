@@ -7,7 +7,6 @@
 
 
 from __future__ import division
-from __future__ import with_statement
 
 import re
 from armspeech.util import collectionshelp
