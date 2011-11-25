@@ -26,7 +26,7 @@ def main(args):
         job = persist.loadPickle(os.path.join(liveJob.dir, 'job.pickle'))
         jobSecHash = liveJob.extra('secHash')
         buildRepo = persist.loadPickle(os.path.join(liveJob.dir, 'buildRepo.pickle'))
-        print 'sge_runner: job', job.name, '(', liveJob.dir, ') started at', datetime.now(), 'on', os.environ['HOSTNAME']
+        print 'sge_runner: job', job.secHash(), '(', job.name, ')', '(', liveJob.dir, ') started at', datetime.now(), 'on', os.environ['HOSTNAME']
         print 'sge_runner: build dir =', buildRepo.base
         print 'sge_runner: inputs =', [ inputArt.secHash() for inputArt in job.inputs ]
         if job.secHash() != jobSecHash:
@@ -34,7 +34,7 @@ def main(args):
         job.run(buildRepo)
         if job.secHash() != jobSecHash:
             raise RuntimeError('some of the dependencies of this job changed while the job was running')
-        print 'sge_runner: job', job.name, '(', liveJob.dir, ') finished at', datetime.now(), 'on', os.environ['HOSTNAME']
+        print 'sge_runner: job', job.secHash(), '(', job.name, ')', '(', liveJob.dir, ') finished at', datetime.now(), 'on', os.environ['HOSTNAME']
     except:
         liveJob.setError()
         raise

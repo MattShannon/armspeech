@@ -37,7 +37,7 @@ class SgeQueuer(qr.Queuer):
         liveJob.setExtra('jid', jidAssigned)
 
         if verbosity >= 1:
-            print 'queuer: job', job.name, '(', liveJob.dir, ') submitted with jid', jidAssigned
+            print 'queuer: job', job.secHash(), '(', job.name, ')', '(', liveJob.dir, ') submitted with jid', jidAssigned
 
         liveJob.setSubmitted()
 

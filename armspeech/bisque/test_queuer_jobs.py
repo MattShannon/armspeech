@@ -16,22 +16,24 @@ from __future__ import division
 import distribute
 
 class OneJob(distribute.Job):
-    def __init__(self, name):
+    def __init__(self, name = 'oneJob'):
         self.name = name
-        self.valueOut = self.newOutput()
+
         self.inputs = []
+        self.valueOut = self.newOutput()
     def run(self, buildRepo):
         valueOut = 1
 
         buildRepo.saveToArt(self.valueOut, valueOut)
 
 class AddJob(distribute.Job):
-    def __init__(self, valueLeft, valueRight, name):
-        self.name = name
+    def __init__(self, valueLeft, valueRight, name = 'addJob'):
         self.valueLeft = valueLeft
         self.valueRight = valueRight
+        self.name = name
+
+        self.inputs = [valueLeft, valueRight]
         self.valueOut = self.newOutput()
-        self.inputs = [ valueLeft, valueRight ]
     def run(self, buildRepo):
         valueLeft = buildRepo.loadFromArt(self.valueLeft)
         valueRight = buildRepo.loadFromArt(self.valueRight)
