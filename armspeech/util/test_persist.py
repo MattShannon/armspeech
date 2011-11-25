@@ -73,7 +73,7 @@ class TestPersist(unittest.TestCase):
 
 def suite(createShouldNotPickle = None):
     global _createShouldNotPickle
-    if createShouldNotPickle != None:
+    if createShouldNotPickle is not None:
         _createShouldNotPickle = createShouldNotPickle
     return unittest.TestLoader().loadTestsFromTestCase(TestPersist)
 

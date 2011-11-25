@@ -136,7 +136,7 @@ def main(rawArgs):
         def studentResidualsMapPartial(dist, mapChild):
             if isinstance(dist, d.LinearGaussian):
                 subDist = d.StudentDist(df = 10000.0, precision = 1.0 / dist.variance).withTag(studentTag)
-                if debugTag != None:
+                if debugTag is not None:
                     subDist = d.DebugDist(None, subDist).withTag(debugTag)
                 subtractMeanTransform = xf.ShiftOutputTransform(xf.DotProductTransform(-dist.coeff)).withTag(subtractMeanTag)
                 distNew = d.TransformedOutputDist(subtractMeanTransform,
@@ -162,7 +162,7 @@ def main(rawArgs):
                 subDist = d.TransformedOutputDist(residualTransform,
                     d.LinearGaussian(np.array([]), dist.variance)
                 )
-                if debugTag != None:
+                if debugTag is not None:
                     subDist = d.DebugDist(None, subDist).withTag(debugTag)
                 subtractMeanTransform = xf.ShiftOutputTransform(xf.DotProductTransform(-dist.coeff)).withTag(subtractMeanTag)
                 distNew = d.TransformedOutputDist(subtractMeanTransform,

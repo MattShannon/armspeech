@@ -24,7 +24,7 @@ def readParamFile(paramFile, paramOrder, decode = None):
             if bytes == '':
                 break
             curr = list(floatLittleEndian.unpack(bytes))
-            yield curr if decode == None else decode(curr)
+            yield curr if decode is None else decode(curr)
 # (FIXME : use instead of above??)
 # (N.B. perhaps surprisingly, it seems quite a bit slower (43 sec vs 60 sec in one test)
 #   than readParamFile!)
@@ -35,7 +35,7 @@ def writeParamFile(outSeq, paramFile, paramOrder, encode = None):
     floatLittleEndian = struct.Struct('<'+''.join([ 'f' for i in range(paramOrder) ]))
     with open(paramFile, 'wb') as f:
         for out in outSeq:
-            curr = out if encode == None else encode(out)
+            curr = out if encode is None else encode(out)
             bytes = floatLittleEndian.pack(*curr)
             f.write(bytes)
 
@@ -93,6 +93,6 @@ def doHtsDemoWaveformGeneration(scriptsDir, synthOutDir, basenames, logFile = No
     logOutput = p.communicate()[0]
     if p.returncode != 0:
         sys.stderr.write('WARNING: waveform generation failed (exit code '+str(p.returncode)+')\n')
-    if logFile != None:
+    if logFile is not None:
         with open(logFile, 'w') as f:
             f.write(logOutput)

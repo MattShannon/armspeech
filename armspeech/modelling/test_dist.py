@@ -308,7 +308,7 @@ def getTrainEM(initEstDist, verbosity = 0):
             for input, output, occ in training:
                 acc.add(input, output, occ)
         dist, logLike, occ = trn.trainEM(initEstDist, accumulate, deltaThresh = 1e-9, verbosity = verbosity)
-        assert initEstDist.tag != None
+        assert initEstDist.tag is not None
         assert dist.tag == initEstDist.tag
         return dist, logLike, occ
     return doTrainEM
@@ -319,7 +319,7 @@ def getTrainCG(initEstDist, ps = d.defaultParamSpec, verbosity = 0):
             for input, output, occ in training:
                 acc.add(input, output, occ)
         dist, logLike, occ = trn.trainCG(initEstDist, accumulate, ps = ps, length = -500, verbosity = verbosity)
-        assert initEstDist.tag != None
+        assert initEstDist.tag is not None
         assert dist.tag == initEstDist.tag
         return dist, logLike, occ
     return doTrainCG
@@ -330,7 +330,7 @@ def getTrainFromAcc(createAcc):
         for input, output, occ in training:
             acc.add(input, output, occ)
         dist, logLike, occ = d.defaultEstimate(acc)
-        assert acc.tag != None
+        assert acc.tag is not None
         assert dist.tag == acc.tag
         return dist, logLike, occ
     return doTrainFromAcc
@@ -401,7 +401,7 @@ def getTrainingSet(dist, inputGen, typicalSize, iid, unitOcc):
 def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = False, hasEM = True, ps = d.defaultParamSpec, logProbDerivInputCheck = False, logProbDerivOutputCheck = False, checkAdditional = None):
     # (FIXME : add pickle test)
     # (FIXME : add eval test)
-    assert dist.tag != None
+    assert dist.tag is not None
     if hasEM:
         assert d.defaultCreateAcc(dist).tag == dist.tag
     assert ps.createAccG(dist).tag == dist.tag
@@ -426,7 +426,7 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
     for input, output in points:
         # (FIXME : math.isinf ~20x faster but only exists in python >= 2.6)
         if not np.isinf(dist.logProb(input, output)):
-            if checkAdditional != None:
+            if checkAdditional is not None:
                 checkAdditional(dist, input, output, eps)
             lp = dist.logProb(input, output)
             assert_allclose(distMapped.logProb(input, output), lp)

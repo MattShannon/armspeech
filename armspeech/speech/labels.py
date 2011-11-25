@@ -43,7 +43,7 @@ def getLabelClass(className, labelFormat):
     for labelKey, pat, decode, sep in labelFormat:
         labelKeys.append(labelKey)
         labelReStrings.append(r'(?P<'+labelKey+r'>'+pat+r')'+re.escape(sep))
-        if decode != None:
+        if decode is not None:
             decodeDict[labelKey] = decode
 
     labelRe = re.compile(r''.join(labelReStrings)+r'$')

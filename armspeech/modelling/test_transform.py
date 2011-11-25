@@ -172,7 +172,7 @@ def check_inv(transform, x, y):
     assert_allclose(yAgain, y, msg = 'inverse not consistent')
 
 def checkTransform(transform, shapeIn, invertible, hasParams, is1D, eps, its, checkAdditional = None):
-    assert transform.tag != None
+    assert transform.tag is not None
     transformEvaled = xf.eval_local(repr(transform))
     assert transformEvaled.tag == transform.tag
     assert repr(transform) == repr(transformEvaled)
@@ -184,7 +184,7 @@ def checkTransform(transform, shapeIn, invertible, hasParams, is1D, eps, its, ch
         assert_allclose(params, transformEvaled.params, rtol = 1e-4)
     for it in range(its):
         x = randn(*shapeIn)
-        if checkAdditional != None:
+        if checkAdditional is not None:
             checkAdditional(transform, x, eps)
         if True:
             assert_allclose(transformEvaled(x), transform(x), rtol = 1e-4)
@@ -336,7 +336,7 @@ def checkOutputTransform(outputTransform, shapeInput, shapeOutput, hasParams, ep
         input = randn(*shapeInput)
         x = randn(*shapeOutput)
         transform = outputTransform.atInput(input)
-        if checkAdditional != None:
+        if checkAdditional is not None:
             checkAdditional(outputTransform, input, x, eps)
         if True:
             assert_allclose(transform(x), outputTransform(input, x))

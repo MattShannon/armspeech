@@ -24,12 +24,12 @@ def partitionSeq(xs, numPartitions):
 def drawLabelledSeq(dataSeqs, labelSeqs, outPdf, figSizeRate = None, fillBetween = [], xmin = None, xmax = None, ylims = None, xlabel = None, ylabel = None, legend = None, colors = ['red', 'purple', 'orange', 'blue']):
     import matplotlib.pyplot as plt
 
-    if xmin == None:
+    if xmin is None:
         xmin = min([ dataSeq[0][0] for dataSeq in dataSeqs] + [ labelSeq[0][0] for labelSeq in labelSeqs ])
-    if xmax == None:
+    if xmax is None:
         xmax = max([ dataSeq[0][-1] for dataSeq in dataSeqs ] + [ labelSeq[-1][1] for labelSeq in labelSeqs ])
 
-    if figSizeRate == None:
+    if figSizeRate is None:
         fig = plt.figure()
     else:
         fig = plt.figure(figsize = ((xmax - xmin) * figSizeRate, 6.0), dpi = 300.0)
@@ -53,14 +53,14 @@ def drawLabelledSeq(dataSeqs, labelSeqs, outPdf, figSizeRate = None, fillBetween
             ax.axvline(x = start, linewidth = 0.1, color = 'black')
 
     ax.set_xlim(xmin, xmax)
-    if ylims != None:
+    if ylims is not None:
         ax.set_ylim(*ylims)
 
-    if xlabel != None:
+    if xlabel is not None:
         plt.xlabel(xlabel)
-    if ylabel != None:
+    if ylabel is not None:
         plt.ylabel(ylabel)
-    if legend != None:
+    if legend is not None:
         ax.legend(legend)
 
     plt.savefig(outPdf)
@@ -76,9 +76,9 @@ def drawWarping(transformList, outPdf, xlims, ylims = None, title = None):
     for transform in transformList:
         ys = [ transform(x) for x in xs ]
         plt.plot(xs, ys, '-')
-    if ylims != None:
+    if ylims is not None:
         plt.ylim(*ylims)
-    if title != None:
+    if title is not None:
         plt.title(title)
 
     plt.savefig(outPdf)
@@ -96,10 +96,10 @@ def drawLogPdf(outputs, bins, outPdf, fns = [], ylims = None, title = None):
     plt.plot(binCentres, np.log(avgPdfValues))
     for f in fns:
         plt.plot(binCentres, [ f(x) for x in binCentres ])
-    if title != None:
+    if title is not None:
         plt.title(title)
     plt.xlim(bins[0], bins[-1])
-    if ylims != None:
+    if ylims is not None:
         plt.ylim(*ylims)
     plt.savefig(outPdf)
 
@@ -162,6 +162,6 @@ def drawFor1DInput(debugAcc, subDist, outPdf, xlims, ylims, title = None, drawPl
     plt.xlabel('input')
     plt.ylabel('output')
     plt.grid(True)
-    if title != None:
+    if title is not None:
         plt.title(title)
     plt.savefig(outPdf)

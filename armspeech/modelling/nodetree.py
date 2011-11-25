@@ -116,9 +116,9 @@ def getDagMap(
                 ret = None
                 for partialMap in partialMaps:
                     ret = partialMap(*(args + (mapChild,)))
-                    if ret != None:
+                    if ret is not None:
                         break
-                if ret == None:
+                if ret is None:
                     raise RuntimeError('none of the given partial functions was defined at input '+repr(args))
                 lookup[ident] = storeValue(ret, args)
                 return ret

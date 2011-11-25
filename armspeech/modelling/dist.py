@@ -202,7 +202,7 @@ class Memo(object):
         if occ != 1.0:
             raise RuntimeError('Memo occupancies must be 1.0')
         self.occ += occ
-        if self.maxOcc == None or len(self.inputs) < self.maxOcc:
+        if self.maxOcc is None or len(self.inputs) < self.maxOcc:
             self.fakeOcc += occ
             self.inputs.append(input)
             self.outputs.append(output)
@@ -220,7 +220,7 @@ class Memo(object):
         self.fakeOcc += acc.fakeOcc
         self.inputs += acc.inputs
         self.outputs += acc.outputs
-        if self.maxOcc != None and self.fakeOcc > self.maxOcc:
+        if self.maxOcc is not None and self.fakeOcc > self.maxOcc:
             self.fakeOcc = self.maxOcc
             self.inputs = self.inputs[:self.maxOcc]
             self.outputs = self.outputs[:self.maxOcc]
@@ -365,7 +365,7 @@ class OracleAcc(TermAcc):
 class LinearGaussianAcc(TermAcc):
     def __init__(self, distPrev = None, inputLength = None, tag = None):
         self.distPrev = distPrev
-        if distPrev != None:
+        if distPrev is not None:
             inputLength = len(distPrev.coeff)
         self.tag = tag
 
@@ -417,10 +417,10 @@ class LinearGaussianAcc(TermAcc):
             variance = (self.sumSqr - np.dot(coeff, self.sumTarget)) / self.occ
             if variance <= 0.0:
                 raise EstimationError('computed variance is zero or negative: '+str(variance))
-            auxValue = self.logLikeSingle() if self.distPrev != None else self.aux(coeff, variance)
+            auxValue = self.logLikeSingle() if self.distPrev is not None else self.aux(coeff, variance)
             return LinearGaussian(coeff, variance, tag = self.tag), auxValue, self.occ
         except EstimationError, detail:
-            if self.distPrev == None:
+            if self.distPrev is None:
                 raise
             else:
                 sys.stderr.write('WARNING: reverting to previous dist due to error during LinearGaussian estimation: '+str(detail)+'\n')
@@ -460,7 +460,7 @@ class LinearGaussianAcc(TermAcc):
 class ConstantClassifierAcc(TermAcc):
     def __init__(self, distPrev = None, numClasses = None, tag = None):
         self.distPrev = distPrev
-        if distPrev != None:
+        if distPrev is not None:
             numClasses = len(distPrev.logProbs)
         assert numClasses >= 1
         self.tag = tag
@@ -496,10 +496,10 @@ class ConstantClassifierAcc(TermAcc):
             if self.occ == 0.0:
                 raise EstimationError('require occ > 0')
             logProbs = np.log(self.occs / self.occ)
-            auxValue = self.logLikeSingle() if self.distPrev != None else self.aux(logProbs)
+            auxValue = self.logLikeSingle() if self.distPrev is not None else self.aux(logProbs)
             return ConstantClassifier(logProbs, tag = self.tag), auxValue, self.occ
         except EstimationError, detail:
-            if self.distPrev == None:
+            if self.distPrev is None:
                 raise
             else:
                 sys.stderr.write('WARNING: reverting to previous dist due to error during ConstantClassifier estimation: '+str(detail)+'\n')
@@ -810,7 +810,7 @@ class AutoGrowingDiscreteAcc(Acc):
         getBestSplit = timed(self.decisionTreeGetBestSplit, msg = 'cluster:'+indent+'choose split took') if verbosity >= 3 else self.decisionTreeGetBestSplit
         bestFullQuestion, bestLogLike, bestEstimatedYes, bestEstimatedNo = getBestSplit(questionGroups, minOcc, labelList, logLikeLeaf, occNode)
 
-        if bestFullQuestion != None and (bestLogLike - logLikeLeaf > thresh or maxOcc != None and occNode > maxOcc):
+        if bestFullQuestion is not None and (bestLogLike - logLikeLeaf > thresh or maxOcc is not None and occNode > maxOcc):
             bestLabelValuer, bestQuestion = bestFullQuestion
             if verbosity >= 2:
                 print 'cluster:'+indent+'question (', bestLabelValuer.shortRepr()+' '+bestQuestion.shortRepr(), ')', '( delta =', bestLogLike - logLikeLeaf, ')'
@@ -870,7 +870,7 @@ class AutoGrowingDiscreteAcc(Acc):
                     else:
                         assert_allclose(occYes + occNo, occNode)
                         logLike = logLikeYesLeaf + logLikeNoLeaf
-                        if bestFullQuestion == None or logLike > bestLogLike:
+                        if bestFullQuestion is None or logLike > bestLogLike:
                             bestFullQuestion = labelValuer, question
                             bestLogLike = logLike
                             bestEstimatedYes = distYesLeaf, logLikeYesLeaf, occYes
@@ -1711,7 +1711,7 @@ class IdentifiableMixtureDist(Dist):
         return IdentifiableMixtureAcc(classAcc, regAccs, tag = self.tag)
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
-        actualComp, actualAcOutput = actualOutput if actualOutput != None else (None, None)
+        actualComp, actualAcOutput = actualOutput if actualOutput is not None else (None, None)
         comp = self.classDist.synth(input, method, actualComp)
         acOutput = self.regDists[comp].synth(input, method, actualAcOutput)
         return comp, acOutput
@@ -1783,7 +1783,7 @@ class VectorDist(Dist):
                 out = actualOutput[outIndex]
             else:
                 summary = self.vectorSummarizer(input, partialOutput, outIndex)
-                out = self.distComps[outIndex].synth(summary, method, actualOutput[outIndex] if actualOutput != None else None)
+                out = self.distComps[outIndex].synth(summary, method, actualOutput[outIndex] if actualOutput is not None else None)
             partialOutput.append(out)
         return partialOutput
 
@@ -2062,7 +2062,7 @@ class MappedOutputDist(Dist):
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
         return self.outputTransform.inv(input,
-            self.dist.synth(input, method, None if actualOutput == None else self.outputTransform(input, actualOutput))
+            self.dist.synth(input, method, None if actualOutput is None else self.outputTransform(input, actualOutput))
         )
 
     def paramsSingle(self):
@@ -2181,7 +2181,7 @@ class TransformedOutputDist(Dist):
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
         return self.outputTransform.inv(input,
-            self.dist.synth(input, method, None if actualOutput == None else self.outputTransform(input, actualOutput))
+            self.dist.synth(input, method, None if actualOutput is None else self.outputTransform(input, actualOutput))
         )
 
     def paramsSingle(self):

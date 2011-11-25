@@ -14,14 +14,14 @@ from armspeech.util.timing import timed
 
 def trainEM(distInit, accumulate, createAcc = d.defaultCreateAcc, estimate = d.defaultEstimate, deltaThresh = 1e-8, minIterations = 1, maxIterations = None, beforeAcc = None, afterAcc = None, afterEst = None, monotone = False, verbosity = 0):
     assert minIterations >= 1
-    assert maxIterations == None or maxIterations >= minIterations
+    assert maxIterations is None or maxIterations >= minIterations
 
     def estimateSubCore(distPrev, logLikePrevPrev):
-        if beforeAcc != None:
+        if beforeAcc is not None:
             beforeAcc(distPrev)
         acc = createAcc(distPrev)
         accumulate(acc)
-        if afterAcc != None:
+        if afterAcc is not None:
             afterAcc(acc)
         dist, logLikePrev, occ = estimate(acc)
         deltaPrev = logLikePrev - logLikePrevPrev
@@ -33,14 +33,14 @@ def trainEM(distInit, accumulate, createAcc = d.defaultCreateAcc, estimate = d.d
 
     it = 0
     dist, logLikePrev, deltaPrev, occ = estimateSub(distInit, float('-inf'))
-    if afterEst != None:
+    if afterEst is not None:
         afterEst(dist = dist, it = it)
     it += 1
     if verbosity >= 2:
         print '(trainEM: (after it', it, ', logLikePrev =', logLikePrev / occ, ', deltaPrev =', deltaPrev / occ, '))'
-    while it < minIterations or abs(deltaPrev / occ) > deltaThresh and (maxIterations == None or it < maxIterations):
+    while it < minIterations or abs(deltaPrev / occ) > deltaThresh and (maxIterations is None or it < maxIterations):
         dist, logLikePrev, deltaPrev, occ = estimateSub(dist, logLikePrev)
-        if afterEst != None:
+        if afterEst is not None:
             afterEst(dist = dist, it = it)
         it += 1
         if verbosity >= 2:
@@ -97,7 +97,7 @@ def trainCGandEM(distInit, accumulate, ps = d.defaultParamSpec, createAccEM = d.
         (timed(accumulate) if verbosity >= 2 else accumulate)(acc)
         dist, trainLogLike, trainOcc = estimate(acc)
 
-        if afterEst != None:
+        if afterEst is not None:
             afterEst(dist = dist, logLike = trainLogLike, occ = trainOcc, it = it)
 
         if verbosity >= 1:

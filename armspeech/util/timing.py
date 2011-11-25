@@ -14,7 +14,7 @@ def printTime(msg):
 
 def timed(func, msg = None):
     """(probably based on http://www.daniweb.com/software-development/python/code/216610)"""
-    if msg == None:
+    if msg is None:
         msg = func.func_name+' took'
     def ret(*args, **kwargs):
         t1 = time.time()

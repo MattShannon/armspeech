@@ -72,7 +72,7 @@ class ArcticCorpus(cps.Corpus):
             print 'synth: synthesizing to', synthOutDir, 'with tag', exptTag
         for uttId in uttIds:
             synthOutput = self.synth(dist, uttId, method)
-            if afterSynth != None:
+            if afterSynth is not None:
                 afterSynth(synthOutput = synthOutput, uttId = uttId, exptTag = exptTag)
             feat.writeAcousticSeq(
                 synthOutput,
