@@ -12,6 +12,7 @@ from __future__ import with_statement
 import os
 import cPickle as pickle
 import hashlib
+import tempfile
 
 def loadPickle(location):
     with open(location, 'rb') as f:
@@ -19,17 +20,25 @@ def loadPickle(location):
     return obj
 
 def savePickle(location, obj):
-    with open(location, 'wb') as f:
+    head, tail = os.path.split(location)
+    with tempfile.NamedTemporaryFile(prefix = '.'+tail+'.', dir = head, mode='wb', delete = False) as f:
+        tempLocation = f.name
         pickle.dump(obj, f, protocol = 2)
+
     # (FIXME : could remove below checks for speed, especially once we're dealing with large pickled files)
     # make sure we can read in again
-    objAgain = loadPickle(location)
+    objAgain = loadPickle(tempLocation)
     # make sure pickled stream doesn't contain __main__ references
     #   (these can't be unpickled from a different script)
-    with open(location, 'rb') as f:
+    with open(tempLocation, 'rb') as f:
         pickledString = f.read()
     if pickledString.find('__main__') != -1:
         raise pickle.PicklingError('objects to be pickled should be defined in a module and not in the currently-running script')
+
+    # move into place atomically (at least on linux)
+    # (FIXME : does windows behavior in fact still give correct result in our
+    #   use cases?)
+    os.rename(tempLocation, location)
 
 def roundTrip(obj):
     return pickle.loads(pickle.dumps(obj, protocol = 2))
