@@ -1,4 +1,4 @@
-"""Simple object persistence framework built on top of pickle."""
+"""Useful functions for object persistence."""
 
 # Copyright 2011 Matt Shannon
 
@@ -11,14 +11,13 @@ from __future__ import with_statement
 
 import os
 import cPickle as pickle
-import random
-
-# FIXME : replace with shelve?
+import hashlib
 
 def loadPickle(location):
     with open(location, 'rb') as f:
         obj = pickle.load(f)
     return obj
+
 def savePickle(location, obj):
     with open(location, 'wb') as f:
         pickle.dump(obj, f, protocol = 2)
@@ -32,23 +31,29 @@ def savePickle(location, obj):
     if pickledString.find('__main__') != -1:
         raise pickle.PicklingError('objects to be pickled should be defined in a module and not in the currently-running script')
 
-class Repo(object):
-    def newLocation(self):
-        abstract
+def roundTrip(obj):
+    return pickle.loads(pickle.dumps(obj, protocol = 2))
 
-class SimpleRepo(Repo):
-    def __init__(self, base, createDirIfNece = True):
-        self.base = base
-        if createDirIfNece and not os.path.isdir(base):
-            os.mkdir(base)
-        if not os.path.isdir(base):
-            raise RuntimeError('directory does not exist: '+base)
-    def newId(self):
-        # FIXME : use even more entropy to make a collision almost impossible
-        return ''.join([ random.choice('0123456789') for i in range(7) ])
-    def newLocation(self):
-        return os.path.join(self.base, self.newId())
+def checkRoundTrip(obj):
+    assert pickle.dumps(pickle.loads(pickle.dumps(obj, protocol = 2)), protocol = 2) == pickle.dumps(obj, protocol = 2)
 
-class Artifact(object):
-    def __init__(self, location):
-        self.location = location
+def secHashObject(obj):
+    """Computes git-style hash of the pickled version of an object."""
+    m = hashlib.sha1()
+    pickledObj = pickle.dumps(obj, protocol = 2)
+    m.update('blob '+str(len(pickledObj))+'\0')
+    m.update(pickledObj)
+    return m.hexdigest()
+
+def secHashFile(location, readChunkSize = 2 ** 20):
+    """Computes git-style hash of a file."""
+    m = hashlib.sha1()
+    size = os.path.getsize(location)
+    m.update('blob '+str(size)+'\0')
+    with open(location, 'rb') as f:
+        while True:
+            chunk = f.read(readChunkSize)
+            if not chunk:
+                break
+            m.update(chunk)
+    return m.hexdigest()

@@ -8,12 +8,12 @@
 
 from __future__ import division
 
-from armspeech.bisque import test_distribute
-from armspeech.bisque import test_persist
+from armspeech.bisque import test_queuer
 from armspeech.modelling import test_dist
 from armspeech.modelling import test_minimize
 from armspeech.modelling import test_transform
 from armspeech.util import test_mathhelp
+from armspeech.util import test_persist
 
 import unittest
 import sys
@@ -24,12 +24,12 @@ class ShouldNotPickle(object):
 
 def suite(deepTest = False):
     return unittest.TestSuite([
-        test_distribute.suite(),
-        test_persist.suite(createShouldNotPickle = ShouldNotPickle),
+        test_queuer.suite(),
         test_dist.suite(deepTest = deepTest),
         test_minimize.suite(),
         test_transform.suite(),
         test_mathhelp.suite(),
+        test_persist.suite(createShouldNotPickle = ShouldNotPickle),
     ])
 
 def main(rawArgs):

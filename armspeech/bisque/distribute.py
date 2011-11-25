@@ -1,4 +1,4 @@
-"""Simple distributed computation framework."""
+"""Basic definitions for specifying distributed computations."""
 
 # Copyright 2011 Matt Shannon
 
@@ -8,90 +8,81 @@
 
 from __future__ import division
 
-import persist
+from armspeech.util import persist
 
 import os
 import sys
-import traceback
-from datetime import datetime
+import inspect
+import modulefinder
 
-class ExecContext(object):
-    def generateArtifacts(self, finalArtifacts, verbosity = 1):
-        abstract
+def findDeps(srcFile):
+    """Returns local dependencies for a given source file.
 
-class LocalExecContext(ExecContext):
-    def __init__(self, repo):
-        self.repo = repo
+    Local means defined under PYTHONPATH (or in the same directory as the given
+    source file if PYTHONPATH not defined), the idea being that local files are
+    the ones subject to change and need to be hashed.
+    It is assumed that modules that are on the system search path are fixed.
+    """
+    envPythonPath = os.environ['PYTHONPATH'] if 'PYTHONPATH' in os.environ else sys.path[0]
+    finder = modulefinder.ModuleFinder(path = envPythonPath)
+    finder.run_script(srcFile)
+    depFiles = [ mod.__file__ for modName, mod in finder.modules.items() if mod.__file__ is not None ]
+    return sorted(depFiles)
 
-    def submitAll(self, job, submitted):
-        if job not in submitted:
-            for parentJob in job.parentJobsToRun():
-                self.submitAll(parentJob, submitted)
-            self.submitOne(job)
-            submitted.add(job)
+class Artifact(object):
+    def secHash(self):
+        secHashAllExternals = [ secHash for art in ancestorArtifacts([self]) for secHash in art.secHashExternals() ]
+        return persist.secHashObject((self, secHashAllExternals, self.secHashSources()))
 
-    def generateArtifacts(self, finalArtifacts, verbosity = 1):
-        submitted = set()
-        for art in finalArtifacts:
-            for parentJob in getParentJobs(art):
-                self.submitAll(parentJob, submitted)
-        if verbosity >= 1:
-            print 'distribute: final artifacts will be at:'
-            for art in finalArtifacts:
-                print 'distribute:     '+art.location
+class FixedArtifact(Artifact):
+    def __init__(self, location):
+        self.location = location
+    def parentJobs(self):
+        return []
+    def parentArtifacts(self):
+        return []
+    def secHashExternals(self):
+        return [persist.secHashFile(self.location)]
+    def secHashSources(self):
+        return []
+    def loc(self, baseDir):
+        return self.location
 
-    def submitOne(self, job):
-        job.run()
+class JobArtifact(Artifact):
+    def __init__(self, parentJob):
+        self.parentJob = parentJob
+    def parentJobs(self):
+        return [self.parentJob]
+    def parentArtifacts(self):
+        return self.parentJob.inputs
+    def secHashExternals(self):
+        return []
+    def secHashSources(self):
+        return [ persist.secHashFile(depFile) for depFile in findDeps(inspect.getsourcefile(self.parentJob.__class__)) ]
+    def loc(self, baseDir):
+        return os.path.join(baseDir, self.secHash())
+
+def ancestorArtifacts(initialArts):
+    ret = []
+    agenda = list(initialArts)
+    lookup = dict()
+    while agenda:
+        art = agenda.pop()
+        ident = id(art)
+        if not ident in lookup:
+            lookup[ident] = True
+            ret.append(art)
+            agenda.extend(reversed(art.parentArtifacts()))
+    return ret
 
 class Job(object):
     # (N.B. some client code uses default hash routines)
     def parentJobs(self):
-        return [ parentJob for input in self.inputs for parentJob in getParentJobs(input) ]
-    def parentJobsToRun(self):
-        return [ parentJob for input in self.inputs for parentJob in getParentJobs(input) if not os.path.exists(input.location) ]
+        return [ parentJob for input in self.inputs for parentJob in input.parentJobs() ]
     def newOutput(self):
-        return JobArtifact(self.repo.newLocation(), self)
-    def run(self):
+        return JobArtifact(parentJob = self)
+    def run(self, buildRepo):
         abstract
-    def ancestorJobs(self):
-        return [ job for parentJob in self.parentJobs() for job in parentJob.ancestorJobs() ] + [self]
-    def ancestorJobsToRun(self):
-        return [ job for parentJob in self.parentJobsToRun() for job in parentJob.ancestorJobsToRun() ] + [self]
-    def ancestorArtifacts(self):
-        return self.inputs + [ art for parentJob in self.parentJobs() for art in parentJob.ancestorArtifacts() ]
-
-class JobArtifact(persist.Artifact):
-    def __init__(self, location, parentJob):
-        self.location = location
-        self.parentJob = parentJob
-    def ancestorJobs(self):
-        return self.parentJob.ancestorJobs()
-    def ancestorArtifacts(self):
-        return self.parentJob.ancestorArtifacts() + [self]
-
-def getParentJobs(art):
-    try:
-        parentJob = art.parentJob
-    except AttributeError:
-        ret = []
-    else:
-        ret = [parentJob]
-    return ret
-
-def main(args):
-    assert len(args) == 2
-    jobLocation = args[1]
-    job = persist.loadPickle(jobLocation)
-    print 'distribute: job', job.name, '(', jobLocation, ') started at', datetime.now(), 'on', os.environ['HOSTNAME']
-    print 'distribute: inputs =', [ input.location for input in job.inputs ]
-    job.run()
-    print 'distribute: job', job.name, '(', jobLocation, ') finished at', datetime.now(), 'on', os.environ['HOSTNAME']
-
-if __name__ == '__main__':
-    try:
-        main(sys.argv)
-    except:
-        traceback.print_exc()
-        # exit code 100 so Sun Grid Engine treats specially
-        # (FIXME : SGE-specific)
-        sys.exit(100)
+    def secHash(self):
+        secHashAllExternals = [ secHash for art in ancestorArtifacts(self.inputs) for secHash in art.secHashExternals() ]
+        return persist.secHashObject((self, secHashAllExternals))
