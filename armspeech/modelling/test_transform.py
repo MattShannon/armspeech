@@ -180,8 +180,8 @@ def checkTransform(transform, shapeIn, invertible, hasParams, is1D, eps, its, ch
         params = transform.params
         transformParsed = transform.parseAll(params)
         assert transformParsed.tag == transform.tag
-        assert_allclose(params, transformParsed.params)
-        assert_allclose(params, transformEvaled.params, rtol = 1e-4)
+        assert_allclose(transformParsed.params, params)
+        assert_allclose(transformEvaled.params, params, rtol = 1e-4)
     for it in range(its):
         x = randn(*shapeIn)
         if checkAdditional is not None:
@@ -330,8 +330,8 @@ def checkOutputTransform(outputTransform, shapeInput, shapeOutput, hasParams, ep
     if hasParams:
         params = outputTransform.params
         outputTransformParsed = outputTransform.parseAll(params)
-        assert_allclose(params, outputTransformParsed.params)
-        assert_allclose(params, outputTransformEvaled.params, rtol = 1e-4)
+        assert_allclose(outputTransformParsed.params, params)
+        assert_allclose(outputTransformEvaled.params, params, rtol = 1e-4)
     for it in range(its):
         input = randn(*shapeInput)
         x = randn(*shapeOutput)
@@ -339,7 +339,7 @@ def checkOutputTransform(outputTransform, shapeInput, shapeOutput, hasParams, ep
         if checkAdditional is not None:
             checkAdditional(outputTransform, input, x, eps)
         if True:
-            assert_allclose(transform(x), outputTransform(input, x))
+            assert_allclose(outputTransform(input, x), transform(x))
         if True:
             assert_allclose(outputTransformEvaled(input, x), outputTransform(input, x), rtol = 1e-4)
         if hasParams:
