@@ -25,7 +25,7 @@ def drawLabelledSeq(dataSeqs, labelSeqs, outPdf, figSizeRate = None, fillBetween
     import matplotlib.pyplot as plt
 
     if xmin is None:
-        xmin = min([ dataSeq[0][0] for dataSeq in dataSeqs] + [ labelSeq[0][0] for labelSeq in labelSeqs ])
+        xmin = min([ dataSeq[0][0] for dataSeq in dataSeqs ] + [ labelSeq[0][0] for labelSeq in labelSeqs ])
     if xmax is None:
         xmax = max([ dataSeq[0][-1] for dataSeq in dataSeqs ] + [ labelSeq[-1][1] for labelSeq in labelSeqs ])
 

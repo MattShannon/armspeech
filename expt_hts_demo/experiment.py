@@ -220,7 +220,7 @@ def main(rawArgs):
                                 #d.MappedInputAcc(xf.Msd01ToVector(),
                                 #    d.MappedInputAcc(xf.AddBias(),
                                 #        d.IdentifiableMixtureAcc(
-                                #            d.BinaryLogisticClassifierAcc(d.BinaryLogisticClassifier(np.zeros([ 2 * lf0StreamDepth + 1 ]))),
+                                #            d.BinaryLogisticClassifierAcc(d.BinaryLogisticClassifier(np.zeros([2 * lf0StreamDepth + 1]))),
                                 #            [
                                 #                d.FixedValueAcc(None),
                                 #                d.LinearGaussianAcc(inputLength = 2 * lf0StreamDepth + 1)
@@ -459,7 +459,7 @@ def main(rawArgs):
                 inputWarp = inputTransform.transform1D
 
                 outPdf = os.path.join(figOutDir, 'warping-'+id+'-'+streamId+'.pdf')
-                draw.drawWarping([ outputWarp, inputWarp ], outPdf = outPdf, xlims = lims, title = outPdf)
+                draw.drawWarping([outputWarp, inputWarp], outPdf = outPdf, xlims = lims, title = outPdf)
 
                 for phone in phoneList:
                     accOrig = nodetree.findTaggedNode(acc, lambda tag: tag == ('debug-orig', phone, streamIndex, outIndex))

@@ -112,7 +112,7 @@ def gen_InvertibleSumOfTanh1D(numTanh = 3, tricky = False):
         if not tricky or numTanh == 0 or any([ transform.a * transform.b < 0.0 for transform in transforms ]):
             derivLowerBound = 1.0 + sum([ min(transform.a * transform.b, 0.0) for transform in transforms ])
             if derivLowerBound > 0.0:
-                return xf.SumTransform1D([ xf.IdentityTransform() ] + transforms).withTag(randTag())
+                return xf.SumTransform1D([xf.IdentityTransform()] + transforms).withTag(randTag())
 def gen_SumOfTanh1D(numTanh = 3):
     return xf.SumTransform1D([ gen_TanhTransform1D() if i > 0 else xf.IdentityTransform() for i in range(numTanh + 1) ]).withTag(randTag())
 

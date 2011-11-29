@@ -36,7 +36,7 @@ class ArcticCorpus(cps.Corpus):
         mgcStream = feat.Stream('mgc', mgcOrder)
         lf0Stream = feat.Stream('lf0', 1, lf0Encoder)
         bapStream = feat.Stream('bap', 5)
-        self.streams = [ mgcStream, lf0Stream, bapStream ]
+        self.streams = [mgcStream, lf0Stream, bapStream]
 
         self.mgcLims = mgcLims40
 

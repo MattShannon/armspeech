@@ -466,7 +466,7 @@ class ConstantClassifierAcc(TermAcc):
         self.tag = tag
 
         self.occ = 0.0
-        self.occs = np.zeros([ numClasses ])
+        self.occs = np.zeros([numClasses])
 
     def add(self, input, classIndex, occ = 1.0):
         self.occ += occ
@@ -1499,7 +1499,7 @@ class StudentDist(TermDist):
             raise RuntimeError('unknown SynthMethod '+repr(method))
 
     def paramsSingle(self):
-        return np.array([ math.log(self.df), math.log(self.precision) ])
+        return np.array([math.log(self.df), math.log(self.precision)])
 
     def parseSingle(self, params):
         df = math.exp(params[0])

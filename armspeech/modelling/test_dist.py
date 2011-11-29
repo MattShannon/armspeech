@@ -716,8 +716,8 @@ def testBinaryLogisticClassifier():
 
     print
     print 'DEBUG: (training data set size is', len(trainData), 'of which:'
-    print 'DEBUG:    count(0) =', len([ input for input, output in trainData if output == 0])
-    print 'DEBUG:    count(1) =', len([ input for input, output in trainData if output == 1])
+    print 'DEBUG:    count(0) =', len([ input for input, output in trainData if output == 0 ])
+    print 'DEBUG:    count(1) =', len([ input for input, output in trainData if output == 1 ])
     print 'DEBUG: )'
     print
     print 'true coeff =', blcTrue.coeff
@@ -759,8 +759,8 @@ def testBinaryLogisticClassifierFunGraph():
         for input, output in trainData:
             acc.add(input, output)
     print 'DEBUG: (in training data:'
-    print 'DEBUG:    count(0) =', len([ input for input, output in trainData if output == 0])
-    print 'DEBUG:    count(1) =', len([ input for input, output in trainData if output == 1])
+    print 'DEBUG:    count(0) =', len([ input for input, output in trainData if output == 0 ])
+    print 'DEBUG:    count(1) =', len([ input for input, output in trainData if output == 1 ])
     print 'DEBUG: )'
 
     def plotBdy(blc):
