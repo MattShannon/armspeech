@@ -255,13 +255,13 @@ def check_logProbDerivInput(dist, input, output, eps):
     inputDelta = randn(*np.shape(input)) * eps
     numericDelta = dist.logProb(input + inputDelta, output) - dist.logProb(input, output)
     analyticDelta = np.dot(inputDelta, dist.logProbDerivInput(input, output))
-    assert_allclose(analyticDelta, numericDelta, rtol = 1e-4)
+    assert_allclose(numericDelta, analyticDelta, rtol = 1e-4)
 
 def check_logProbDerivOutput(dist, input, output, eps):
     outputDelta = randn(*np.shape(output)) * eps
     numericDelta = dist.logProb(input, output + outputDelta) - dist.logProb(input, output)
     analyticDelta = np.dot(outputDelta, dist.logProbDerivOutput(input, output))
-    assert_allclose(analyticDelta, numericDelta, rtol = 1e-4)
+    assert_allclose(numericDelta, analyticDelta, rtol = 1e-4)
 
 def check_addAcc(dist, trainingAll, ps):
     accAll = trainedAccG(dist, trainingAll, ps = ps)
@@ -300,7 +300,7 @@ def check_derivParams(dist, training, ps, eps):
 
     numericDelta = logLikeNew - logLike
     analyticDelta = np.dot(derivParams, paramsDelta)
-    assert_allclose(analyticDelta, numericDelta, rtol = 1e-4, atol = 1e-10)
+    assert_allclose(numericDelta, analyticDelta, rtol = 1e-4, atol = 1e-10)
 
 def getTrainEM(initEstDist, verbosity = 0):
     def doTrainEM(training):
