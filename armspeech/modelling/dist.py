@@ -2319,6 +2319,9 @@ class SequenceDist(Dist):
         return SequenceAcc(self.depth, createAccChild(self.dist), tag = self.tag)
 
     def synth(self, inSeq, method = SynthMethod.Sample, actualOutSeq = None):
+        return list(self.synthIterator(inSeq, method, actualOutSeq))
+
+    def synthIterator(self, inSeq, method = SynthMethod.Sample, actualOutSeq = None):
         outContext = deque()
         assert len(inSeq) == len(actualOutSeq)
         for inFrame, actualOutFrame in izip(inSeq, actualOutSeq):

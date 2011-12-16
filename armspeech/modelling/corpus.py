@@ -28,4 +28,4 @@ class Corpus(object):
 
     def synth(self, dist, uttId, method = d.SynthMethod.Sample):
         alignment, actualAcousticSeq = self.data(uttId)
-        return list(dist.synth(alignment, method, actualAcousticSeq))
+        return dist.synth(alignment, method, actualAcousticSeq)
