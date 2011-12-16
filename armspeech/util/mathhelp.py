@@ -13,6 +13,7 @@ import math
 import random
 
 def logAdd(a, b):
+    """Computes log(exp(a) + exp(b)) in a way that avoids underflow."""
     k = max(a, b)
     if k == float('-inf'):
         return float('-inf')
@@ -20,7 +21,7 @@ def logAdd(a, b):
         return np.log(math.exp(a - k) + math.exp(b - k)) + k
 
 def logSum(l):
-    """Computes log(sum(exp(l))) but in a better way.
+    """Computes log(sum(exp(l))) in a way that avoids underflow.
 
     N.B. l should be a sequence type (an iterable), not an iterator.
     """
