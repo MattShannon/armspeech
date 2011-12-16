@@ -542,10 +542,10 @@ class BinaryLogisticClassifierAcc(TermAcc):
 
     # (FIXME : estimation doesn't always converge, even in the case where
     #   classes are not linearly separable and we have a clearly defined
-    #   maximum.  Come up with a better procedure?  For example, could
+    #   maximum. Come up with a better procedure? For example, could
     #   say that if current update decreases log likelihood, then take a
     #   half-step and try again (tho N.B. requires tracking previous log like
-    #   somehow).  Does this always converge?  Could also try Firth adjustment,
+    #   somehow). Does this always converge? Could also try Firth adjustment,
     #   or other forms of regularization (though conceptually this is solving
     #   a different problem -- shouldn't have to use any regularization to get
     #   the nice non-linearly-separable case to work!).)
@@ -753,7 +753,7 @@ class AutoGrowingDiscreteAcc(Acc):
     """Discrete acc that creates sub-accs as necessary when a new phonetic context is seen.
 
     (N.B. the accumulator sub-DAGs created by createAcc should probably not have
-    any nodes which are shared outside that sub-DAG.  (Could think about more
+    any nodes which are shared outside that sub-DAG. (Could think about more
     carefully if we ever have a use case).)
     """
     def __init__(self, createAcc, tag = None):
@@ -1971,7 +1971,7 @@ class DecisionTreeLeaf(DecisionTree):
         dist, paramsLeft = parseChild(self.dist, params)
         return DecisionTreeLeaf(dist, tag = self.tag), paramsLeft
 
-# (FIXME : merge MappedInputDist with TransformedInputDist?  (Also merge some of the corresponding Accs?))
+# (FIXME : merge MappedInputDist with TransformedInputDist? (Also merge some of the corresponding Accs?))
 class MappedInputDist(Dist):
     """Dist where input is mapped using a fixed transform."""
     def __init__(self, inputTransform, dist, tag = None):
@@ -2022,7 +2022,7 @@ class MappedInputDist(Dist):
         dist, paramsLeft = parseChild(self.dist, params)
         return MappedInputDist(self.inputTransform, dist, tag = self.tag), paramsLeft
 
-# (FIXME : merge MappedOutputDist with TransformedOutputDist?  (Also merge some of the corresponding Accs?))
+# (FIXME : merge MappedOutputDist with TransformedOutputDist? (Also merge some of the corresponding Accs?))
 class MappedOutputDist(Dist):
     """Dist where output is mapped using a fixed transform."""
     def __init__(self, outputTransform, dist, tag = None):

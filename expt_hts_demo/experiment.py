@@ -44,7 +44,7 @@ def readDistFile(distFile):
 
 # FIXME : roundtripping using writeDistFile (using readDistFile to load a distribution
 #   file saved with writeDistFile) requires every distribution to output all relevant
-#   details, including any functions / closures.  This isn't currently the case.
+#   details, including any functions / closures. This isn't currently the case.
 #   Even if this was the case, might want to just use pickle instead -- less fragile,
 #   doesn't lose precision outputting floats (though maybe this could be overcome by
 #   using better routines than the numpy default ones) and doesn't waste space
@@ -395,7 +395,7 @@ def main(rawArgs):
                 for time in range(startTime, endTime):
                     yield 'global' if globalPhone else phone
 
-        # FIXME : only works if no cross-stream stuff happening.  Make more robust somehow.
+        # FIXME : only works if no cross-stream stuff happening. Make more robust somehow.
         shiftToPrevTransform = xf.ShiftOutputTransform(xf.MinusPrev())
 
         mgcOutputTransform = dict()

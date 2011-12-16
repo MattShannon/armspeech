@@ -1,7 +1,7 @@
 """Slightly customized versions of numpy / scipy linalg methods.
 
 The standard numpy and scipy linalg routines both cope badly with
-0-dimensional matrices or vectors.  This module wraps several standard
+0-dimensional matrices or vectors. This module wraps several standard
 routines to check for these special cases.
 """
 
@@ -59,7 +59,7 @@ def tensordot(*args, **kwargs):
     a = args[0] if len(args) > 0 else kwargs['a']
     b = args[1] if len(args) > 1 else kwargs['b']
     axes = args[2] if len(args) > 2 else kwargs['axes']
-    # (FIXME : specific to axes being an integer.  Make more general.) (N.B. default numpy routine copes fine with axes == 0)
+    # (FIXME : specific to axes being an integer. Make more general.) (N.B. default numpy routine copes fine with axes == 0)
     if np.shape(axes) == () and axes > 0 and sum(np.shape(a)[-axes:]) == 0 and sum(np.shape(b)[:axes]) == 0:
         return np.zeros(np.shape(a)[:-axes] + np.shape(b)[axes:])
     else:

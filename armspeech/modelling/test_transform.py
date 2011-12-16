@@ -32,7 +32,7 @@ def shapeRand(ranks = [0, 1]):
 
 def gen_genericTransform(shapeIn, shapeOut):
     # FIXME : below transforms are either linear or decompose across dimensions.
-    #   Replace with something nastier?  (Would provide a better test.)
+    #   Replace with something nastier? (Would provide a better test.)
     rankIn = len(shapeIn)
     rankOut = len(shapeOut)
     assert rankIn <= 1
@@ -56,7 +56,7 @@ def gen_genericInvertibleTransform(shape):
         return gen_genericInvertibleTransform1D()
     else:
         # FIXME : below transforms are either linear or decompose across dimensions.
-        #   Replace with something nastier?  (Would provide a better test.)
+        #   Replace with something nastier? (Would provide a better test.)
         if randint(0, 2) == 0:
             return gen_InvertibleLinearTransform(shape = shape)
         else:

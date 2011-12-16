@@ -19,7 +19,7 @@ import numpy as np
 import armspeech.util.mylinalg as mla
 
 # (FIXME : current parsing potentially involves _a lot_ of list copying.
-#   Refactor?  (Probably never limiting factor in time or memory though.))
+#   Refactor? (Probably never limiting factor in time or memory though.))
 
 # FIXME : some of the asserts below should really be exceptions?
 
@@ -248,7 +248,7 @@ class InvertedTransform(Transform):
         else:
             return mla.inv(derivOrig)
     def derivParams(self, y):
-        # FIXME : replace with a right division or something?  (but N.B. matrices not vectors, so possible?)
+        # FIXME : replace with a right division or something? (but N.B. matrices not vectors, so possible?)
         return -np.dot(
             self.transform.derivParams(self.transform.inv(y)),
             self.deriv(y)

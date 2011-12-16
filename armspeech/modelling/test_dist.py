@@ -54,7 +54,7 @@ def simpleInputGen(dimIn, bias = False):
 # (FIXME : add tests to test full range of shapes for transform stuff)
 # (FIXME : add tests for logProbDerivInput and logProbDerivOutput for dists where either input or output has a discrete component (applies to lots of below tests, e.g. logProbDerivOutput for IdentifiableMixtureDist))
 # (FIXME : add tests for Transformed(Input|Output)Learn(Dist|Transform)AccEM (for the Transform ones, have to first add a transform that can be re-estimated using EM))
-# (FIXME : deep test for Transformed(Input|Output)Dist doesn't seem to converge to close to true dist in terms of parameters.  Multiple local minima?  Or just very insensitive to details?  For more complicated transforms might the test procedure never converge?)
+# (FIXME : deep test for Transformed(Input|Output)Dist doesn't seem to converge to close to true dist in terms of parameters. Multiple local minima? Or just very insensitive to details? For more complicated transforms might the test procedure never converge?)
 
 def gen_LinearGaussian(dimIn = 3, bias = False):
     coeff = randn(dimIn)
@@ -386,7 +386,7 @@ def getTrainingSet(dist, inputGen, typicalSize, iid, unitOcc):
         trainingSet = [ (input, dist.synth(input), 1.0 if unitOcc else math.exp(randn())) for input in inputs ]
     else:
         assert unitOcc == True
-        # (FIXME : potentially very slow.  Could rewrite some of GP stuff to do this better if necessary.)
+        # (FIXME : potentially very slow. Could rewrite some of GP stuff to do this better if necessary.)
         updatedDist = dist
         trainingSet = []
         for inputNew in inputs:
@@ -465,7 +465,7 @@ class TestDist(unittest.TestCase):
                         acc.add(i, i)
                     for i in acc.outputs:
                         count[i] += 1
-                # (FIXME : thresh hardcoded for 'its' value (and small n, k).  Could compute instead.)
+                # (FIXME : thresh hardcoded for 'its' value (and small n, k). Could compute instead.)
                 self.assertTrue(la.norm(count / its * n - k) <= 0.05 * n, msg = 'histogram '+repr(count / its)+' for (n, k) = '+repr((n, k)))
 
     def test_LinearGaussian(self, eps = 1e-8, numDists = 50, numPoints = 100):
@@ -728,7 +728,7 @@ def testBinaryLogisticClassifier():
     if dist > 0.1:
         sys.stderr.write('WARNING: unusually large discrepancy between estimated and true dist during BinaryLogisticClassifier test\n')
 
-# (N.B. not a unit test.  Just draws pictures to help you assess whether results seem reasonable.)
+# (N.B. not a unit test. Just draws pictures to help you assess whether results seem reasonable.)
 def testBinaryLogisticClassifierFunGraph():
     import pylab
 
@@ -798,7 +798,7 @@ def testBinaryLogisticClassifierFunGraph():
 
     pylab.show()
 
-# (N.B. not a unit test.  Just draws pictures to help you assess whether results seem reasonable.)
+# (N.B. not a unit test. Just draws pictures to help you assess whether results seem reasonable.)
 def testMixtureOfTwoExpertsInitialization():
     import pylab
 

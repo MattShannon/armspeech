@@ -52,7 +52,7 @@ def sampleDiscrete(valueProbList, absTol = 1e-6):
     """Sample a value from the given discrete distribution.
 
     valueProbList is a list of (value, prob) pairs, where prob is the
-    probability of that value.  An exception is raised if probabilities
+    probability of that value. An exception is raised if probabilities
     do not sum to 1.0 within given tolerance.
 
     N.B. valueProbList should be a sequence type (an iterable), not an iterator.
