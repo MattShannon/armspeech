@@ -46,7 +46,7 @@ class TestMemoize(unittest.TestCase):
         assert fe.evalCount == 3
 
 def suite():
-    return unittest.TestLoader().loadTestsFromTestCase(TestMathHelp)
+    return unittest.TestLoader().loadTestsFromTestCase(TestMemoize)
 
 if __name__ == '__main__':
     unittest.main()

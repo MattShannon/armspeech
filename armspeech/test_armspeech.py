@@ -12,7 +12,9 @@ from armspeech.bisque import test_queuer
 from armspeech.modelling import test_dist
 from armspeech.modelling import test_minimize
 from armspeech.modelling import test_transform
+from armspeech.modelling import test_wnet
 from armspeech.util import test_mathhelp
+from armspeech.util import test_memoize
 from armspeech.util import test_persist
 
 import unittest
@@ -28,7 +30,9 @@ def suite(deepTest = False):
         test_dist.suite(deepTest = deepTest),
         test_minimize.suite(),
         test_transform.suite(),
+        test_wnet.suite(),
         test_mathhelp.suite(),
+        test_memoize.suite(),
         test_persist.suite(createShouldNotPickle = ShouldNotPickle),
     ])
 
