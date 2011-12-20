@@ -20,7 +20,7 @@ def randBool():
     return randint(0, 2) == 0
 
 def gen_simple_ConcreteNet(genLabel, deltaTime, sortable = True, pathMustExist = False, maxNodes = 12, maxEdgesPerNode = 3):
-    numNodes = randint(2, maxNodes)
+    numNodes = randint(2, maxNodes + 1)
 
     edgesForwards = dict()
     for node in range(0, numNodes - 1):
