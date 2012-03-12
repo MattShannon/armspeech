@@ -18,9 +18,10 @@ import os
 class ShouldNotPickle(object):
     pass
 
-_createShouldNotPickle = ShouldNotPickle
-
 class TestPersist(unittest.TestCase):
+    def setUp(self):
+        self.createShouldNotPickle = ShouldNotPickle
+
     def test_pickling(self):
         l = [1, 2, 3]
         d = dict()
@@ -41,7 +42,7 @@ class TestPersist(unittest.TestCase):
         tempDir = TempDir()
         def loc(suffix):
             return os.path.join(tempDir.location, suffix)
-        obj = _createShouldNotPickle()
+        obj = self.createShouldNotPickle()
         self.assertRaises(pickle.PicklingError, persist.savePickle, loc('obj.pickle'), obj)
         tempDir.remove()
     def test_secHash_consistent(self):
@@ -72,10 +73,14 @@ class TestPersist(unittest.TestCase):
         assert persist.secHashObject(d) == 'bebad045b5f2d023efed1d4fc1840a28c532789e'
 
 def suite(createShouldNotPickle = None):
-    global _createShouldNotPickle
-    if createShouldNotPickle is not None:
-        _createShouldNotPickle = createShouldNotPickle
-    return unittest.TestLoader().loadTestsFromTestCase(TestPersist)
+    if createShouldNotPickle is None:
+        return unittest.TestLoader().loadTestsFromTestCase(TestPersist)
+    else:
+        class CustomTestPersist(TestPersist):
+            def setUp(self):
+                self.createShouldNotPickle = createShouldNotPickle
+
+        return unittest.TestLoader().loadTestsFromTestCase(CustomTestPersist)
 
 if __name__ == '__main__':
     unittest.main()
