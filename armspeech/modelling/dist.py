@@ -417,6 +417,8 @@ class LinearGaussianAcc(TermAcc):
             variance = (self.sumSqr - np.dot(coeff, self.sumTarget)) / self.occ
             if variance <= 0.0:
                 raise EstimationError('computed variance is zero or negative: '+str(variance))
+            elif variance < 1.0e-10:
+                raise EstimationError('computed variance too miniscule (variances this small can lead to substantial loss of precision during accumulation): '+str(variance))
             auxValue = self.logLikeSingle() if self.distPrev is not None else self.aux(coeff, variance)
             return LinearGaussian(coeff, variance, tag = self.tag), auxValue, self.occ
         except EstimationError, detail:
@@ -1394,6 +1396,10 @@ class LinearGaussian(TermDist):
         self.variance = variance
         self.tag = tag
         self.gConst = -0.5 * math.log(2.0 * math.pi)
+
+        assert self.variance > 0.0
+        if self.variance < 1.0e-10:
+            raise RuntimeError('LinearGaussian variance too miniscule (variances this small can lead to substantial loss of precision during accumulation): '+str(self.variance))
 
     def __repr__(self):
         return 'LinearGaussian('+repr(self.coeff)+', '+repr(self.variance)+', tag = '+repr(self.tag)+')'
