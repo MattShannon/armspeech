@@ -453,6 +453,14 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
         paramsAfter = ps.params(dist)
         assert_allclose(logProbsAfter, logProbsBefore, rtol = 1e-10, msg = 'looks like parsing affected the original distribution, which should never happen')
 
+    if hasEM:
+        # check EM estimation runs at all (if there is a decent amount of data)
+        if len(training) >= numPoints - 1:
+            estDist, estLogLike, estOcc = getTrainEM(dist)(training)
+    if True:
+        # check CG estimation runs at all
+        estDist, estLogLike, estOcc = getTrainCG(dist, length = -2)(training)
+
 class TestDist(unittest.TestCase):
     def test_Memo_random_subset(self, its = 10000):
         """Memo class random subsets should be equally likely to include each element"""
