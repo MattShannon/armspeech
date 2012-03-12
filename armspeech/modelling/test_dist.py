@@ -715,7 +715,7 @@ class TestDist(unittest.TestCase):
 
     # FIXME : add more tests for shared dists
 
-    # FIXME : add SequenceDist test
+    # FIXME : add AutoregressiveSequenceDist test
 
 class DeepTestDist(TestDist):
     def setUp(self):

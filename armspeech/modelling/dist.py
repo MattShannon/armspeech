@@ -1247,7 +1247,7 @@ class DebugAcc(Acc):
         dist, logLike, occ = estimateChild(self.acc)
         return DebugDist(self.memo.maxOcc, dist, tag = self.tag), logLike, occ
 
-class SequenceAcc(Acc):
+class AutoregressiveSequenceAcc(Acc):
     def __init__(self, depth, acc, tag = None):
         self.depth = depth
         self.acc = acc
@@ -1277,7 +1277,7 @@ class SequenceAcc(Acc):
 
     def estimate(self, estimateChild):
         dist, logLike, occ = estimateChild(self.acc)
-        return SequenceDist(self.depth, dist, tag = self.tag), logLike, occ
+        return AutoregressiveSequenceDist(self.depth, dist, tag = self.tag), logLike, occ
 
 
 class Dist(object):
@@ -2280,20 +2280,20 @@ class DebugDist(Dist):
         dist, paramsLeft = parseChild(self.dist, params)
         return DebugDist(self.maxOcc, dist, tag = self.tag), paramsLeft
 
-class SequenceDist(Dist):
+class AutoregressiveSequenceDist(Dist):
     def __init__(self, depth, dist, tag = None):
         self.depth = depth
         self.dist = dist
         self.tag = tag
 
     def __repr__(self):
-        return 'SequenceDist('+repr(self.depth)+', '+repr(self.dist)+', tag = '+repr(self.tag)+')'
+        return 'AutoregressiveSequenceDist('+repr(self.depth)+', '+repr(self.dist)+', tag = '+repr(self.tag)+')'
 
     def children(self):
         return [self.dist]
 
     def mapChildren(self, mapChild):
-        return SequenceDist(self.depth, mapChild(self.dist), tag = self.tag)
+        return AutoregressiveSequenceDist(self.depth, mapChild(self.dist), tag = self.tag)
 
     def logProb(self, inSeq, outSeq):
         lp = 0.0
@@ -2322,7 +2322,7 @@ class SequenceDist(Dist):
         notyetimplemented
 
     def createAcc(self, createAccChild):
-        return SequenceAcc(self.depth, createAccChild(self.dist), tag = self.tag)
+        return AutoregressiveSequenceAcc(self.depth, createAccChild(self.dist), tag = self.tag)
 
     def synth(self, inSeq, method = SynthMethod.Sample, actualOutSeq = None):
         return list(self.synthIterator(inSeq, method, actualOutSeq))
@@ -2350,4 +2350,4 @@ class SequenceDist(Dist):
 
     def parseChildren(self, params, parseChild):
         dist, paramsLeft = parseChild(self.dist, params)
-        return SequenceDist(self.depth, dist, tag = self.tag), paramsLeft
+        return AutoregressiveSequenceDist(self.depth, dist, tag = self.tag), paramsLeft
