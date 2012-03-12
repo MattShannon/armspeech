@@ -305,6 +305,7 @@ class DerivTermAccG(AccG):
         self.logLikePrev += self.distPrev.logProb(input, output) * occ
         self.derivParams += self.distPrev.logProbDerivParams(input, output) * occ
 
+    # N.B. assumes distPrev is the same for self and acc (not checked).
     def addAccSingle(self, acc):
         self.occ += acc.occ
         self.logLikePrev += acc.logLikePrev
@@ -1281,7 +1282,6 @@ class SequenceAcc(Acc):
 
 class Dist(object):
     """Conditional probability distribution."""
-
     def children(self):
         abstract
     def mapChildren(self, mapChild):
