@@ -15,8 +15,8 @@ import summarizer
 from armspeech.util.mathhelp import logSum
 from armspeech.util.iterhelp import chunkList
 
-import test_transform
 import test_dist_questions
+import test_transform
 
 import unittest
 import sys
