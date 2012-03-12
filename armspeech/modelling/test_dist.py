@@ -336,11 +336,25 @@ def getTrainFromAcc(createAcc):
     return doTrainFromAcc
 
 def check_est(trueDist, train, inputGen, hasParams, iid = True, unitOcc = False, ps = d.defaultParamSpec, logLikeThresh = 2e-2, tslpThresh = 2e-2, testSetSize = 50, initTrainingSetSize = 100, trainingSetMult = 5, maxTrainingSetSize = 100000):
-    """Check estimation of distribution using expectation-maximization.
+    """Checks specified training method converges with sufficient data.
 
-    (N.B. set train to getTrainEM(trueDist) instead of
-    getTrainEM(<some random dist of the same form>) for a less stringent test
-    (e.g. if there are local optima))
+    More specifically, checks that, for a sufficient amount of training data,
+    training using train produces a distribution that assigns roughly the true
+    log probability to an unseen test set of size testSetSize.
+    (There are several additional checks, but this is the main one).
+
+    train specifies both the training procedure and the initialization, and
+    the initialization used should be appropriate for the training procedure.
+    For simple models with effective training procedures (e.g. learning a linear
+    Gaussian model using expectation-maximization) initializing with a random
+    model (e.g. train = getTrainEM(<some random dist in the same family>) )
+    provides a stringent test.
+    For more complicated models with weaker training procedures (e.g. learning a
+    mixture of linear Gaussians using gradient descent, which suffers from
+    multiple local optima) initializing with the true distribution (e.g.
+    train = getTrainCG(trueDist) ) at least provides a check that the training
+    procedure doesn't move away from the true distribution when given sufficient
+    training data.
     """
     assert iid == True
 
