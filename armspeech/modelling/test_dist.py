@@ -313,12 +313,12 @@ def getTrainEM(initEstDist, verbosity = 0):
         return dist, logLike, occ
     return doTrainEM
 
-def getTrainCG(initEstDist, ps = d.defaultParamSpec, verbosity = 0):
+def getTrainCG(initEstDist, ps = d.defaultParamSpec, length = -500, verbosity = 0):
     def doTrainCG(training):
         def accumulate(acc):
             for input, output, occ in training:
                 acc.add(input, output, occ)
-        dist, logLike, occ = trn.trainCG(initEstDist, accumulate, ps = ps, length = -500, verbosity = verbosity)
+        dist, logLike, occ = trn.trainCG(initEstDist, accumulate, ps = ps, length = length, verbosity = verbosity)
         assert initEstDist.tag is not None
         assert dist.tag == initEstDist.tag
         return dist, logLike, occ
