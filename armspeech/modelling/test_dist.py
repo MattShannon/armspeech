@@ -907,7 +907,7 @@ class TestDist(unittest.TestCase):
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True, iid = True, unitOcc = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True, iid = True, unitOcc = True)
 
-    # FIXME : fix code to make this test pass!
+    # FIXME : fix code to make (the deep version of) this test pass!
     def test_shared_DiscreteDist(self, eps = 1e-8, numDists = 20, numPoints = 100):
         for distIndex in range(numDists):
             keys = list('abcde')[:randint(1, 5)]
