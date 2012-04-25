@@ -480,7 +480,7 @@ def check_addAcc(dist, trainingAll, ps):
     logLikeFull = accFull.logLike()
     derivParamsFull = ps.derivParams(accFull)
 
-    assert_allclose(logLikeFull, logLikeAll)
+    assert_allclose(logLikeFull, logLikeAll, atol = 1e-10)
     assert_allclose(derivParamsFull, derivParamsAll)
 
 def check_logLike(dist, training, iid, hasEM):
@@ -488,9 +488,9 @@ def check_logLike(dist, training, iid, hasEM):
     logLikeFromDist = iidLogProb(dist, training)
     if hasEM:
         logLikeEM = trainedAcc(dist, training).logLike()
-        assert_allclose(logLikeEM, logLikeFromDist)
+        assert_allclose(logLikeEM, logLikeFromDist, atol = 1e-10)
     logLikeG = trainedAccG(dist, training).logLike()
-    assert_allclose(logLikeG, logLikeFromDist)
+    assert_allclose(logLikeG, logLikeFromDist, atol = 1e-10)
 
 def check_derivParams(dist, training, ps, eps):
     params = ps.params(dist)
@@ -580,7 +580,7 @@ def check_est(trueDist, train, inputGen, hasParams, iid = True, unitOcc = False,
         estDist, estLogLike, estOcc = train(training)
         # N.B. tests both that training has converged and that logLike from estimate agrees with iid logProb from dist
         # (FIXME : might be nice to separate these two criterion)
-        assert_allclose(estLogLike, iidLogProb(estDist, training))
+        assert_allclose(estLogLike, iidLogProb(estDist, training), atol = 1e-10)
         assert_allclose(estOcc, sum([ occ for input, output, occ in training ]))
         tslpTrue = iidLogProb(trueDist, testSet)
         tslpEst = iidLogProb(estDist, testSet)
@@ -666,10 +666,10 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
         check_derivParams(dist, training, ps, eps = eps)
 
     logProbsAfter = [ dist.logProb(input, output) for input, output in points ]
-    assert_allclose(logProbsAfter, logProbsBefore, msg = 'looks like parsing affected the original distribution, which should never happen')
+    assert_allclose(logProbsAfter, logProbsBefore, atol = 1e-10, msg = 'looks like parsing affected the original distribution, which should never happen')
     if hasParams:
         paramsAfter = ps.params(dist)
-        assert_allclose(logProbsAfter, logProbsBefore, rtol = 1e-10, msg = 'looks like parsing affected the original distribution, which should never happen')
+        assert_allclose(logProbsAfter, logProbsBefore, atol = 1e-10, msg = 'looks like parsing affected the original distribution, which should never happen')
 
     if hasEM:
         # check EM estimation runs at all (if there is a decent amount of data)
