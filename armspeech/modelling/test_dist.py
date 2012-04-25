@@ -492,12 +492,12 @@ def check_derivParams(dist, training, ps, eps):
     analyticDelta = np.dot(derivParams, paramsDelta)
     assert_allclose(numericDelta, analyticDelta, rtol = 1e-4, atol = 1e-10)
 
-def getTrainEM(initEstDist, verbosity = 0):
+def getTrainEM(initEstDist, maxIterations = None, verbosity = 0):
     def doTrainEM(training):
         def accumulate(acc):
             for input, output, occ in training:
                 acc.add(input, output, occ)
-        dist, logLike, occ = trn.trainEM(initEstDist, accumulate, deltaThresh = 1e-9, verbosity = verbosity)
+        dist, logLike, occ = trn.trainEM(initEstDist, accumulate, deltaThresh = 1e-9, maxIterations = maxIterations, verbosity = verbosity)
         assert initEstDist.tag is not None
         assert dist.tag == initEstDist.tag
         return dist, logLike, occ
@@ -660,7 +660,7 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
     if hasEM:
         # check EM estimation runs at all (if there is a decent amount of data)
         if len(training) >= numPoints - 1:
-            estDist, estLogLike, estOcc = getTrainEM(dist)(training)
+            estDist, estLogLike, estOcc = getTrainEM(dist, maxIterations = 1)(training)
     if True:
         # check CG estimation runs at all
         estDist, estLogLike, estOcc = getTrainCG(dist, length = -2)(training)
