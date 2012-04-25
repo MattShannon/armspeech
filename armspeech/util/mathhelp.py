@@ -47,7 +47,7 @@ def logDet(mat):
         return 0.0
     else:
         # FIXME : replace with slogdet once we're using numpy 2.0?
-        return np.sum(np.log(np.abs(np.linalg.svd(mat, compute_uv = False))))
+        return np.sum(np.log(np.linalg.svd(mat, compute_uv = False)))
 
 def sampleDiscrete(valueProbList, absTol = 1e-6):
     """Sample a value from the given discrete distribution.

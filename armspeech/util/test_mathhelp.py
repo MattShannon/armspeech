@@ -48,8 +48,7 @@ class TestMathHelp(unittest.TestCase):
             else:
                 A = randn(n, n)
             trueDet = la.det(A) if n > 0 else 1.0
-            if trueDet >= 0.0:
-                assert_allclose(np.exp(mathhelp.logDet(A)), trueDet)
+            assert_allclose(np.exp(mathhelp.logDet(A)), abs(trueDet))
 
     def test_sampleDiscrete(self, numDists = 20, numSamples = 10000):
         for distIndex in range(numDists):
