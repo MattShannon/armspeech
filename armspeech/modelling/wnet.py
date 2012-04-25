@@ -47,9 +47,9 @@ class MappedElemNet(Net):
         return self.net.next(node, forwards)
 
 class FlatMappedNet(Net):
-    """Lazy flat-mapped network.
+    """Lazy flat-mapped net.
 
-    Each emitting node in the given network is replaced by the sub-network
+    Each emitting node in the given net is replaced by the sub-net
     f(<elem of the emitting node>).
 
     N.B. f is called frequently, so should probably be memoized if computing it
@@ -705,8 +705,9 @@ class TimeSyncSumAgenda(SumAgenda):
                 queueNew.append(node)
         self.queue[self.time] = deque(queueNew)
 class TrackRepeatPopsSumAgenda(SumAgenda):
-    def __init__(self, sumAgenda):
+    def __init__(self, sumAgenda, verbose = True):
         self.sa = sumAgenda
+        self.verbose = verbose
 
         self.popped = defaultdict(int)
         self.pops = 0
@@ -731,8 +732,9 @@ class TrackRepeatPopsSumAgenda(SumAgenda):
         return reversed(sorted([ (count, node) for node, count in self.popped.items() if count > 1 ])[-n:])
     def printStats(self):
         poppedNodes, pops = self.summary()
-        print 'SumAgenda: repeat pop stats:', pops, 'pops for', poppedNodes, 'unique nodes'
-        if pops != poppedNodes:
+        if self.verbose or pops != poppedNodes:
+            print 'SumAgenda: repeat pop stats:', pops, 'pops for', poppedNodes, 'unique nodes'
+        if self.verbose and pops != poppedNodes:
             print 'SumAgenda: repeat pop stats: top offenders:'
             for count, node in self.topOffenders():
                 print 'SumAgenda:\t', node, '->', count, 'times'
@@ -822,8 +824,6 @@ def sumYieldGamma(net, labelToWeight, divisionRing, totalWeight, beta, getAgenda
     agenda.add(net.start(forwards), ring.one)
     totalWeightAgain = ring.zero
     endNode = net.end(forwards)
-
-    entropy = totalWeight
 
     while agenda:
         node, weight = agenda.pop()

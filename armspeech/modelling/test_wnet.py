@@ -167,6 +167,7 @@ class TestWnet(unittest.TestCase):
             totalWeightForwards = wnet.sum(net, labelToWeight, ring, getAgenda = getAgenda, forwards = True)
             totalWeightBackwards = wnet.sum(net, labelToWeight, ring, getAgenda = getAgenda, forwards = True)
             assert ring.isClose(totalWeightForwards, totalWeightBackwards)
+    # FIXME : add tests for other stuff in wnet
 
 def suite():
     return unittest.TestLoader().loadTestsFromTestCase(TestWnet)
