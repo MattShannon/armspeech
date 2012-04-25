@@ -240,7 +240,7 @@ def gen_autoregressive_dist(depth = 2):
         )
     )
     return dist, None
-def autoregressive_1D_is_stable(dist, depth, starts = 5, stepsIntoFuture = 100, bigThresh = 1.0e6):
+def autoregressive_1D_is_stable(dist, depth, starts = 5, stepsIntoFuture = 100, bigThresh = 1e6):
     for start in range(starts):
         input = deque(randn(depth))
         for step in range(stepsIntoFuture):

@@ -13,7 +13,7 @@ from armspeech.util import collectionshelp
 
 def readHtkLabFile(labFile, framePeriod, decode = lambda labelString: labelString):
     """Reads HTK-style label file."""
-    divisor = framePeriod * 1.0e7
+    divisor = framePeriod * 1e7
     for line in open(labFile):
         startTicks, endTicks, labelString = line.strip().split(None, 2)
         startTime = int(int(startTicks) / divisor + 0.5)
