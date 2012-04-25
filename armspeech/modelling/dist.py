@@ -235,6 +235,13 @@ class EstimationError(Exception):
     def __str__(self):
         return str(self.msg)
 
+class SynthSeqTooLongError(Exception):
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __str__(self):
+        return str(self.msg)
+
 class AccCommon(object):
     def children(self):
         abstract
@@ -2521,7 +2528,7 @@ class AutoregressiveNetDist(Dist):
     def createAcc(self, createAccChild):
         return AutoregressiveNetAcc(distPrev = self, durAcc = createAccChild(self.durDist), acAcc = createAccChild(self.acDist), tag = self.tag)
 
-    def synth(self, input, method = SynthMethod.Sample, actualOutSeq = None):
+    def synth(self, input, method = SynthMethod.Sample, actualOutSeq = None, maxLength = None):
         # (FIXME : align actualOutSeq and pass down to frames below?  (What exactly do I mean?))
         # (FIXME : can we do anything simple and reasonable with durations for meanish case?)
         forwards = True
@@ -2551,6 +2558,8 @@ class AutoregressiveNetDist(Dist):
                 outSeq.append(acOutput)
                 time = len(outSeq)
                 acInput = outSeq[max(time - self.depth, 0):time]
+            if maxLength is not None and len(outSeq) > maxLength:
+                raise SynthSeqTooLongError('maximum length '+str(maxLength)+' exceeded during synth from AutoregressiveNetDist')
 
         return outSeq
 
