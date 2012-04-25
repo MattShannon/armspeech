@@ -942,10 +942,6 @@ class TestDist(unittest.TestCase):
                 check_est(dist, getTrainEM(dist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(dist), inputGen, hasParams = True)
 
-class DeepTestDist(TestDist):
-    def setUp(self):
-        self.deepTest = True
-
 # FIXME : this is nowhere near a proper unit test (need to make it more robust, automated, etc)
 def testBinaryLogisticClassifier():
     def inputGen(num):
@@ -1116,13 +1112,15 @@ def testMixtureOfTwoExpertsInitialization():
     pylab.show()
 
 def suite(deepTest = False):
+    # below definition nested here so that unittest search only finds shallow
+    #   version of tests by default
+    class DeepTestDist(TestDist):
+        def setUp(self):
+            self.deepTest = True
     if deepTest:
         return unittest.TestLoader().loadTestsFromTestCase(DeepTestDist)
     else:
         return unittest.TestLoader().loadTestsFromTestCase(TestDist)
 
 if __name__ == '__main__':
-    # N.B. this runs both shallow _and_ deep versions of tests by default.
-    #   Should call command-line with either TestDist or DeepTestDist as
-    #   argument.
     unittest.main()
