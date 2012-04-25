@@ -407,9 +407,23 @@ def gen_inSeq_AutoregressiveNetDist(depth = 2):
 
     def getInputGen():
         while True:
-            labelSeq = [ random.choice(labels) for i in range(randint(0, 10)) ]
+            labelSeq = [ random.choice(labels) for i in range(randint(0, 4)) ]
             yield labelSeq
     return dist, getInputGen()
+
+def restrictTypicalOutputLength(genDist, maxLength = 20, numPoints = 100):
+    bad = True
+    while bad:
+        dist, inputGen = genDist()
+        bad = False
+        for i in range(numPoints):
+            input = inputGen.next()
+            try:
+                output = dist.synth(input, maxLength = maxLength)
+            except d.SynthSeqTooLongError, e:
+                bad = True
+                break
+    return dist, inputGen
 
 def iidLogProb(dist, training):
     logProb = 0.0
@@ -909,18 +923,19 @@ class TestDist(unittest.TestCase):
 
     # FIXME : add AutoregressiveSequenceDist test
 
-    # FIXME : why is this _so_ slow? (should increase numDists or numPoints if possible)
-    def test_AutoregressiveNetDist(self, eps = 1e-8, numDists = 20, numPoints = 5):
+    # (FIXME : check this is not unnecessarily slow for any reason)
+    def test_AutoregressiveNetDist(self, eps = 1e-8, numDists = 5, numPoints = 100):
         def checkAdditional(dist, input, outSeq, eps):
             # check result of getTimedNet is topologically sorted
             timedNet = dist.getTimedNet(input, outSeq)
             assert wnet.netIsTopSorted(timedNet, wnet.nodeSetCompute(timedNet, accessibleOnly = False), deltaTime = lambda label: 0)
         for distIndex in range(numDists):
             depth = randint(0, 5)
+            # below restriction to dists with a moderate typical output length is to prevent tests taking too long
             if randBool():
-                dist, inputGen = gen_constant_AutoregressiveNetDist(depth = depth)
+                dist, inputGen = restrictTypicalOutputLength(genDist = lambda: gen_constant_AutoregressiveNetDist(depth = depth), numPoints = numPoints)
             else:
-                dist, inputGen = gen_inSeq_AutoregressiveNetDist(depth = depth)
+                dist, inputGen = restrictTypicalOutputLength(genDist = lambda: gen_constant_AutoregressiveNetDist(depth = depth), numPoints = numPoints)
             # (FIXME : add logProbDerivOutputCheck once implemented)
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, checkAdditional = checkAdditional)
             if self.deepTest:
