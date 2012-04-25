@@ -835,10 +835,9 @@ def sumYieldGamma(net, labelToWeight, divisionRing, totalWeight, beta, getAgenda
             betaWeight = beta(nextNode)
             if newWeight != ring.zero and betaWeight != ring.zero:
                 agenda.add(nextNode, newWeight)
-                if label is not None:
-                    edgeTotalWeight = ring.times(newWeight, betaWeight) if forwards else ring.times(betaWeight, newWeight)
-                    gamma = ring.ldivide(totalWeight, edgeTotalWeight)
-                    yield label, gamma
+                edgeTotalWeight = ring.times(newWeight, betaWeight) if forwards else ring.times(betaWeight, newWeight)
+                gamma = ring.ldivide(totalWeight, edgeTotalWeight)
+                yield label, gamma
 
     if not ring.isClose(totalWeight, totalWeightAgain):
         raise RuntimeError('recomputed total weight ('+str(totalWeightAgain)+') differs from given value ('+str(totalWeight)+')')
