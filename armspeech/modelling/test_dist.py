@@ -1122,4 +1122,7 @@ def suite(deepTest = False):
         return unittest.TestLoader().loadTestsFromTestCase(TestDist)
 
 if __name__ == '__main__':
+    # N.B. this runs both shallow _and_ deep versions of tests by default.
+    #   Should call command-line with either TestDist or DeepTestDist as
+    #   argument.
     unittest.main()
