@@ -481,7 +481,7 @@ def check_addAcc(dist, trainingAll, ps):
     derivParamsFull = ps.derivParams(accFull)
 
     assert_allclose(logLikeFull, logLikeAll, atol = 1e-10)
-    assert_allclose(derivParamsFull, derivParamsAll)
+    assert_allclose(derivParamsFull, derivParamsAll, atol = 1e-10)
 
 def check_logLike(dist, training, iid, hasEM):
     assert iid == True
