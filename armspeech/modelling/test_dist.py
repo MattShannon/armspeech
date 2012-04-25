@@ -12,6 +12,8 @@ import nodetree
 import dist as d
 import train as trn
 import summarizer
+import transform as xf
+import wnet
 from armspeech.util.mathhelp import logSum
 from armspeech.util.iterhelp import chunkList
 
@@ -20,12 +22,14 @@ import test_transform
 
 import unittest
 import sys
+from collections import deque
 import math
 import random
 import numpy as np
 from numpy.random import randn, randint
 import numpy.linalg as la
 from scipy import stats
+import string
 
 def logProb_frames(dist, trainData):
     lp = 0.0
@@ -38,6 +42,9 @@ def logProb_frames(dist, trainData):
 def assert_allclose(actual, desired, rtol = 1e-7, atol = 1e-14, msg = 'items not almost equal'):
     if np.shape(actual) != np.shape(desired) or not np.allclose(actual, desired, rtol, atol):
         raise AssertionError(msg+'\n ACTUAL:  '+repr(actual)+'\n DESIRED: '+repr(desired))
+
+def randBool():
+    return randint(0, 2) == 0
 
 def randTag():
     return 'tag'+str(randint(0, 1000000))
@@ -79,6 +86,13 @@ def gen_BinaryLogisticClassifier(dimIn = 3, bias = False, useZeroCoeff = False):
         w = randn(dimIn)
     dist = d.BinaryLogisticClassifier(w).withTag(randTag())
     return dist, simpleInputGen(dimIn, bias = bias)
+
+def gen_classifier(numClasses, dimIn, bias = False):
+    """Generates a random classifier with vector input."""
+    if numClasses == 2 and randBool():
+        return gen_BinaryLogisticClassifier(dimIn = dimIn, bias = bias)
+    else:
+        return gen_ConstantClassifier(numClasses)
 
 def gen_MixtureDist(dimIn):
     return gen_MixtureOfTwoExperts(dimIn = 3)
@@ -218,6 +232,184 @@ def gen_PassThruDist(dimIn = 3):
 def gen_DebugDist(maxOcc = None, dimIn = 3):
     subDist, inputGen = gen_LinearGaussian(dimIn)
     return d.DebugDist(maxOcc, subDist).withTag(randTag()), inputGen
+
+def gen_autoregressive_dist(depth = 2):
+    dist = d.MappedInputDist(np.asarray,
+        d.MappedInputDist(xf.AddBias(),
+            gen_LinearGaussian(dimIn = depth + 1)[0]
+        )
+    )
+    return dist, None
+def autoregressive_1D_is_stable(dist, depth, starts = 5, stepsIntoFuture = 100, bigThresh = 1.0e6):
+    for start in range(starts):
+        input = deque(randn(depth))
+        for step in range(stepsIntoFuture):
+            assert len(input) == depth
+            output = dist.synth(list(input))
+            if abs(output) > bigThresh:
+                return False
+            input.append(output)
+            input.popleft()
+    return True
+def gen_stable_autoregressive_dist(depth = 2):
+    while True:
+        dist = gen_autoregressive_dist(depth)[0]
+        if autoregressive_1D_is_stable(dist, depth):
+            break
+    return dist, None
+
+def add_autoregressive_style_labels(concreteNet, genLabels):
+    net = concreteNet
+    numNodes = net.numNodes
+    edgesForwards = [ [] for node in range(numNodes) ]
+    for node in range(numNodes):
+        nextNodes = [ nextNode for label, nextNode in net.next(node, forwards = True) ]
+        labels = genLabels(numLabels = len(nextNodes))
+        edgesForwards[node] = zip(labels, nextNodes)
+    return wnet.ConcreteNet(startNode = net.startNode, endNode = net.endNode, elems = net.elems, edgesForwards = edgesForwards)
+def gen_autoregressive_style_net(genElem, genLabels, sortable = True, maxNodes = 20, maxEdgesPerNode = 3):
+    numNodes = randint(2, maxNodes + 1)
+    elems = [None] + [ genElem() for node in range(1, numNodes - 1) ] + [None]
+
+    edgesForwards = dict()
+    for node in range(0, numNodes - 1):
+        edgesForwards[node] = []
+        elem = elems[node]
+        for edge in range(randint(1, maxEdgesPerNode + 1)):
+            while True:
+                if elem is not None and randBool():
+                    nextNode = node
+                else:
+                    nextNode = randint(1, numNodes)
+                if (not sortable) or elem is not None or elems[nextNode] is not None or nextNode > node:
+                    break
+            edgesForwards[node].append((None, nextNode))
+    edgesForwards[numNodes - 1] = []
+
+    net = wnet.ConcreteNet(startNode = 0, endNode = numNodes - 1, elems = elems, edgesForwards = edgesForwards)
+
+    nodeSet = wnet.nodeSetCompute(net, accessibleOnly = True)
+    if not nodeSet:
+        return gen_autoregressive_style_net(genElem = genElem, genLabels = genLabels, sortable = sortable, maxNodes = maxNodes, maxEdgesPerNode = maxEdgesPerNode)
+    else:
+        perm = list(nodeSet)
+        random.shuffle(perm)
+        netPerm = wnet.concretizeNet(net, perm)
+        netFinal = add_autoregressive_style_labels(netPerm, genLabels)
+
+        wnet.checkConsistent(netFinal, nodeSet = set(range(len(nodeSet))))
+        return netFinal
+def gen_simple_autoregressive_style_net(label, acSubLabels, durSubLabels):
+    def genElem():
+        return None if randBool() else random.choice([ (label, subLabel) for subLabel in acSubLabels ])
+    def genLabels(numLabels):
+        if numLabels == 0:
+            return []
+        elif numLabels == 1:
+            return [None]
+        else:
+            # numLabels added below to ensure all nodes with the same phonetic
+            #   context have the same number of edges leaving them
+            context = random.choice([ (label, (subLabel, numLabels)) for subLabel in durSubLabels ])
+            perm = list(range(numLabels))
+            random.shuffle(perm)
+            return [ (context, adv) for adv in perm ]
+    net = gen_autoregressive_style_net(genElem, genLabels, sortable = True)
+
+    # collect phonetic contexts and outputs actually present in net
+    nodeSet = wnet.nodeSetCompute(net)
+    phInputsAc = set([ net.elem(node) for node in nodeSet ])
+    phInputsAc.remove(None)
+    phInputToNumClassesDur = dict()
+    for node in nodeSet:
+        labels = [ label for label, nextNode in net.next(node, forwards = True) ]
+        if len(labels) >= 2 or len(labels) == 1 and labels[0] is not None:
+            phInputs, phOutputs = zip(*labels)
+            numClasses = len(phOutputs)
+            assert set(phOutputs) == set(range(numClasses))
+            phInput = phInputs[0]
+            for phInputAgain in phInputs[1:]:
+                assert phInputAgain == phInput
+            if phInput in phInputToNumClassesDur:
+                assert phInputToNumClassesDur[phInput] == numClasses
+            else:
+                phInputToNumClassesDur[phInput] = numClasses
+
+    return net, phInputsAc, phInputToNumClassesDur
+
+def gen_constant_AutoregressiveNetDist(depth = 2):
+    """Generates an AutoregressiveNetDist which is independent of input."""
+    numSubLabels = randint(1, 5)
+    while True:
+        net, phInputsAc, phInputToNumClassesDur = gen_simple_autoregressive_style_net('g', acSubLabels = range(numSubLabels), durSubLabels = range(numSubLabels))
+        nodeSet = wnet.nodeSetCompute(net, accessibleOnly = True)
+        numEmitting = len([ node for node in nodeSet if net.elem(node) is not None ])
+        if numEmitting >= 2 or numEmitting == 1 and randint(0, 4) == 0 or numEmitting == 0 and randint(0, 10) == 0:
+            break
+    def makeFullDepth(acInput):
+        if len(acInput) < depth:
+            acInput = np.concatenate((np.zeros((depth - len(acInput),)), acInput))
+        return np.asarray(acInput)
+    durDist = d.createDiscreteDist(phInputToNumClassesDur.keys(), lambda phInput:
+        d.MappedInputDist(makeFullDepth,
+            d.MappedInputDist(xf.AddBias(),
+                gen_classifier(numClasses = phInputToNumClassesDur[phInput], dimIn = depth + 1)[0]
+            )
+        )
+    )
+    acDist = d.createDiscreteDist(list(phInputsAc), lambda phInput:
+        d.MappedInputDist(makeFullDepth,
+            gen_stable_autoregressive_dist(depth)[0]
+        )
+    )
+    def netFor(input):
+        return net
+    dist = d.AutoregressiveNetDist(depth, netFor, durDist, acDist).withTag(randTag())
+
+    def getInputGen():
+        while True:
+            yield ''
+    return dist, getInputGen()
+
+def gen_inSeq_AutoregressiveNetDist(depth = 2):
+    """Generates a left-to-right AutoregressiveNetDist where input is a label sequence."""
+    labels = string.lowercase[:randint(1, 10)]
+    numSubLabels = randint(1, 5)
+    subLabels = list(range(numSubLabels))
+    def netFor(labelSeq):
+        net = wnet.FlatMappedNet(
+            # (FIXME : any reason to memoize this?)
+            lambda label: wnet.probLeftToRightNet(
+                [ (label, subLabel) for subLabel in subLabels ],
+                [ [ ((label, subLabel), adv) for adv in [0, 1] ] for subLabel in subLabels ]
+            ),
+            wnet.SequenceNet(labelSeq, None)
+        )
+        return net
+    def makeFullDepth(acInput):
+        if len(acInput) < depth:
+            acInput = np.concatenate((np.zeros((depth - len(acInput),)), acInput))
+        return np.asarray(acInput)
+    labelledSubLabels = [ (label, subLabel) for label in labels for subLabel in subLabels ]
+    durDist = d.createDiscreteDist(labelledSubLabels, lambda (label, subLabel):
+        d.MappedInputDist(makeFullDepth,
+            d.MappedInputDist(xf.AddBias(),
+                gen_classifier(numClasses = 2, dimIn = depth + 1)[0]
+            )
+        )
+    )
+    acDist = d.createDiscreteDist(labelledSubLabels, lambda (label, subLabel):
+        d.MappedInputDist(makeFullDepth,
+            gen_stable_autoregressive_dist(depth)[0]
+        )
+    )
+    dist = d.AutoregressiveNetDist(depth, netFor, durDist, acDist).withTag(randTag())
+
+    def getInputGen():
+        while True:
+            labelSeq = [ random.choice(labels) for i in range(randint(0, 10)) ]
+            yield labelSeq
+    return dist, getInputGen()
 
 def iidLogProb(dist, training):
     logProb = 0.0
@@ -716,6 +908,24 @@ class TestDist(unittest.TestCase):
     # FIXME : add more tests for shared dists
 
     # FIXME : add AutoregressiveSequenceDist test
+
+    # FIXME : why is this _so_ slow? (should increase numDists or numPoints if possible)
+    def test_AutoregressiveNetDist(self, eps = 1e-8, numDists = 20, numPoints = 5):
+        def checkAdditional(dist, input, outSeq, eps):
+            # check result of getTimedNet is topologically sorted
+            timedNet = dist.getTimedNet(input, outSeq)
+            assert wnet.netIsTopSorted(timedNet, wnet.nodeSetCompute(timedNet, accessibleOnly = False), deltaTime = lambda label: 0)
+        for distIndex in range(numDists):
+            depth = randint(0, 5)
+            if randBool():
+                dist, inputGen = gen_constant_AutoregressiveNetDist(depth = depth)
+            else:
+                dist, inputGen = gen_inSeq_AutoregressiveNetDist(depth = depth)
+            # (FIXME : add logProbDerivOutputCheck once implemented)
+            checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, checkAdditional = checkAdditional)
+            if self.deepTest:
+                check_est(dist, getTrainEM(dist), inputGen, hasParams = True)
+                check_est(dist, getTrainCG(dist), inputGen, hasParams = True)
 
 class DeepTestDist(TestDist):
     def setUp(self):

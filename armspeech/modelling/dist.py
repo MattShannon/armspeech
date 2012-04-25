@@ -11,6 +11,9 @@ from __future__ import division
 from armspeech.util.mathhelp import logSum, sigmoid, sampleDiscrete
 import nodetree
 import transform as xf
+import semiring
+import wnet
+from armspeech.util.memoize import memoize
 from armspeech.util.timing import timed
 
 import math
@@ -1279,6 +1282,62 @@ class AutoregressiveSequenceAcc(Acc):
         dist, logLike, occ = estimateChild(self.acc)
         return AutoregressiveSequenceDist(self.depth, dist, tag = self.tag), logLike, occ
 
+class AutoregressiveNetAcc(Acc):
+    def __init__(self, distPrev, durAcc, acAcc, tag = None):
+        self.distPrev = distPrev
+        self.durAcc = durAcc
+        self.acAcc = acAcc
+        self.tag = tag
+
+        self.occ = 0.0
+        self.entropy = 0.0
+
+    def children(self):
+        return [self.durAcc, self.acAcc]
+
+    @property
+    def occFrames(self):
+        return self.acAcc.occ
+
+    def add(self, input, outSeq, occ = 1.0):
+        self.occ += occ
+        timedNet = self.distPrev.getTimedNet(input, outSeq)
+        labelToWeight = self.distPrev.getLabelToWeight(outSeq)
+        totalLogProb, edgeGen = wnet.forwardBackward(timedNet, labelToWeight = labelToWeight, divisionRing = self.distPrev.ring, getAgenda = self.distPrev.getAgenda)
+        entropy = totalLogProb * occ
+        for (label, labelStartTime, labelEndTime), logOcc in edgeGen:
+            labelOcc = math.exp(logOcc) * occ
+            if label is not None:
+                entropy -= labelToWeight((label, labelStartTime, labelEndTime)) * labelOcc
+
+                acInput = outSeq[max(labelStartTime - self.distPrev.depth, 0):labelStartTime]
+                if not label[0]:
+                    _, phInput, phOutput = label
+                    self.durAcc.add((phInput, acInput), phOutput, labelOcc)
+                else:
+                    _, phInput = label
+                    assert labelEndTime == labelStartTime + 1
+                    acOutput = outSeq[labelStartTime]
+                    self.acAcc.add((phInput, acInput), acOutput, labelOcc)
+        self.entropy += entropy
+
+    # N.B. assumes distPrev is the same for self and acc (not checked).
+    def addAccSingle(self, acc):
+        self.occ += acc.occ
+        self.entropy += acc.entropy
+
+    def logLikeSingle(self):
+        return self.entropy
+
+    def derivParamsSingle(self):
+        return []
+
+    def estimate(self, estimateChild):
+        durDist, logLikeDur, occDur = estimateChild(self.durAcc)
+        acDist, logLikeAc, occAc = estimateChild(self.acAcc)
+        logLike = logLikeDur + logLikeAc + self.entropy
+        return AutoregressiveNetDist(self.distPrev.depth, self.distPrev.netFor, durDist, acDist, tag = self.tag), logLike, self.occ
+
 
 class Dist(object):
     """Conditional probability distribution."""
@@ -2351,3 +2410,158 @@ class AutoregressiveSequenceDist(Dist):
     def parseChildren(self, params, parseChild):
         dist, paramsLeft = parseChild(self.dist, params)
         return AutoregressiveSequenceDist(self.depth, dist, tag = self.tag), paramsLeft
+
+class AutoregressiveNetDist(Dist):
+    """An autoregressive distribution over sequences.
+
+    The generative model is that for each input we have a net, and we jump
+    forwards through this net probabilistically, generating acoustic output at
+    the emitting nodes. The conditional probability of a given transition in the
+    net is specified by durDist and the conditional probability of a given
+    emission is specified by acDist. Each transition and each emission are
+    allowed to be conditioned on the previous emissions up to a given depth. We
+    stop emitting when we reach the end node of the net. This whole process is
+    therefore a generative model which takes some input and produces a finite
+    acoustic output sequence outSeq, where outSeq[t] is the acoustic output at
+    "time" t.
+
+    netFor is a function which takes some input and returns a net. The form of
+    input is arbitrary, and is only passed to netFor. The emitting nodes of this
+    net should be labelled by phonetic context, and the non-None edges should be
+    labelled by (phonetic context, phonetic output) pairs. Here phonetic context
+    and phonetic output are arbitrary user-specified data. durDist should have a
+    (phonetic context, acoustic context) pair as input and a phonetic output as
+    output. acDist should have a (phonetic context, acoustic context) pair as
+    input and an acoustic output as output. Here the acoustic context at time t
+    is defined as outSeq[max(t - depth, 0):t]. The net returned by netFor should
+    contain no non-emitting cycles.
+
+    This class internally expands the net specified by netFor, adding acoustic
+    context as appropriate, to form a new "unrolled" net. Each transition in the
+    original net has conditional log probability specified by durDist.logProb
+    and each emission in the original net has conditional log probability
+    specified by acDist.logProb. The conditional log probability of edges with
+    label None is fixed at 0.0. As a consistency condition, for any node in the
+    original net and for any acoustic context the sum of the probabilities of
+    all edges leaving that node forwards must be 1.0. (During synthesis, this
+    condition is checked for all nodes along the chosen path). The easiest and
+    most natural way to satisfy this condition is as follows -- for each node
+    with non-None edges leaving it, use the same phonetic context for all these
+    edges, and have the phonetic output for the different edges correspond
+    (bijectively) to the set of possible outputs given by durDist. For example,
+    if durDist for a given phonetic context (and for any acoustic context) is a
+    distribution over [0, 1] and we wish to use this phonetic context for a
+    given node, then there should be two edges leaving this node, one with
+    phonetic output 0 and one with phonetic output 1, and both with the given
+    phonetic context.
+    """
+    def __init__(self, depth, netFor, durDist, acDist, tag = None):
+        self.depth = depth
+        self.netFor = netFor
+        self.durDist = durDist
+        self.acDist = acDist
+        self.tag = tag
+
+        self.ring = semiring.logRealsField
+
+    def __repr__(self):
+        return 'AutoregressiveNetDist('+repr(self.depth)+', '+repr(self.netFor)+', '+repr(self.durDist)+', '+repr(self.acDist)+', tag = '+repr(self.tag)+')'
+
+    def children(self):
+        return [self.durDist, self.acDist]
+
+    def mapChildren(self, mapChild):
+        return AutoregressiveNetDist(self.depth, self.netFor, mapChild(self.durDist), mapChild(self.acDist), tag = self.tag)
+
+    def getTimedNet(self, input, outSeq):
+        net0 = self.netFor(input)
+        net1 = wnet.MappedLabelNet(lambda (phInput, phOutput): (False, phInput, phOutput), net0)
+        net2 = wnet.FlatMappedNet(lambda phInput: wnet.TrivialNet((True, phInput)), net1)
+        def deltaTime(label):
+            return 0 if label is None or not label[0] else 1
+        net = wnet.concretizeNetTopSort(net2, deltaTime)
+        timedNet = wnet.UnrolledNet(net, startTime = 0, endTime = len(outSeq), deltaTime = deltaTime)
+        return timedNet
+
+    def getLabelToWeight(self, outSeq):
+        def timedLabelToLogProb((label, labelStartTime, labelEndTime)):
+            if label is None:
+                return 0.0
+            else:
+                acInput = outSeq[max(labelStartTime - self.depth, 0):labelStartTime]
+                if not label[0]:
+                    _, phInput, phOutput = label
+                    return self.durDist.logProb((phInput, acInput), phOutput)
+                else:
+                    _, phInput = label
+                    assert labelEndTime == labelStartTime + 1
+                    acOutput = outSeq[labelStartTime]
+                    return self.acDist.logProb((phInput, acInput), acOutput)
+        return memoize(timedLabelToLogProb)
+
+    def getAgenda(self, forwards):
+        def negMap((time, nodeIndex)):
+            return -time, -nodeIndex
+        agenda = wnet.PriorityQueueSumAgenda(self.ring, forwards, negMap = negMap)
+        return agenda
+
+    def logProb(self, input, outSeq):
+        timedNet = self.getTimedNet(input, outSeq)
+        labelToWeight = self.getLabelToWeight(outSeq)
+        totalLogProb = wnet.sum(timedNet, labelToWeight = labelToWeight, ring = self.ring, getAgenda = self.getAgenda)
+        return totalLogProb
+
+    def logProb_frames(self, input, outSeq):
+        return self.logProb(input, outSeq), len(outSeq)
+
+    def logProbDerivOutput(self, input, output):
+        # FIXME : complete
+        notyetimplemented
+
+    def createAcc(self, createAccChild):
+        return AutoregressiveNetAcc(distPrev = self, durAcc = createAccChild(self.durDist), acAcc = createAccChild(self.acDist), tag = self.tag)
+
+    def synth(self, input, method = SynthMethod.Sample, actualOutSeq = None):
+        # (FIXME : align actualOutSeq and pass down to frames below?  (What exactly do I mean?))
+        # (FIXME : can we do anything simple and reasonable with durations for meanish case?)
+        forwards = True
+        net = self.netFor(input)
+        startNode = net.start(forwards)
+        endNode = net.end(forwards)
+        assert net.elem(startNode) is None
+        assert net.elem(endNode) is None
+
+        outSeq = []
+        acInput = []
+        node = startNode
+        while node != endNode:
+            nodedProbs = []
+            for label, nextNode in net.next(node, forwards):
+                if label is None:
+                    nodedProbs.append((nextNode, 1.0))
+                else:
+                    phInput, phOutput = label
+                    logProb = self.durDist.logProb((phInput, acInput), phOutput)
+                    nodedProbs.append((nextNode, math.exp(logProb)))
+            node = sampleDiscrete(nodedProbs)
+            elem = net.elem(node)
+            if elem is not None:
+                phInput = elem
+                acOutput = self.acDist.synth((phInput, acInput), method)
+                outSeq.append(acOutput)
+                time = len(outSeq)
+                acInput = outSeq[max(time - self.depth, 0):time]
+
+        return outSeq
+
+    def paramsSingle(self):
+        return []
+
+    def parseSingle(self, params):
+        return self, params
+
+    def parseChildren(self, params, parseChild):
+        paramsLeft = params
+        durDist, paramsLeft = parseChild(self.durDist, paramsLeft)
+        acDist, paramsLeft = parseChild(self.acDist, paramsLeft)
+        return AutoregressiveNetDist(self.depth, self.netFor, durDist, acDist, tag = self.tag), paramsLeft
