@@ -46,6 +46,20 @@ class MappedElemNet(Net):
     def next(self, node, forwards):
         return self.net.next(node, forwards)
 
+class MappedLabelNet(Net):
+    """Applies a function to each non-None label in a net."""
+    def __init__(self, fn, net):
+        self.fn = fn
+        self.net = net
+
+        basicChecks(self)
+    def start(self, forwards):
+        return self.net.start(forwards)
+    def elem(self, node):
+        return self.net.elem(node)
+    def next(self, node, forwards):
+        return [ (None if label is None else self.fn(label), nextNode) for label, nextNode in self.net.next(node, forwards) ]
+
 class FlatMappedNet(Net):
     """Lazy flat-mapped net.
 
