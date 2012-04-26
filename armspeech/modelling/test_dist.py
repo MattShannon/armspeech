@@ -202,21 +202,21 @@ def gen_nestedTransformDist(dimInputs = [3, 4, 2]):
     assert len(dimInputs) >= 1
     dimIn = dimInputs[-1]
     dist = gen_LinearGaussian(dimIn)[0]
-    if randint(0, 2) == 0:
+    if randBool():
         outputTransform = test_transform.gen_genericOutputTransform([dimIn], [])
-        if randint(0, 2) == 0:
+        if randBool():
             dist = d.MappedOutputDist(outputTransform, dist)
         else:
             dist = d.TransformedOutputDist(outputTransform, dist)
     for dimIn, dimOut in reversed(zip(dimInputs, dimInputs[1:])):
         transform = test_transform.gen_genericTransform([dimIn], [dimOut])
-        if randint(0, 2) == 0:
+        if randBool():
             dist = d.MappedInputDist(transform, dist)
         else:
             dist = d.TransformedInputDist(transform, dist)
-        if randint(0, 2) == 0:
+        if randBool():
             outputTransform = test_transform.gen_genericOutputTransform([dimIn], [])
-            if randint(0, 2) == 0:
+            if randBool():
                 dist = d.MappedOutputDist(outputTransform, dist)
             else:
                 dist = d.TransformedOutputDist(outputTransform, dist)
@@ -830,7 +830,7 @@ class TestDist(unittest.TestCase):
     def test_MappedInputDist(self, eps = 1e-8, numDists = 20, numPoints = 100):
         for distIndex in range(numDists):
             dimIn = randint(0, 5)
-            if randint(0, 2) == 0:
+            if randBool():
                 dimOut = dimIn
             else:
                 dimOut = randint(0, 5)
@@ -854,7 +854,7 @@ class TestDist(unittest.TestCase):
     def test_TransformedInputDist(self, eps = 1e-8, numDists = 10, numPoints = 100):
         for distIndex in range(numDists):
             dimIn = randint(0, 5)
-            if randint(0, 2) == 0:
+            if randBool():
                 dimOut = dimIn
             else:
                 dimOut = randint(0, 5)

@@ -20,6 +20,9 @@ from numpy.random import randn, randint
 
 # FIXME : add explicit tests for transform_acc
 
+def randBool():
+    return randint(0, 2) == 0
+
 def randTag():
     return 'tag'+str(randint(0, 1000000))
 
@@ -54,7 +57,7 @@ def gen_genericInvertibleTransform(shape):
     else:
         # FIXME : below transforms are either linear or decompose across dimensions.
         #   Replace with something nastier? (Would provide a better test.)
-        if randint(0, 2) == 0:
+        if randBool():
             return gen_InvertibleLinearTransform(shape = shape)
         else:
             return xf.VectorizeTransform(gen_genericInvertibleTransform1D()).withTag(randTag())
@@ -235,7 +238,7 @@ class TestTransform(unittest.TestCase):
     def test_FrozenTransform(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         for it in range(its):
             shapeIn = shapeRand()
-            if randint(0, 2) == 0:
+            if randBool():
                 shapeOut = shapeIn
             else:
                 shapeOut = shapeRand()
@@ -304,7 +307,7 @@ def gen_genericOutputTransform(shapeInput, shapeOutput):
     return gen_ShiftOutputTransform(shapeInput = shapeInput, shapeOutput = shapeOutput)
 def gen_SimpleOutputTransform(shapeInput, shapeOutput):
     axf = gen_genericInvertibleTransform(shape = shapeOutput)
-    checkDerivPositive1D = (len(shapeOutput) == 0 and randint(0, 2) == 0)
+    checkDerivPositive1D = (len(shapeOutput) == 0 and randBool())
     return xf.SimpleOutputTransform(axf, checkDerivPositive1D = checkDerivPositive1D).withTag(randTag())
 def gen_ShiftOutputTransform(shapeInput, shapeOutput):
     axf = gen_genericTransform(shapeIn = shapeInput, shapeOut = shapeOutput)
@@ -373,7 +376,7 @@ class TestOutputTransform(unittest.TestCase):
             assert_allclose(outputTransform(input, x), x + outputTransform.shift(input))
         for it in range(its):
             shapeInput = shapeRand()
-            if randint(0, 2) == 0:
+            if randBool():
                 shapeOutput = shapeInput
             else:
                 shapeOutput = shapeRand()
