@@ -15,6 +15,7 @@ import semiring
 import wnet
 from armspeech.util.memoize import memoize
 from armspeech.util.timing import timed
+from armspeech.util.mathhelp import assert_allclose
 
 import math
 import numpy as np
@@ -34,10 +35,6 @@ from collections import deque, defaultdict
 # FIXME : occ doesn't cope with sharing
 
 # FIXME : make estimate return just the dist (seems philosophically better)
-
-def assert_allclose(actual, desired, rtol = 1e-7, atol = 1e-14, msg = 'items not almost equal'):
-    if np.shape(actual) != np.shape(desired) or not np.allclose(actual, desired, rtol, atol):
-        raise AssertionError(msg+'\n ACTUAL:  '+repr(actual)+'\n DESIRED: '+repr(desired))
 
 class SynthMethod(object):
     Meanish = 0

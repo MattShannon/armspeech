@@ -16,6 +16,7 @@ import transform as xf
 import wnet
 from armspeech.util.mathhelp import logSum
 from armspeech.util.iterhelp import chunkList
+from armspeech.util.mathhelp import assert_allclose
 
 import test_dist_questions
 import test_transform
@@ -38,10 +39,6 @@ def logProb_frames(dist, trainData):
         lp += dist.logProb(input, output)
         frames += 1
     return lp, frames
-
-def assert_allclose(actual, desired, rtol = 1e-7, atol = 1e-14, msg = 'items not almost equal'):
-    if np.shape(actual) != np.shape(desired) or not np.allclose(actual, desired, rtol, atol):
-        raise AssertionError(msg+'\n ACTUAL:  '+repr(actual)+'\n DESIRED: '+repr(desired))
 
 def randBool():
     return randint(0, 2) == 0

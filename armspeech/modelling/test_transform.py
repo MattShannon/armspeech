@@ -10,6 +10,7 @@ from __future__ import division
 
 import transform as xf
 from armspeech.util.mathhelp import logDet
+from armspeech.util.mathhelp import assert_allclose
 
 import unittest
 import math
@@ -18,10 +19,6 @@ import numpy as np
 from numpy.random import randn, randint
 
 # FIXME : add explicit tests for transform_acc
-
-def assert_allclose(actual, desired, rtol = 1e-7, atol = 1e-14, msg = 'items not almost equal'):
-    if np.shape(actual) != np.shape(desired) or not np.allclose(actual, desired, rtol, atol):
-        raise AssertionError(msg+'\n ACTUAL:  '+repr(actual)+'\n DESIRED: '+repr(desired))
 
 def randTag():
     return 'tag'+str(randint(0, 1000000))

@@ -12,6 +12,10 @@ import numpy as np
 import math
 import random
 
+def assert_allclose(actual, desired, rtol = 1e-7, atol = 1e-14, msg = 'items not almost equal'):
+    if np.shape(actual) != np.shape(desired) or not np.allclose(actual, desired, rtol, atol):
+        raise AssertionError(msg+'\n ACTUAL:  '+repr(actual)+'\n DESIRED: '+repr(desired))
+
 def logAdd(a, b):
     """Computes log(exp(a) + exp(b)) in a way that avoids underflow."""
     k = max(a, b)

@@ -9,15 +9,12 @@
 from __future__ import division
 
 import mathhelp
+from armspeech.util.mathhelp import assert_allclose
 
 import unittest
 import numpy as np
 import numpy.linalg as la
 from numpy.random import randn, randint
-
-def assert_allclose(actual, desired, rtol = 1e-7, atol = 1e-14, msg = 'items not almost equal'):
-    if np.shape(actual) != np.shape(desired) or not np.allclose(actual, desired, rtol, atol):
-        raise AssertionError(msg+'\n ACTUAL:  '+repr(actual)+'\n DESIRED: '+repr(desired))
 
 def randLogProb():
     if randint(0, 3) == 0:
