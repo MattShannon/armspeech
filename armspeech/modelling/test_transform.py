@@ -148,7 +148,7 @@ def computeLogJac(transform, x):
         return logDet(deriv)
     else:
         raise RuntimeError('log-Jacobian computation not implemented for output of rank >= 2')
-def check_logJac(transform, x, eps):
+def check_logJac(transform, x):
     numericLJ = computeLogJac(transform, x)
     analyticLJ = transform.logJac(x)
     assert np.shape(analyticLJ) == ()
@@ -199,7 +199,7 @@ def checkTransform(transform, shapeIn, invertible, hasParams, is1D, eps, its, ch
         if hasParams and is1D:
             check_derivParamsDeriv(transform, x, eps)
         if invertible:
-            check_logJac(transform, x, eps)
+            check_logJac(transform, x)
         if invertible:
             check_logJacDeriv(transform, x, eps)
         if hasParams and invertible:
@@ -349,7 +349,7 @@ def checkOutputTransform(outputTransform, shapeInput, shapeOutput, hasParams, ep
         if hasParams:
             check_derivParams(transform, x, eps)
         if True:
-            check_logJac(transform, x, eps)
+            check_logJac(transform, x)
         if True:
             check_logJacDeriv(transform, x, eps)
         if hasParams:
