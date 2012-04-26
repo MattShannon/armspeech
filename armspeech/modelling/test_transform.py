@@ -117,28 +117,28 @@ def gen_SumOfTanh1D(numTanh = 3):
     return xf.SumTransform1D([ gen_TanhTransform1D() if i > 0 else xf.IdentityTransform() for i in range(numTanh + 1) ]).withTag(randTag())
 
 def check_deriv(transform, x, eps):
-    delta = randn(*np.shape(x)) * eps
-    numericDelta = transform(x + delta) - transform(x)
-    analyticDelta = np.dot(delta, transform.deriv(x))
-    assert_allclose(numericDelta, analyticDelta, rtol = 1e-4)
+    direction = randn(*np.shape(x))
+    numericDeriv = (transform(x + direction * eps) - transform(x)) / eps
+    analyticDeriv = np.dot(direction, transform.deriv(x))
+    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 def check_derivDeriv(transform, x, eps):
     assert np.shape(x) == ()
-    delta = randn() * eps
-    numericDelta = transform.deriv(x + delta) - transform.deriv(x)
-    analyticDelta = np.dot(delta, transform.derivDeriv(x))
-    assert_allclose(numericDelta, analyticDelta, rtol = 1e-4)
+    direction = randn()
+    numericDeriv = (transform.deriv(x + direction * eps) - transform.deriv(x)) / eps
+    analyticDeriv = np.dot(direction, transform.derivDeriv(x))
+    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 def check_derivParams(transform, x, eps):
     params = transform.params
-    paramsDelta = randn(*np.shape(params)) * eps
-    numericDelta = transform.parseAll(params + paramsDelta)(x) - transform(x)
-    analyticDelta = np.dot(paramsDelta, transform.derivParams(x))
-    assert_allclose(numericDelta, analyticDelta, rtol = 1e-4)
+    paramsDirection = randn(*np.shape(params))
+    numericDeriv = (transform.parseAll(params + paramsDirection * eps)(x) - transform(x)) / eps
+    analyticDeriv = np.dot(paramsDirection, transform.derivParams(x))
+    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 def check_derivParamsDeriv(transform, x, eps):
     assert np.shape(x) == ()
-    delta = randn() * eps
-    numericDelta = transform.derivParams(x + delta) - transform.derivParams(x)
-    analyticDelta = np.dot(delta, transform.derivParamsDeriv(x))
-    assert_allclose(numericDelta, analyticDelta, rtol = 1e-4)
+    direction = randn()
+    numericDeriv = (transform.derivParams(x + direction * eps) - transform.derivParams(x)) / eps
+    analyticDeriv = np.dot(direction, transform.derivParamsDeriv(x))
+    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 def computeLogJac(transform, x):
     shapeOut = np.shape(x)
     deriv = transform.deriv(x)
@@ -154,16 +154,16 @@ def check_logJac(transform, x, eps):
     assert np.shape(analyticLJ) == ()
     assert_allclose(numericLJ, analyticLJ, atol = 1e-10)
 def check_logJacDeriv(transform, x, eps):
-    delta = randn(*np.shape(x)) * eps
-    numericDelta = transform.logJac(x + delta) - transform.logJac(x)
-    analyticDelta = np.dot(delta, transform.logJacDeriv(x))
-    assert_allclose(numericDelta, analyticDelta, atol = 1e-10, rtol = 1e-4)
+    direction = randn(*np.shape(x))
+    numericDeriv = (transform.logJac(x + direction * eps) - transform.logJac(x)) / eps
+    analyticDeriv = np.dot(direction, transform.logJacDeriv(x))
+    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-2, rtol = 1e-4)
 def check_logJacDerivParams(transform, x, eps):
     params = transform.params
-    paramsDelta = randn(*np.shape(params)) * eps
-    numericDeltaLJ = transform.parseAll(params + paramsDelta).logJac(x) - transform.logJac(x)
-    analyticDeltaLJ = np.dot(transform.logJacDerivParams(x), paramsDelta)
-    assert_allclose(numericDeltaLJ, analyticDeltaLJ, atol = 1e-10, rtol = 1e-4)
+    paramsDirection = randn(*np.shape(params))
+    numericDerivLJ = (transform.parseAll(params + paramsDirection * eps).logJac(x) - transform.logJac(x)) / eps
+    analyticDerivLJ = np.dot(transform.logJacDerivParams(x), paramsDirection)
+    assert_allclose(numericDerivLJ, analyticDerivLJ, atol = 1e-2, rtol = 1e-4)
 def check_inv(transform, x, y):
     """(N.B. x and y not supposed to correspond to each other)"""
     xAgain = transform.inv(transform(x))
@@ -314,15 +314,15 @@ def gen_ShiftOutputTransform(shapeInput, shapeOutput):
     return xf.ShiftOutputTransform(axf).withTag(randTag())
 
 def check_derivInput(outputTransform, input, x, eps):
-    delta = randn(*np.shape(input)) * eps
-    numericDelta = outputTransform(input + delta, x) - outputTransform(input, x)
-    analyticDelta = np.dot(delta, outputTransform.derivInput(input, x))
-    assert_allclose(numericDelta, analyticDelta, rtol = 1e-4)
+    direction = randn(*np.shape(input))
+    numericDeriv = (outputTransform(input + direction * eps, x) - outputTransform(input, x)) / eps
+    analyticDeriv = np.dot(direction, outputTransform.derivInput(input, x))
+    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 def check_logJacDerivInput(outputTransform, input, x, eps):
-    delta = randn(*np.shape(input)) * eps
-    numericDelta = outputTransform.logJac(input + delta, x) - outputTransform.logJac(input, x)
-    analyticDelta = np.dot(delta, outputTransform.logJacDerivInput(input, x))
-    assert_allclose(numericDelta, analyticDelta, atol = 1e-10, rtol = 1e-4)
+    direction = randn(*np.shape(input))
+    numericDeriv = (outputTransform.logJac(input + direction * eps, x) - outputTransform.logJac(input, x)) / eps
+    analyticDeriv = np.dot(direction, outputTransform.logJacDerivInput(input, x))
+    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-2, rtol = 1e-4)
 
 def checkOutputTransform(outputTransform, shapeInput, shapeOutput, hasParams, eps, its, checkAdditional = None):
     outputTransformEvaled = xf.eval_local(repr(outputTransform))

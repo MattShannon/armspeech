@@ -453,16 +453,16 @@ def reparse(dist, ps):
     return distParsed
 
 def check_logProbDerivInput(dist, input, output, eps):
-    inputDelta = randn(*np.shape(input)) * eps
-    numericDelta = dist.logProb(input + inputDelta, output) - dist.logProb(input, output)
-    analyticDelta = np.dot(inputDelta, dist.logProbDerivInput(input, output))
-    assert_allclose(numericDelta, analyticDelta, atol = 1e-10, rtol = 1e-4)
+    inputDirection = randn(*np.shape(input))
+    numericDeriv = (dist.logProb(input + inputDirection * eps, output) - dist.logProb(input, output)) / eps
+    analyticDeriv = np.dot(inputDirection, dist.logProbDerivInput(input, output))
+    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-2, rtol = 1e-4)
 
 def check_logProbDerivOutput(dist, input, output, eps):
-    outputDelta = randn(*np.shape(output)) * eps
-    numericDelta = dist.logProb(input, output + outputDelta) - dist.logProb(input, output)
-    analyticDelta = np.dot(outputDelta, dist.logProbDerivOutput(input, output))
-    assert_allclose(numericDelta, analyticDelta, atol = 1e-10, rtol = 1e-4)
+    outputDirection = randn(*np.shape(output))
+    numericDeriv = (dist.logProb(input, output + outputDirection * eps) - dist.logProb(input, output)) / eps
+    analyticDeriv = np.dot(outputDirection, dist.logProbDerivOutput(input, output))
+    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-2, rtol = 1e-4)
 
 def check_addAcc(dist, trainingAll, ps):
     accAll = trainedAccG(dist, trainingAll, ps = ps)
@@ -494,14 +494,14 @@ def check_derivParams(dist, training, ps, eps):
     acc = trainedAccG(dist, training, ps = ps)
     logLike = acc.logLike()
     derivParams = ps.derivParams(acc)
-    paramsDelta = randn(*np.shape(params)) * eps
-    distNew = ps.parseAll(dist, params + paramsDelta)
+    paramsDirection = randn(*np.shape(params))
+    distNew = ps.parseAll(dist, params + paramsDirection * eps)
     logLikeNew = trainedAccG(distNew, training, ps = ps).logLike()
-    assert_allclose(ps.params(distNew), params + paramsDelta)
+    assert_allclose(ps.params(distNew), params + paramsDirection * eps)
 
-    numericDelta = logLikeNew - logLike
-    analyticDelta = np.dot(derivParams, paramsDelta)
-    assert_allclose(numericDelta, analyticDelta, atol = 1e-10, rtol = 1e-4)
+    numericDeriv = (logLikeNew - logLike) / eps
+    analyticDeriv = np.dot(derivParams, paramsDirection)
+    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-2, rtol = 1e-4)
 
 def getTrainEM(initEstDist, maxIterations = None, verbosity = 0):
     def doTrainEM(training):
