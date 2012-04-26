@@ -456,13 +456,13 @@ def check_logProbDerivInput(dist, input, output, eps):
     inputDirection = randn(*np.shape(input))
     numericDeriv = (dist.logProb(input + inputDirection * eps, output) - dist.logProb(input, output)) / eps
     analyticDeriv = np.dot(inputDirection, dist.logProbDerivInput(input, output))
-    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-2, rtol = 1e-4)
+    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 
 def check_logProbDerivOutput(dist, input, output, eps):
     outputDirection = randn(*np.shape(output))
     numericDeriv = (dist.logProb(input, output + outputDirection * eps) - dist.logProb(input, output)) / eps
     analyticDeriv = np.dot(outputDirection, dist.logProbDerivOutput(input, output))
-    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-2, rtol = 1e-4)
+    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 
 def check_addAcc(dist, trainingAll, ps):
     accAll = trainedAccG(dist, trainingAll, ps = ps)
@@ -501,7 +501,7 @@ def check_derivParams(dist, training, ps, eps):
 
     numericDeriv = (logLikeNew - logLike) / eps
     analyticDeriv = np.dot(derivParams, paramsDirection)
-    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-2, rtol = 1e-4)
+    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-4, rtol = 1e-4)
 
 def getTrainEM(initEstDist, maxIterations = None, verbosity = 0):
     def doTrainEM(training):

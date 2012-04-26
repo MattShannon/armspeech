@@ -157,13 +157,13 @@ def check_logJacDeriv(transform, x, eps):
     direction = randn(*np.shape(x))
     numericDeriv = (transform.logJac(x + direction * eps) - transform.logJac(x)) / eps
     analyticDeriv = np.dot(direction, transform.logJacDeriv(x))
-    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-2, rtol = 1e-4)
+    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-5, rtol = 1e-4)
 def check_logJacDerivParams(transform, x, eps):
     params = transform.params
     paramsDirection = randn(*np.shape(params))
     numericDerivLJ = (transform.parseAll(params + paramsDirection * eps).logJac(x) - transform.logJac(x)) / eps
     analyticDerivLJ = np.dot(transform.logJacDerivParams(x), paramsDirection)
-    assert_allclose(numericDerivLJ, analyticDerivLJ, atol = 1e-2, rtol = 1e-4)
+    assert_allclose(numericDerivLJ, analyticDerivLJ, atol = 1e-6, rtol = 1e-4)
 def check_inv(transform, x, y):
     """(N.B. x and y not supposed to correspond to each other)"""
     xAgain = transform.inv(transform(x))
@@ -322,7 +322,7 @@ def check_logJacDerivInput(outputTransform, input, x, eps):
     direction = randn(*np.shape(input))
     numericDeriv = (outputTransform.logJac(input + direction * eps, x) - outputTransform.logJac(input, x)) / eps
     analyticDeriv = np.dot(direction, outputTransform.logJacDerivInput(input, x))
-    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-2, rtol = 1e-4)
+    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 
 def checkOutputTransform(outputTransform, shapeInput, shapeOutput, hasParams, eps, its, checkAdditional = None):
     outputTransformEvaled = xf.eval_local(repr(outputTransform))
