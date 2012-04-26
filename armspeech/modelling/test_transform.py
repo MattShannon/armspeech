@@ -152,18 +152,18 @@ def check_logJac(transform, x, eps):
     numericLJ = computeLogJac(transform, x)
     analyticLJ = transform.logJac(x)
     assert np.shape(analyticLJ) == ()
-    assert_allclose(numericLJ, analyticLJ)
+    assert_allclose(numericLJ, analyticLJ, atol = 1e-10)
 def check_logJacDeriv(transform, x, eps):
     delta = randn(*np.shape(x)) * eps
     numericDelta = transform.logJac(x + delta) - transform.logJac(x)
     analyticDelta = np.dot(delta, transform.logJacDeriv(x))
-    assert_allclose(numericDelta, analyticDelta, rtol = 1e-4)
+    assert_allclose(numericDelta, analyticDelta, atol = 1e-10, rtol = 1e-4)
 def check_logJacDerivParams(transform, x, eps):
     params = transform.params
     paramsDelta = randn(*np.shape(params)) * eps
     numericDeltaLJ = transform.parseAll(params + paramsDelta).logJac(x) - transform.logJac(x)
     analyticDeltaLJ = np.dot(transform.logJacDerivParams(x), paramsDelta)
-    assert_allclose(numericDeltaLJ, analyticDeltaLJ, rtol = 1e-4)
+    assert_allclose(numericDeltaLJ, analyticDeltaLJ, atol = 1e-10, rtol = 1e-4)
 def check_inv(transform, x, y):
     """(N.B. x and y not supposed to correspond to each other)"""
     xAgain = transform.inv(transform(x))
@@ -322,7 +322,7 @@ def check_logJacDerivInput(outputTransform, input, x, eps):
     delta = randn(*np.shape(input)) * eps
     numericDelta = outputTransform.logJac(input + delta, x) - outputTransform.logJac(input, x)
     analyticDelta = np.dot(delta, outputTransform.logJacDerivInput(input, x))
-    assert_allclose(numericDelta, analyticDelta, rtol = 1e-4)
+    assert_allclose(numericDelta, analyticDelta, atol = 1e-10, rtol = 1e-4)
 
 def checkOutputTransform(outputTransform, shapeInput, shapeOutput, hasParams, eps, its, checkAdditional = None):
     outputTransformEvaled = xf.eval_local(repr(outputTransform))
