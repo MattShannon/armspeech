@@ -27,18 +27,22 @@ class ContextualVectorSummarizer(object):
         return context, summary
 
 class VectorSeqSummarizer(object):
-    def __init__(self, order, depths):
+    def __init__(self, order, depths, strictAboutDepth = True):
         self.order = order
         self.depths = depths
+        self.strictAboutDepth = strictAboutDepth
 
     def __repr__(self):
         return 'VectorSeqSummarizer('+repr(self.order)+', '+repr(self.depths)+')'
 
     def __call__(self, input, partialOutput, outIndex):
         depth = self.depths[outIndex]
-        summary = map(lambda v: v[outIndex], input[-depth:] if depth > 0 else [])
-        if len(summary) != depth:
-            raise RuntimeError('input to summarize has incorrect depth (should be '+repr(depth)+' not '+repr(len(summary))+'): '+repr(input))
+        assert depth >= 0
+        if self.strictAboutDepth and len(input) < depth:
+            raise RuntimeError('input to summarize is too short (length of input '+str(len(input))+' < specified depth '+str(depth)+')')
+        startSummaryIndex = max(len(input) - depth, 0)
+        endSummaryIndex = len(input)
+        summary = [ v[outIndex] for v in input[startSummaryIndex:endSummaryIndex] ]
         return summary
 
     def createDist(self, contextual, createDistForIndex):
