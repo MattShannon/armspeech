@@ -1317,8 +1317,7 @@ class AutoregressiveNetAcc(Acc):
         if self.verbosity >= 2:
             print 'fb: utt (%s frames)' % len(outSeq)
         self.occ += occ
-        timedNet = self.distPrev.getTimedNet(input, outSeq)
-        labelToWeight = self.distPrev.getLabelToWeight(outSeq)
+        timedNet, labelToWeight = self.distPrev.getTimedNet(input, outSeq)
         totalLogProb, edgeGen = wnet.forwardBackwardAlt(timedNet, labelToWeight = labelToWeight, divisionRing = self.distPrev.ring, getAgenda = self.distPrev.getAgenda)
         entropy = totalLogProb * occ
         accedEdges = 0
@@ -2498,15 +2497,20 @@ class AutoregressiveNetDist(Dist):
     def mapChildren(self, mapChild):
         return AutoregressiveNetDist(self.depth, self.netFor, mapChild(self.durDist), mapChild(self.acDist), self.pruneSpec, tag = self.tag)
 
-    def getTimedNet(self, input, outSeq):
+    def getNet(self, input):
         net0 = self.netFor(input)
         net1 = wnet.MappedLabelNet(lambda (phInput, phOutput): (False, phInput, phOutput), net0)
         net2 = wnet.FlatMappedNet(lambda phInput: wnet.TrivialNet((True, phInput)), net1)
         def deltaTime(label):
             return 0 if label is None or not label[0] else 1
         net = wnet.concretizeNetTopSort(net2, deltaTime)
+        return net, deltaTime
+
+    def getTimedNet(self, input, outSeq):
+        net, deltaTime = self.getNet(input)
         timedNet = wnet.UnrolledNet(net, startTime = 0, endTime = len(outSeq), deltaTime = deltaTime)
-        return timedNet
+        labelToWeight = self.getLabelToWeight(outSeq)
+        return timedNet, labelToWeight
 
     def getLabelToWeight(self, outSeq):
         def timedLabelToLogProb((label, labelStartTime, labelEndTime)):
@@ -2535,8 +2539,7 @@ class AutoregressiveNetDist(Dist):
         return agenda
 
     def logProb(self, input, outSeq):
-        timedNet = self.getTimedNet(input, outSeq)
-        labelToWeight = self.getLabelToWeight(outSeq)
+        timedNet, labelToWeight = self.getTimedNet(input, outSeq)
         totalLogProb = wnet.sum(timedNet, labelToWeight = labelToWeight, ring = self.ring, getAgenda = self.getAgenda)
         return totalLogProb
 
