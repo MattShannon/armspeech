@@ -12,6 +12,8 @@ import numpy as np
 import math
 import random
 
+negInf = float('-inf')
+
 def assert_allclose(actual, desired, rtol = 1e-7, atol = 1e-14, msg = 'items not almost equal'):
     if np.shape(actual) != np.shape(desired) or not np.allclose(actual, desired, rtol, atol):
         absErr = np.abs(actual - desired)
@@ -26,11 +28,11 @@ def assert_allclose(actual, desired, rtol = 1e-7, atol = 1e-14, msg = 'items not
 
 def logAdd(a, b):
     """Computes log(exp(a) + exp(b)) in a way that avoids underflow."""
-    k = max(a, b)
-    if k == float('-inf'):
-        return float('-inf')
+    if a == negInf and b == negInf:
+        # np.logaddexp(negInf, negInf) incorrectly returns nan
+        return negInf
     else:
-        return np.log(math.exp(a - k) + math.exp(b - k)) + k
+        return np.logaddexp(a, b)
 
 def logSum(l):
     """Computes log(sum(exp(l))) in a way that avoids underflow.
@@ -38,13 +40,24 @@ def logSum(l):
     N.B. l should be a sequence type (an iterable), not an iterator.
     """
     if len(l) == 0:
-        return float('-inf')
-    else:
-        k = max(l)
-        if k == float('-inf'):
-            return float('-inf')
+        return negInf
+    elif len(l) == 1:
+        return l[0]
+    elif len(l) == 2:
+        return logAdd(l[0], l[1])
+    elif len(l) < 10:
+        ret = reduce(np.logaddexp, l)
+        if math.isnan(ret):
+            # np.logaddexp(negInf, negInf) incorrectly returns nan
+            pass
         else:
-            return np.log(np.sum(np.exp(np.array(l) - k))) + k
+            return ret
+
+    k = max(l)
+    if k == negInf:
+        return negInf
+    else:
+        return np.log(np.sum(np.exp(np.array(l) - k))) + k
 
 def sigmoid(a):
     if a > 40.0:

@@ -32,7 +32,7 @@ class TestMathHelp(unittest.TestCase):
 
     def test_logSum(self, numPoints = 200):
         for pointIndex in range(numPoints):
-            n = randint(0, 10)
+            n = randint(0, 20)
             l = [ randLogProb() for _ in range(n) ]
             r = mathhelp.logSum(l)
             assert_allclose(np.exp(r), np.sum(np.exp(l)))
