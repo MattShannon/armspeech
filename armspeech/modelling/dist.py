@@ -1559,8 +1559,7 @@ class StudentDist(TermDist):
         elif method == SynthMethod.Sample:
             while True:
                 out = np.random.standard_t(self.df) / math.sqrt(self.precision)
-                # (FIXME : math.isinf ~20x faster but only exists in python >= 2.6)
-                if np.isinf(out):
+                if math.isinf(out):
                     print 'NOTE: redoing sample from t-dist since it was', out
                 else:
                     return out

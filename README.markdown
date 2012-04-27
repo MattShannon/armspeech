@@ -58,15 +58,6 @@ the latter is not intended to be a fully-fledged package suitable for separate
 distribution.
 This may change as the code matures.
 
-While armspeech officially requires python 2.6, it can be made to run with
-python 2.5 with minimal changes.
-You will need the `argparse` module, since this is not part of the standard
-library for python 2.5.
-If you are not in a position to install argparse properly on your system, a
-quick hack is to
-[download argparse](http://code.google.com/p/argparse/downloads/list) and
-copy `argparse.py` into the directory containing this Readme.
-
 
 License
 -------
@@ -77,7 +68,6 @@ Parts of the code in this directory are based on the following software packages
 
 - [GPML toolbox][gpml] v3.0
 - [HTS demo][hts_demo] (STRAIGHT version of the English speaker dependent training demo for HTS 2.1)
-- [Python][python] 2.6.7
 
 
 Bugs
@@ -98,4 +88,3 @@ The author of armspeech is [Matt Shannon](mailto:matt.shannon@cantab.net).
 [straight]: http://www.wakayama-u.ac.jp/~kawahara/STRAIGHTadv/index_e.html
 [arctic]: http://festvox.org/cmu_arctic/
 [gpml]: http://www.gaussianprocess.org/gpml/code/matlab/doc/index.html
-[python]: http://www.python.org/

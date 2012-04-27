@@ -423,8 +423,7 @@ class ScaledSinhTransform1D(Transform1D):
     def derivParamsDeriv(self, x):
         return np.array([2.0 * self.a * math.cosh(self.a * x) + self.a * self.a * x * math.sinh(self.a * x)])
     def inv(self, y):
-        # (FIXME : math.asinh faster but only exists in python >= 2.6)
-        return np.arcsinh(y / self.a) / self.a
+        return math.asinh(y / self.a) / self.a
 
 class TanhTransformLogParam1D(Transform1D):
     def __init__(self, params, tag = None):

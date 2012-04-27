@@ -9,7 +9,7 @@
 from __future__ import division
 
 import re
-from armspeech.util import collectionshelp
+import collections
 
 def readHtkLabFile(labFile, framePeriod, decode = lambda labelString: labelString):
     """Reads HTK-style label file."""
@@ -47,7 +47,7 @@ def getLabelClass(className, labelFormat):
             decodeDict[labelKey] = decode
 
     labelRe = re.compile(r''.join(labelReStrings)+r'$')
-    Label = collectionshelp.namedtuple(className, labelKeys)
+    Label = collections.namedtuple(className, labelKeys)
 
     def parseLabel(labelString):
         match = labelRe.match(labelString)
