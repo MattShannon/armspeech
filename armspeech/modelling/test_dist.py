@@ -361,7 +361,8 @@ def gen_constant_AutoregressiveNetDist(depth = 2):
     )
     def netFor(input):
         return net
-    dist = d.AutoregressiveNetDist(depth, netFor, durDist, acDist).withTag(randTag())
+    pruneSpec = None if randBool() else d.SimplePruneSpec(betaThresh = (None if randBool() else 1000.0), logOccThresh = (None if randBool() else 1000.0))
+    dist = d.AutoregressiveNetDist(depth, netFor, durDist, acDist, pruneSpec).withTag(randTag())
 
     def getInputGen():
         while True:
@@ -400,7 +401,8 @@ def gen_inSeq_AutoregressiveNetDist(depth = 2):
             gen_stable_autoregressive_dist(depth)[0]
         )
     )
-    dist = d.AutoregressiveNetDist(depth, netFor, durDist, acDist).withTag(randTag())
+    pruneSpec = None if randBool() else d.SimplePruneSpec(betaThresh = (None if randBool() else 1000.0), logOccThresh = (None if randBool() else 1000.0))
+    dist = d.AutoregressiveNetDist(depth, netFor, durDist, acDist, pruneSpec).withTag(randTag())
 
     def getInputGen():
         while True:

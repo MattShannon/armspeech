@@ -189,6 +189,15 @@ def parseConcat(dists, params, parseChild):
         distNews.append(distNew)
     return distNews, paramsLeft
 
+class PruneSpec(object):
+    pass
+class SimplePruneSpec(PruneSpec):
+    def __init__(self, betaThresh, logOccThresh):
+        self.betaThresh = betaThresh
+        self.logOccThresh = logOccThresh
+    def __repr__(self):
+        return 'SimplePruneSpec('+repr(self.betaThresh)+', '+repr(self.logOccThresh)+')'
+
 class Memo(object):
     def __init__(self, maxOcc):
         self.maxOcc = maxOcc
@@ -1314,8 +1323,8 @@ class AutoregressiveNetAcc(Acc):
         entropy = totalLogProb * occ
         accedEdges = 0
         for (label, labelStartTime, labelEndTime), logOcc in edgeGen:
-            labelOcc = math.exp(logOcc) * occ
-            if label is not None:
+            if label is not None and (self.distPrev.pruneSpec is None or self.distPrev.pruneSpec.logOccThresh is None or logOcc > -self.distPrev.pruneSpec.logOccThresh):
+                labelOcc = math.exp(logOcc) * occ
                 entropy -= labelToWeight((label, labelStartTime, labelEndTime)) * labelOcc
 
                 acInput = outSeq[max(labelStartTime - self.distPrev.depth, 0):labelStartTime]
@@ -1352,7 +1361,7 @@ class AutoregressiveNetAcc(Acc):
         durDist, logLikeDur, occDur = estimateChild(self.durAcc)
         acDist, logLikeAc, occAc = estimateChild(self.acAcc)
         logLike = logLikeDur + logLikeAc + self.entropy
-        return AutoregressiveNetDist(self.distPrev.depth, self.distPrev.netFor, durDist, acDist, tag = self.tag), logLike, self.occ
+        return AutoregressiveNetDist(self.distPrev.depth, self.distPrev.netFor, durDist, acDist, self.distPrev.pruneSpec, tag = self.tag), logLike, self.occ
 
 
 class Dist(object):
@@ -2470,23 +2479,24 @@ class AutoregressiveNetDist(Dist):
     phonetic output 0 and one with phonetic output 1, and both with the given
     phonetic context.
     """
-    def __init__(self, depth, netFor, durDist, acDist, tag = None):
+    def __init__(self, depth, netFor, durDist, acDist, pruneSpec, tag = None):
         self.depth = depth
         self.netFor = netFor
         self.durDist = durDist
         self.acDist = acDist
+        self.pruneSpec = pruneSpec
         self.tag = tag
 
         self.ring = semiring.logRealsField
 
     def __repr__(self):
-        return 'AutoregressiveNetDist('+repr(self.depth)+', '+repr(self.netFor)+', '+repr(self.durDist)+', '+repr(self.acDist)+', tag = '+repr(self.tag)+')'
+        return 'AutoregressiveNetDist('+repr(self.depth)+', '+repr(self.netFor)+', '+repr(self.durDist)+', '+repr(self.acDist)+', '+repr(self.pruneSpec)+', tag = '+repr(self.tag)+')'
 
     def children(self):
         return [self.durDist, self.acDist]
 
     def mapChildren(self, mapChild):
-        return AutoregressiveNetDist(self.depth, self.netFor, mapChild(self.durDist), mapChild(self.acDist), tag = self.tag)
+        return AutoregressiveNetDist(self.depth, self.netFor, mapChild(self.durDist), mapChild(self.acDist), self.pruneSpec, tag = self.tag)
 
     def getTimedNet(self, input, outSeq):
         net0 = self.netFor(input)
@@ -2517,7 +2527,11 @@ class AutoregressiveNetDist(Dist):
     def getAgenda(self, forwards):
         def negMap((time, nodeIndex)):
             return -time, -nodeIndex
-        agenda = wnet.PriorityQueueSumAgenda(self.ring, forwards, negMap = negMap)
+        def pruneTrigger(nodePrevPop, nodeCurrPop):
+            # compare times
+            return (nodePrevPop[0] != nodeCurrPop[0])
+        pruneThresh = None if self.pruneSpec is None else self.pruneSpec.betaThresh
+        agenda = wnet.PriorityQueueSumAgenda(self.ring, forwards, negMap = negMap, pruneThresh = pruneThresh, pruneTrigger = pruneTrigger)
         return agenda
 
     def logProb(self, input, outSeq):
@@ -2581,4 +2595,4 @@ class AutoregressiveNetDist(Dist):
         paramsLeft = params
         durDist, paramsLeft = parseChild(self.durDist, paramsLeft)
         acDist, paramsLeft = parseChild(self.acDist, paramsLeft)
-        return AutoregressiveNetDist(self.depth, self.netFor, durDist, acDist, tag = self.tag), paramsLeft
+        return AutoregressiveNetDist(self.depth, self.netFor, durDist, acDist, self.pruneSpec, tag = self.tag), paramsLeft
