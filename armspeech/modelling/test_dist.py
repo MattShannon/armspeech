@@ -932,7 +932,7 @@ class TestDist(unittest.TestCase):
             if randBool():
                 dist, inputGen = restrictTypicalOutputLength(genDist = lambda: gen_constant_AutoregressiveNetDist(depth = depth), numPoints = numPoints)
             else:
-                dist, inputGen = restrictTypicalOutputLength(genDist = lambda: gen_constant_AutoregressiveNetDist(depth = depth), numPoints = numPoints)
+                dist, inputGen = restrictTypicalOutputLength(genDist = lambda: gen_inSeq_AutoregressiveNetDist(depth = depth), numPoints = numPoints)
             # (FIXME : add logProbDerivOutputCheck once implemented)
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, checkAdditional = checkAdditional)
             if self.deepTest:
