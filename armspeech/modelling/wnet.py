@@ -785,13 +785,14 @@ def sum(net, labelToWeight, ring, getAgenda, forwards = True):
 
     while agenda:
         node, weight = agenda.pop()
-        if node == endNode:
-            totalWeight = ring.plus(totalWeight, weight)
-        for label, nextNode in net.next(node, forwards):
-            linkWeight = labelToWeight(label)
-            newWeight = ring.times(weight, linkWeight) if forwards else ring.times(linkWeight, weight)
-            if newWeight != ring.zero:
-                agenda.add(nextNode, newWeight)
+        if weight != ring.zero:
+            if node == endNode:
+                totalWeight = ring.plus(totalWeight, weight)
+            for label, nextNode in net.next(node, forwards):
+                linkWeight = labelToWeight(label)
+                newWeight = ring.times(weight, linkWeight) if forwards else ring.times(linkWeight, weight)
+                if newWeight != ring.zero:
+                    agenda.add(nextNode, newWeight)
 
     agenda.printStats()
     return totalWeight
@@ -811,15 +812,16 @@ def sumGetAlpha(net, labelToWeight, ring, getAgenda, forwards = True):
 
     while agenda:
         node, weight = agenda.pop()
-        for label, nextNode in net.next(node, forwards):
-            linkWeight = labelToWeight(label)
-            newWeight = ring.times(weight, linkWeight) if forwards else ring.times(linkWeight, weight)
-            if newWeight != ring.zero:
-                agenda.add(nextNode, newWeight)
-        if node in alpha:
-            alpha[node] = ring.plus(alpha[node], weight)
-        else:
-            alpha[node] = weight
+        if weight != ring.zero:
+            for label, nextNode in net.next(node, forwards):
+                linkWeight = labelToWeight(label)
+                newWeight = ring.times(weight, linkWeight) if forwards else ring.times(linkWeight, weight)
+                if newWeight != ring.zero:
+                    agenda.add(nextNode, newWeight)
+            if node in alpha:
+                alpha[node] = ring.plus(alpha[node], weight)
+            else:
+                alpha[node] = weight
 
     agenda.printStats()
     return alpha[net.end(forwards)], alpha
@@ -856,17 +858,18 @@ def sumYieldGamma(net, labelToWeight, divisionRing, totalWeight, beta, getAgenda
 
     while agenda:
         node, weight = agenda.pop()
-        if node == endNode:
-            totalWeightAgain = ring.plus(totalWeightAgain, weight)
-        for label, nextNode in net.next(node, forwards):
-            linkWeight = labelToWeight(label)
-            newWeight = ring.times(weight, linkWeight) if forwards else ring.times(linkWeight, weight)
-            betaWeight = beta(nextNode)
-            if newWeight != ring.zero and betaWeight != ring.zero:
-                agenda.add(nextNode, newWeight)
-                edgeTotalWeight = ring.times(newWeight, betaWeight) if forwards else ring.times(betaWeight, newWeight)
-                gamma = ring.ldivide(totalWeight, edgeTotalWeight)
-                yield label, gamma
+        if weight != ring.zero:
+            if node == endNode:
+                totalWeightAgain = ring.plus(totalWeightAgain, weight)
+            for label, nextNode in net.next(node, forwards):
+                linkWeight = labelToWeight(label)
+                newWeight = ring.times(weight, linkWeight) if forwards else ring.times(linkWeight, weight)
+                betaWeight = beta(nextNode)
+                if newWeight != ring.zero and betaWeight != ring.zero:
+                    agenda.add(nextNode, newWeight)
+                    edgeTotalWeight = ring.times(newWeight, betaWeight) if forwards else ring.times(betaWeight, newWeight)
+                    gamma = ring.ldivide(totalWeight, edgeTotalWeight)
+                    yield label, gamma
 
     if not ring.isClose(totalWeight, totalWeightAgain):
         sys.stderr.write('WARNING: recomputed total weight ('+str(totalWeightAgain)+') differs from given value ('+str(totalWeight)+')\n')
