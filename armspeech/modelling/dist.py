@@ -1287,10 +1287,11 @@ class AutoregressiveSequenceAcc(Acc):
         return AutoregressiveSequenceDist(self.depth, dist, tag = self.tag), logLike, occ
 
 class AutoregressiveNetAcc(Acc):
-    def __init__(self, distPrev, durAcc, acAcc, tag = None):
+    def __init__(self, distPrev, durAcc, acAcc, verbosity, tag = None):
         self.distPrev = distPrev
         self.durAcc = durAcc
         self.acAcc = acAcc
+        self.verbosity = verbosity
         self.tag = tag
 
         self.occ = 0.0
@@ -1304,11 +1305,14 @@ class AutoregressiveNetAcc(Acc):
         return self.acAcc.occ
 
     def add(self, input, outSeq, occ = 1.0):
+        if self.verbosity >= 2:
+            print 'fb: utt (%s frames)' % len(outSeq)
         self.occ += occ
         timedNet = self.distPrev.getTimedNet(input, outSeq)
         labelToWeight = self.distPrev.getLabelToWeight(outSeq)
         totalLogProb, edgeGen = wnet.forwardBackward(timedNet, labelToWeight = labelToWeight, divisionRing = self.distPrev.ring, getAgenda = self.distPrev.getAgenda)
         entropy = totalLogProb * occ
+        accedEdges = 0
         for (label, labelStartTime, labelEndTime), logOcc in edgeGen:
             labelOcc = math.exp(logOcc) * occ
             if label is not None:
@@ -1323,7 +1327,15 @@ class AutoregressiveNetAcc(Acc):
                     assert labelEndTime == labelStartTime + 1
                     acOutput = outSeq[labelStartTime]
                     self.acAcc.add((phInput, acInput), acOutput, labelOcc)
+                accedEdges += 1
         self.entropy += entropy
+
+        if self.verbosity >= 2:
+            print 'fb:    log like = %s, net path entropy = %s' % ((0.0, 0.0) if len(outSeq) == 0 else (totalLogProb / len(outSeq), entropy / len(outSeq)))
+        if self.verbosity >= 3:
+            print 'fb:    (accumulated over %s edges)' % accedEdges
+        if self.verbosity >= 2:
+            print 'fb:'
 
     # N.B. assumes distPrev is the same for self and acc (not checked).
     def addAccSingle(self, acc):
@@ -2521,8 +2533,8 @@ class AutoregressiveNetDist(Dist):
         # FIXME : complete
         notyetimplemented
 
-    def createAcc(self, createAccChild):
-        return AutoregressiveNetAcc(distPrev = self, durAcc = createAccChild(self.durDist), acAcc = createAccChild(self.acDist), tag = self.tag)
+    def createAcc(self, createAccChild, verbosity = 0):
+        return AutoregressiveNetAcc(distPrev = self, durAcc = createAccChild(self.durDist), acAcc = createAccChild(self.acDist), verbosity = verbosity, tag = self.tag)
 
     def synth(self, input, method = SynthMethod.Sample, actualOutSeq = None, maxLength = None):
         # (FIXME : align actualOutSeq and pass down to frames below?  (What exactly do I mean?))
