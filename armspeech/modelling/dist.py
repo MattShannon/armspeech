@@ -1319,7 +1319,7 @@ class AutoregressiveNetAcc(Acc):
         self.occ += occ
         timedNet = self.distPrev.getTimedNet(input, outSeq)
         labelToWeight = self.distPrev.getLabelToWeight(outSeq)
-        totalLogProb, edgeGen = wnet.forwardBackward(timedNet, labelToWeight = labelToWeight, divisionRing = self.distPrev.ring, getAgenda = self.distPrev.getAgenda)
+        totalLogProb, edgeGen = wnet.forwardBackwardAlt(timedNet, labelToWeight = labelToWeight, divisionRing = self.distPrev.ring, getAgenda = self.distPrev.getAgenda)
         entropy = totalLogProb * occ
         accedEdges = 0
         for (label, labelStartTime, labelEndTime), logOcc in edgeGen:
