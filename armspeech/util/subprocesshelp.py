@@ -11,7 +11,7 @@ from __future__ import division
 import subprocess
 from subprocess import PIPE
 
-# emulate python 2.7 function (roughly -- in particular, exception generated is not right)
+# emulate python 2.7 function (roughly -- in particular, exception generated is not the same)
 def check_output(*popenargs, **kwargs):
     p = subprocess.Popen(stdout = PIPE, *popenargs, **kwargs)
     stdout = p.communicate()[0]
