@@ -8,6 +8,7 @@
 
 from __future__ import division
 
+import sys
 import math
 import heapq
 from collections import deque, defaultdict
@@ -868,7 +869,7 @@ def sumYieldGamma(net, labelToWeight, divisionRing, totalWeight, beta, getAgenda
                 yield label, gamma
 
     if not ring.isClose(totalWeight, totalWeightAgain):
-        raise RuntimeError('recomputed total weight ('+str(totalWeightAgain)+') differs from given value ('+str(totalWeight)+')')
+        sys.stderr.write('WARNING: recomputed total weight ('+str(totalWeightAgain)+') differs from given value ('+str(totalWeight)+')\n')
     agenda.printStats()
 
 def forwardBackward(net, labelToWeight, divisionRing, getAgenda, forwardsFirst = False):
