@@ -870,4 +870,6 @@ def forwardBackward(net, labelToWeight, divisionRing, getAgenda, forwardsFirst =
 def forwardBackwardAlt(net, labelToWeight, divisionRing, getAgenda):
     totalWeight, rnet = reweight(net, labelToWeight = labelToWeight, divisionRing = divisionRing, getAgenda = getAgenda)
     edgeGen = sumYieldGamma(rnet, labelToWeight = lambda (label, weight): weight, divisionRing = divisionRing, totalWeight = divisionRing.one, beta = lambda node: divisionRing.one, getAgenda = getAgenda, forwards = True)
+    # remove extra part of label added by reweighting
+    edgeGen = ( (label, logOcc) for (label, _), logOcc in edgeGen )
     return totalWeight, edgeGen
