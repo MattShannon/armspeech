@@ -643,13 +643,16 @@ class PriorityQueueSumAgenda(SumAgenda):
     forwards == False as a very ugly hack to turn a min heap into a max heap.
     """
     # (FIXME : find a nicer solution to the max heap problem!)
-    def __init__(self, ring, forwards, negMap):
+    def __init__(self, ring, forwards, negMap, pruneThresh = None, pruneTrigger = None):
         self.ring = ring
         self.forwards = forwards
         self.negMap = negMap
+        self.pruneThresh = pruneThresh
+        self.pruneTrigger = pruneTrigger
 
         self.active = dict()
         self.heap = []
+        self.nodePrevPop = None
     def __nonzero__(self):
         return bool(self.active)
     def add(self, node, weight):
@@ -662,9 +665,20 @@ class PriorityQueueSumAgenda(SumAgenda):
         node = heapq.heappop(self.heap)
         if not self.forwards:
             node = self.negMap(node)
+        # it's ok to pop node from heap before doing pruning since pruning doesn't touch heap
+        if self.nodePrevPop is not None and self.pruneThresh is not None and self.pruneTrigger is not None and self.pruneTrigger(self.nodePrevPop, node):
+            self.prune()
         weight = self.active[node]
         del self.active[node]
+        self.nodePrevPop = node
         return node, weight
+    def prune(self):
+        thresh = self.pruneThresh
+        best = self.ring.max(self.active.itervalues())
+        for node in self.active:
+            weight = self.active[node]
+            if self.ring.lt(self.ring.times(weight, thresh) if self.forwards else self.ring.times(thresh, weight), best):
+                self.active[node] = self.ring.zero
 class TimeSyncSumAgenda(SumAgenda):
     # (FIXME : does stack (rather than queue) really work well enough for TimeSyncSumAgenda that we should have it as a default?)
     #   (note that stack definitely does have an advantage in avoiding repeat pops when dealing with ~flatmapped zero-duration stuff~)
