@@ -1339,7 +1339,9 @@ class AutoregressiveNetAcc(Acc):
         self.entropy += entropy
 
         if self.verbosity >= 2:
-            print 'fb:    log like = %s, net path entropy = %s' % ((0.0, 0.0) if len(outSeq) == 0 else (totalLogProb / len(outSeq), entropy / len(outSeq)))
+            print 'fb:    log like = %s (of which net path entropy = %s)' % (
+                (0.0, 0.0) if len(outSeq) == 0 else (totalLogProb / len(outSeq), entropy / len(outSeq))
+            )
         if self.verbosity >= 3:
             print 'fb:    (accumulated over %s edges)' % accedEdges
         if self.verbosity >= 2:
@@ -1360,6 +1362,12 @@ class AutoregressiveNetAcc(Acc):
         durDist, logLikeDur, occDur = estimateChild(self.durAcc)
         acDist, logLikeAc, occAc = estimateChild(self.acAcc)
         logLike = logLikeDur + logLikeAc + self.entropy
+        if self.verbosity >= 1:
+            print 'fb:    overall log like %s == %s (dur) + %s (ac) + %s (net path entropy)' % (
+                (0.0, 0.0, 0.0, 0.0) if self.occFrames == 0 else (logLike / self.occFrames,
+                    logLikeDur / self.occFrames, logLikeAc / self.occFrames, self.entropy / self.occFrames
+                )
+            )
         return AutoregressiveNetDist(self.distPrev.depth, self.distPrev.netFor, durDist, acDist, self.distPrev.pruneSpec, tag = self.tag), logLike, self.occ
 
 
