@@ -1315,7 +1315,7 @@ class AutoregressiveNetAcc(Acc):
 
     def add(self, input, outSeq, occ = 1.0):
         if self.verbosity >= 2:
-            print 'fb: utt (%s frames)' % len(outSeq)
+            print 'fb: seq (%s frames)' % len(outSeq)
         self.occ += occ
         timedNet, labelToWeight = self.distPrev.getTimedNet(input, outSeq)
         totalLogProb, edgeGen = wnet.forwardBackwardAlt(timedNet, labelToWeight = labelToWeight, divisionRing = self.distPrev.ring, getAgenda = self.distPrev.getAgenda)
@@ -1339,7 +1339,7 @@ class AutoregressiveNetAcc(Acc):
         self.entropy += entropy
 
         if self.verbosity >= 2:
-            print 'fb:    log like = %s (of which net path entropy = %s)' % (
+            print 'fb:    log like = %s (net path entropy = %s)' % (
                 (0.0, 0.0) if len(outSeq) == 0 else (totalLogProb / len(outSeq), entropy / len(outSeq))
             )
         if self.verbosity >= 3:
@@ -1363,9 +1363,11 @@ class AutoregressiveNetAcc(Acc):
         acDist, logLikeAc, occAc = estimateChild(self.acAcc)
         logLike = logLikeDur + logLikeAc + self.entropy
         if self.verbosity >= 1:
-            print 'fb:    overall log like %s == %s (dur) + %s (ac) + %s (net path entropy)' % (
-                (0.0, 0.0, 0.0, 0.0) if self.occFrames == 0 else (logLike / self.occFrames,
-                    logLikeDur / self.occFrames, logLikeAc / self.occFrames, self.entropy / self.occFrames
+            print 'fb:    overall log like %s == %s (dur) + %s (ac) + %s (net path entropy) (%s frames, %s seqs)' % (
+                (0.0, 0.0, 0.0, 0.0, 0, 0) if self.occFrames == 0 else (
+                    logLike / self.occFrames,
+                    logLikeDur / self.occFrames, logLikeAc / self.occFrames, self.entropy / self.occFrames,
+                    self.occFrames, self.occ
                 )
             )
         return AutoregressiveNetDist(self.distPrev.depth, self.distPrev.netFor, durDist, acDist, self.distPrev.pruneSpec, tag = self.tag), logLike, self.occ
