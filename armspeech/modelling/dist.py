@@ -2506,10 +2506,22 @@ class AutoregressiveNetDist(Dist):
         net = wnet.concretizeNetTopSort(net2, deltaTime)
         return net, deltaTime
 
-    def getTimedNet(self, input, outSeq):
+    def getTimedNet(self, input, outSeq, preComputeLabelToWeight = False):
         net, deltaTime = self.getNet(input)
         timedNet = wnet.UnrolledNet(net, startTime = 0, endTime = len(outSeq), deltaTime = deltaTime)
         labelToWeight = self.getLabelToWeight(outSeq)
+
+        if preComputeLabelToWeight:
+            times = range(len(outSeq) + 1)
+            times0 = zip(times, times)
+            times1 = zip(times, times[1:])
+            for node in wnet.nodeSetCompute(net, accessibleOnly = False):
+                for label, nextNode in net.next(node, forwards = True):
+                    delta = deltaTime(label)
+                    assert delta == 0 or delta == 1
+                    for labelStartTime, labelEndTime in (times0 if delta == 0 else times1):
+                        labelToWeight((label, labelStartTime, labelEndTime))
+
         return timedNet, labelToWeight
 
     def getLabelToWeight(self, outSeq):

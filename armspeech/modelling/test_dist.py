@@ -924,7 +924,7 @@ class TestDist(unittest.TestCase):
     def test_AutoregressiveNetDist(self, eps = 1e-8, numDists = 5, numPoints = 100):
         def checkAdditional(dist, input, outSeq, eps):
             # check result of getTimedNet is topologically sorted
-            timedNet = dist.getTimedNet(input, outSeq)
+            timedNet, labelToWeight = dist.getTimedNet(input, outSeq, preComputeLabelToWeight = randBool())
             assert wnet.netIsTopSorted(timedNet, wnet.nodeSetCompute(timedNet, accessibleOnly = False), deltaTime = lambda label: 0)
         for distIndex in range(numDists):
             depth = randint(0, 5)
