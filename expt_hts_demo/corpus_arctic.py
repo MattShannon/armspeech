@@ -45,11 +45,11 @@ class ArcticCorpus(cps.Corpus):
         return [ ArcticCorpus(trainUttIds, self.testUttIds, self.synthUttIds, self.dataDir, self.labDir, self.scriptsDir, self.mgcOrder, self.framePeriod) for trainUttIds in trainUttIdsList ]
 
     def rawAlignment(self, uttId):
-        return list(lab.readHtkLabFile(
+        return lab.readHtkLabFile(
             os.path.join(self.labDir, uttId+'.lab'),
             self.framePeriod,
             decode = labels_hts_demo.parseLabel
-        ))
+        )
     def rawAcousticSeq(self, uttId):
         return list(feat.readAcousticGen(
             self.streams,

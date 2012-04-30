@@ -14,12 +14,14 @@ import collections
 def readHtkLabFile(labFile, framePeriod, decode = lambda labelString: labelString):
     """Reads HTK-style label file."""
     divisor = framePeriod * 1e7
+    alignment = []
     for line in open(labFile):
-        startTicks, endTicks, labelString = line.strip().split(None, 2)
+        startTicks, endTicks, labelString = line.strip().split()
         startTime = int(int(startTicks) / divisor + 0.5)
         endTime = int(int(endTicks) / divisor + 0.5)
         label = decode(labelString)
-        yield startTime, endTime, label, None
+        alignment.append((startTime, endTime, label, None))
+    return alignment
 
 # (FIXME : this should probably be moved into modelling subpackage)
 def checkAlignment(alignment, startTimeReq = None, endTimeReq = None, allowZeroDur = True):
