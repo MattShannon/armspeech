@@ -88,15 +88,16 @@ class ArcticCorpus(cps.Corpus):
 
 def cleanAlignment(alignment, acousticSeq, verbose = True):
     alignmentNew = alignment[:]
-    startTime, endTime, label = alignment[-1]
+    startTime, endTime, label, subAlignment = alignment[-1]
     if endTime < len(acousticSeq):
+        assert subAlignment is None
         # FIXME : hack to cope with the fact lab files seem to be 2-3 frames
         #   shorter than they should be (and shorter than the corresponding mgc, etc files).
         if verbose:
             print 'NOTE: label file short by '+str(len(acousticSeq) - endTime)+' frames'
         # add at most an extra 3 frames on (for consistency with previous implementation of hack)
         endTime = min(endTime + 3, len(acousticSeq))
-        alignmentNew[-1] = startTime, endTime, label
+        alignmentNew[-1] = startTime, endTime, label, subAlignment
     return alignmentNew
 
 def getCorpus(trainUttIds, dataDir, labDir, scriptsDir, mgcOrder):

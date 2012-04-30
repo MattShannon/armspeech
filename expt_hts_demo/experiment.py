@@ -180,7 +180,7 @@ def main(rawArgs):
         def drawMgc(synthOutput, uttId, exptTag):
             alignment, trueOutput = corpus.data(uttId)
 
-            alignmentToDraw = [ (start * corpus.framePeriod, end * corpus.framePeriod, label.phone) for start, end, label in alignment ]
+            alignmentToDraw = [ (start * corpus.framePeriod, end * corpus.framePeriod, label.phone) for start, end, label, subAlignment in alignment ]
             partitionedLabelSeqs = (draw.partitionSeq(alignmentToDraw, 2) if includeGivenLabels else []) + [ labelSeqSub for labelSeq in extraLabelSeqs for labelSeqSub in draw.partitionSeq(labelSeq, 2) ]
 
             trueSeqTime = (np.array(range(len(trueOutput))) + 0.5) * corpus.framePeriod
@@ -200,7 +200,7 @@ def main(rawArgs):
         printTime('started mono')
 
         def alignmentToPhoneticSeq(alignment):
-            for startTime, endTime, label in alignment:
+            for startTime, endTime, label, subAlignment in alignment:
                 phone = label.phone
                 for time in range(startTime, endTime):
                     yield phone
@@ -268,7 +268,7 @@ def main(rawArgs):
         extraLength = 2
 
         def alignmentToPhoneticSeq(alignment):
-            for startTime, endTime, label in alignment:
+            for startTime, endTime, label, subAlignment in alignment:
                 phone = label.phone
                 for time in range(startTime, endTime):
                     framesBefore = time - startTime
@@ -320,7 +320,7 @@ def main(rawArgs):
         printTime('started clustered')
 
         def alignmentToPhoneticSeq(alignment):
-            for startTime, endTime, label in alignment:
+            for startTime, endTime, label, subAlignment in alignment:
                 for time in range(startTime, endTime):
                     yield label
 
@@ -390,7 +390,7 @@ def main(rawArgs):
         phoneList = ['global'] if globalPhone else phoneset.phoneList
 
         def alignmentToPhoneticSeq(alignment):
-            for startTime, endTime, label in alignment:
+            for startTime, endTime, label, subAlignment in alignment:
                 phone = label.phone
                 for time in range(startTime, endTime):
                     yield 'global' if globalPhone else phone

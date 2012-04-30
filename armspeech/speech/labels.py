@@ -19,22 +19,37 @@ def readHtkLabFile(labFile, framePeriod, decode = lambda labelString: labelStrin
         startTime = int(int(startTicks) / divisor + 0.5)
         endTime = int(int(endTicks) / divisor + 0.5)
         label = decode(labelString)
-        yield startTime, endTime, label
+        yield startTime, endTime, label, None
 
 # (FIXME : this should probably be moved into modelling subpackage)
-def checkAlignment(alignment, allowZeroDur = True):
-    """Checks alignment is in order, contiguous and non-overlapping."""
+def checkAlignment(alignment, startTimeReq = None, endTimeReq = None, allowZeroDur = True):
+    """Checks an alignment for various possible inconsistencies.
+
+    Checks alignment is in order, contiguous and non-overlapping. Recursively
+    checks any sub-alignments, and checks that start and end times of
+    sub-alignments agree with their parents.
+    """
     if alignment:
-        for (startTimePrev, endTimePrev, labelPrev), (startTime, endTime, label) in zip(alignment, alignment[1:]):
+        for (startTimePrev, endTimePrev, labelPrev, subAlignmentPrev), (startTime, endTime, label, subAlignment) in zip(alignment, alignment[1:]):
             if startTime < endTimePrev:
                 raise RuntimeError('alignment has overlaps')
             elif startTime > endTimePrev:
                 raise RuntimeError('alignment is not contiguous')
-    for startTime, endTime, label in alignment:
+    if startTimeReq is not None:
+        startTime, endTime, label, subAlignment = alignment[0]
+        if startTime != startTimeReq:
+            raise RuntimeError('alignment start time is incorrect ('+str(startTimeReq)+' desired, '+str(startTime)+' actual)')
+    if endTimeReq is not None:
+        startTime, endTime, label, subAlignment = alignment[-1]
+        if endTime != endTimeReq:
+            raise RuntimeError('alignment end time is incorrect ('+str(endTimeReq)+' desired, '+str(endTime)+' actual)')
+    for startTime, endTime, label, subAlignment in alignment:
         if endTime < startTime:
             raise RuntimeError('alignment has segment of negative duration')
         if endTime == startTime and not allowZeroDur:
             raise RuntimeError('alignment has zero duration segment')
+        if subAlignment is not None:
+            checkAlignment(subAlignment, startTimeReq = startTime, endTimeReq = endTime, allowZeroDur = allowZeroDur)
 
 def getLabelClass(className, labelFormat):
     labelKeys = []
