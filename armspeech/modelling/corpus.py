@@ -13,19 +13,19 @@ import dist as d
 class Corpus(object):
     def accumulate(self, acc):
         for uttId in self.trainUttIds:
-            alignment, acousticSeq = self.data(uttId)
-            acc.add(alignment, acousticSeq)
+            input, output = self.data(uttId)
+            acc.add(input, output)
 
     def logProb_frames(self, dist, uttIds):
         lp = 0.0
         frames = 0
         for uttId in uttIds:
-            alignment, acousticSeq = self.data(uttId)
-            lpD, framesD = dist.logProb_frames(alignment, acousticSeq)
+            input, output = self.data(uttId)
+            lpD, framesD = dist.logProb_frames(input, output)
             lp += lpD
             frames += framesD
         return lp, frames
 
     def synth(self, dist, uttId, method = d.SynthMethod.Sample):
-        alignment, actualAcousticSeq = self.data(uttId)
-        return dist.synth(alignment, method, actualAcousticSeq)
+        input, actualOutput = self.data(uttId)
+        return dist.synth(input, method, actualOutput)
