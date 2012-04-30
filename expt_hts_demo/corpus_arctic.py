@@ -21,6 +21,11 @@ from armspeech.util.timing import timed
 
 import os
 
+def parseState(stateString):
+    assert stateString[:6] == 'state['
+    assert stateString[-1] == ']'
+    return int(stateString[6:-1]) - 2
+
 class ArcticCorpus(cps.Corpus):
     def __init__(self, trainUttIds, testUttIds, synthUttIds, dataDir, labDir, scriptsDir, mgcOrder, framePeriod):
         self.trainUttIds = trainUttIds
@@ -45,10 +50,12 @@ class ArcticCorpus(cps.Corpus):
         return [ ArcticCorpus(trainUttIds, self.testUttIds, self.synthUttIds, self.dataDir, self.labDir, self.scriptsDir, self.mgcOrder, self.framePeriod) for trainUttIds in trainUttIdsList ]
 
     def rawAlignment(self, uttId):
-        return lab.readHtkLabFile(
+        return lab.readTwoLevelHtkLabFile(
             os.path.join(self.labDir, uttId+'.lab'),
             self.framePeriod,
-            decode = labels_hts_demo.parseLabel
+            decodeHigh = labels_hts_demo.parseLabel,
+            decodeLow = parseState,
+            fallbackToOneLevel = True
         )
     def rawAcousticSeq(self, uttId):
         return list(feat.readAcousticGen(
