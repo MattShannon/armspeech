@@ -65,6 +65,45 @@ def getFirst(x, default = None):
     else:
         return t
 
+def getStandardizeAlignment(subLabels):
+    numSubLabels = len(subLabels)
+    haveWarned = False
+    def standardizeAlignment(alignment):
+        """Returns a standardized, state-level alignment.
+
+        If numSubLabels is 1, outputs 1-state state-level alignment (whether
+        input alignment is state-level or phone-level). If numSubLabels is not
+        1 and input alignment is phone-level, then uses uniform segmentation to
+        obtain a crudge state-level alignment with the desired number of
+        states. If numSubLabels is not 1 and input alignment is state-level,
+        output is just the input alignment, after checking that this has the
+        desired number of states.
+        """
+        alignmentOut = []
+        for phoneStartTime, phoneEndTime, label, subAlignment in alignment:
+            if numSubLabels == 1:
+                alignmentOut.append((phoneStartTime, phoneEndTime, label, [(phoneStartTime, phoneEndTime, 0, None)]))
+            else:
+                if subAlignment is None:
+                    if not haveWarned:
+                        print 'NOTE: only phone-level alignment specified, so will use uniform segmentation to obtain a state-level alignment (not ideal)'
+                        haveWarned = True
+                    phoneDur = (phoneEndTime - phoneStartTime) * 1.0
+                    subAlignmentOut = []
+                    for subLabelIndex, subLabel in enumerate(subLabels):
+                        startTime = int(phoneDur * subLabelIndex / numSubLabels + 0.5) + phoneStartTime
+                        endTime = int(phoneDur * (subLabelIndex + 1) / numSubLabels + 0.5) + phoneStartTime
+                        subAlignmentOut.append((startTime, endTime, subLabel, None))
+                    alignmentOut.append((phoneStartTime, phoneEndTime, label, subAlignmentOut))
+                    assert endTime == phoneEndTime
+                else:
+                    subLabelsFromAlignment = [ subLabel for _, _, subLabel, _ in subAlignment ]
+                    if subLabelsFromAlignment != subLabels:
+                        raise RuntimeError('mismatched subLabels ('+repr(subLabels)+' desired, '+repr(subLabelsFromAlignment)+' actual)')
+                    alignmentOut.append((phoneStartTime, phoneEndTime, label, subAlignment))
+        return alignmentOut
+    return standardizeAlignment
+
 def main(rawArgs):
     parser = argparse.ArgumentParser(
         description = 'Runs example experiments that use the same data as the HTS demo.',
@@ -194,45 +233,68 @@ def main(rawArgs):
                 draw.drawLabelledSeq([(trueSeqTime, trueSeq), (synthSeqTime, synthSeq)], partitionedLabelSeqs, outPdf = outPdf, figSizeRate = 10.0, ylims = ylims, colors = ['red', 'purple'])
         return drawMgc
 
-    def doMonophoneSystem():
+    def doMonophoneSystem(numSubLabels = 1):
         print
         print 'TRAINING MONOPHONE SYSTEM'
         printTime('started mono')
 
+        print 'numSubLabels =', numSubLabels
+        subLabels = list(range(numSubLabels))
+
+        standardizeAlignment = getStandardizeAlignment(subLabels)
+
         def alignmentToPhoneticSeq(alignment):
-            for startTime, endTime, label, subAlignment in alignment:
+            for phoneStartTime, phoneEndTime, label, subAlignment in standardizeAlignment(alignment):
                 phone = label.phone
-                for time in range(startTime, endTime):
-                    yield phone
+                for startTime, endTime, subLabel, subSubAlignment in subAlignment:
+                    assert subSubAlignment is None
+                    for time in range(startTime, endTime):
+                        yield phone, subLabel
 
         acc = d.MappedInputAcc(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
             d.AutoregressiveSequenceAcc(10,
-                d.createDiscreteAcc(phoneset.phoneList, lambda phone:
-                    frameSummarizer.createAcc(False, lambda streamIndex:
-                        {
-                            0:
-                                mgcSummarizer.createAcc(False, lambda outIndex:
-                                    d.MappedInputAcc(xf.AddBias(),
-                                        d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1)
+                frameSummarizer.createAcc(True, lambda streamIndex:
+                    {
+                        0:
+                            d.MappedInputAcc(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
+                                d.createDiscreteAcc(subLabels, lambda subLabel:
+                                    d.createDiscreteAcc(phoneset.phoneList, lambda phone:
+                                        mgcSummarizer.createAcc(False, lambda outIndex:
+                                            d.MappedInputAcc(xf.AddBias(),
+                                                d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1)
+                                            )
+                                        )
                                     )
                                 )
-                        ,   1:
-                                #d.MappedInputAcc(xf.Msd01ToVector(),
-                                #    d.MappedInputAcc(xf.AddBias(),
-                                #        d.IdentifiableMixtureAcc(
-                                #            d.BinaryLogisticClassifierAcc(d.BinaryLogisticClassifier(np.zeros([2 * lf0StreamDepth + 1]))),
-                                #            [
-                                #                d.FixedValueAcc(None),
-                                #                d.LinearGaussianAcc(inputLength = 2 * lf0StreamDepth + 1)
-                                #            ]
-                                #        )
-                                #    )
-                                #)
-                                d.OracleAcc()
-                        ,   2:
-                                d.OracleAcc()
-                        }[streamIndex]
-                    )
+                            )
+                    ,   1:
+                            d.MappedInputAcc(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
+                                d.createDiscreteAcc(subLabels, lambda subLabel:
+                                    d.createDiscreteAcc(phoneset.phoneList, lambda phone:
+                                        #d.MappedInputAcc(xf.Msd01ToVector(),
+                                        #    d.MappedInputAcc(xf.AddBias(),
+                                        #        d.IdentifiableMixtureAcc(
+                                        #            d.BinaryLogisticClassifierAcc(d.BinaryLogisticClassifier(np.zeros([2 * lf0StreamDepth + 1]))),
+                                        #            [
+                                        #                d.FixedValueAcc(None),
+                                        #                d.LinearGaussianAcc(inputLength = 2 * lf0StreamDepth + 1)
+                                        #            ]
+                                        #        )
+                                        #    )
+                                        #)
+                                        d.OracleAcc()
+                                    )
+                                )
+                            )
+                    ,   2:
+                            d.MappedInputAcc(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
+                                d.createDiscreteAcc(subLabels, lambda subLabel:
+                                    d.createDiscreteAcc(phoneset.phoneList, lambda phone:
+                                        d.OracleAcc()
+                                    )
+                                )
+                            )
+                    }[streamIndex]
                 )
             )
         )
@@ -260,46 +322,55 @@ def main(rawArgs):
 
         printTime('finished mono')
 
-    def doTimingInfoSystem():
+    def doTimingInfoSystem(numSubLabels = 1):
         print
         print 'TRAINING MONOPHONE SYSTEM WITH TIMING INFO'
         printTime('started timinginfo')
 
+        print 'numSubLabels =', numSubLabels
+        subLabels = list(range(numSubLabels))
+
+        standardizeAlignment = getStandardizeAlignment(subLabels)
+
         extraLength = 2
 
         def alignmentToPhoneticSeq(alignment):
-            for startTime, endTime, label, subAlignment in alignment:
+            for startTime, endTime, label, subAlignment in standardizeAlignment(alignment):
                 phone = label.phone
-                for time in range(startTime, endTime):
-                    framesBefore = time - startTime
-                    framesAfter = endTime - time - 1
-                    yield phone, [framesBefore, framesAfter]
+                for startTime, endTime, subLabel, subSubAlignment in subAlignment:
+                    assert subSubAlignment is None
+                    for time in range(startTime, endTime):
+                        framesBefore = time - startTime
+                        framesAfter = endTime - time - 1
+                        yield phone, subLabel, [framesBefore, framesAfter]
         def convertTimingInfo(input):
-            (phone, extra), acousticContext = input
+            (phone, subLabel, extra), acousticContext = input
             assert len(extra) == extraLength
-            return phone, (extra, acousticContext)
+            return subLabel, (phone, (extra, acousticContext))
 
         acc = d.MappedInputAcc(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
             d.AutoregressiveSequenceAcc(10,
-                d.MappedInputAcc(convertTimingInfo,
-                    d.createDiscreteAcc(phoneset.phoneList, lambda phone:
-                        frameSummarizer.createAcc(True, lambda streamIndex:
-                            {
-                                0:
-                                    mgcSummarizer.createAcc(True, lambda outIndex:
-                                        d.MappedInputAcc(np.concatenate,
-                                            d.MappedInputAcc(xf.AddBias(),
-                                                d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + extraLength + 1)
+                frameSummarizer.createAcc(True, lambda streamIndex:
+                    {
+                        0:
+                            d.MappedInputAcc(convertTimingInfo,
+                                d.createDiscreteAcc(subLabels, lambda subLabel:
+                                    d.createDiscreteAcc(phoneset.phoneList, lambda phone:
+                                        mgcSummarizer.createAcc(True, lambda outIndex:
+                                            d.MappedInputAcc(np.concatenate,
+                                                d.MappedInputAcc(xf.AddBias(),
+                                                    d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + extraLength + 1)
+                                                )
                                             )
                                         )
                                     )
-                            ,   1:
-                                    d.OracleAcc()
-                            ,   2:
-                                    d.OracleAcc()
-                            }[streamIndex]
-                        )
-                    )
+                                )
+                            )
+                    ,   1:
+                            d.OracleAcc()
+                    ,   2:
+                            d.OracleAcc()
+                    }[streamIndex]
                 )
             )
         )
@@ -314,15 +385,22 @@ def main(rawArgs):
 
         printTime('finished timinginfo')
 
-    def doDecisionTreeClusteredSystem():
+    def doDecisionTreeClusteredSystem(numSubLabels = 1):
         print
         print 'DECISION TREE CLUSTERING'
         printTime('started clustered')
 
+        print 'numSubLabels =', numSubLabels
+        subLabels = list(range(numSubLabels))
+
+        standardizeAlignment = getStandardizeAlignment(subLabels)
+
         def alignmentToPhoneticSeq(alignment):
-            for startTime, endTime, label, subAlignment in alignment:
-                for time in range(startTime, endTime):
-                    yield label
+            for phoneStartTime, phoneEndTime, label, subAlignment in standardizeAlignment(alignment):
+                for startTime, endTime, subLabel, subSubAlignment in subAlignment:
+                    assert subSubAlignment is None
+                    for time in range(startTime, endTime):
+                        yield label, subLabel
 
         questionGroups = questions_hts_demo.getFullContextQuestionGroups()
 
@@ -331,10 +409,14 @@ def main(rawArgs):
                 frameSummarizer.createAcc(True, lambda streamIndex:
                     {
                         0:
-                            d.AutoGrowingDiscreteAcc(lambda:
-                                mgcSummarizer.createAcc(False, lambda outIndex:
-                                    d.MappedInputAcc(xf.AddBias(),
-                                        d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1)
+                            d.MappedInputAcc(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
+                                d.createDiscreteAcc(subLabels, lambda subLabel:
+                                    d.AutoGrowingDiscreteAcc(lambda:
+                                        mgcSummarizer.createAcc(False, lambda outIndex:
+                                            d.MappedInputAcc(xf.AddBias(),
+                                                d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1)
+                                            )
+                                        )
                                     )
                                 )
                             )
