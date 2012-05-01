@@ -9,7 +9,6 @@
 from __future__ import division
 
 import re
-import collections
 
 def readHtkLabFile(labFile, framePeriod, decode = lambda labelString: labelString):
     """Reads HTK-style label file."""
@@ -75,18 +74,15 @@ def checkAlignment(alignment, startTimeReq = None, endTimeReq = None, allowZeroD
         if subAlignment is not None:
             checkAlignment(subAlignment, startTimeReq = startTime, endTimeReq = endTime, allowZeroDur = allowZeroDur)
 
-def getLabelClass(className, labelFormat):
-    labelKeys = []
+def getParseLabel(labelFormat, createLabel):
     labelReStrings = []
     decodeDict = dict()
     for labelKey, pat, decode, sep in labelFormat:
-        labelKeys.append(labelKey)
         labelReStrings.append(r'(?P<'+labelKey+r'>'+pat+r')'+re.escape(sep))
         if decode is not None:
             decodeDict[labelKey] = decode
 
     labelRe = re.compile(r''.join(labelReStrings)+r'$')
-    Label = collections.namedtuple(className, labelKeys)
 
     def parseLabel(labelString):
         match = labelRe.match(labelString)
@@ -95,7 +91,7 @@ def getLabelClass(className, labelFormat):
         matchDict = match.groupdict()
         for labelKey in decodeDict:
             matchDict[labelKey] = decodeDict[labelKey](matchDict[labelKey])
-        label = Label(**matchDict)
+        label = createLabel(**matchDict)
         return label
 
-    return Label, parseLabel
+    return parseLabel

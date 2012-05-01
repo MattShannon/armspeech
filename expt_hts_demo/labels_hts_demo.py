@@ -13,6 +13,8 @@ from __future__ import division
 
 import armspeech.speech.labels as lab
 
+import collections
+
 phonePat = r'[a-z]+'
 phoneOrNonePat = r'(x|[a-z]+)'
 numPat = r'[0-9]+'
@@ -92,4 +94,6 @@ labelFormat = [
     ('num_phrases_in_utterance', numPat, numDecode, '')
 ]
 
-Label, parseLabel = lab.getLabelClass('Label', labelFormat)
+labelKeys = [ labelKey for labelKey, pat, decode, sep in labelFormat ]
+Label = collections.namedtuple('Label', labelKeys)
+parseLabel = lab.getParseLabel(labelFormat, Label)
