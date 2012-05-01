@@ -540,16 +540,16 @@ def main(rawArgs):
 
         printTime('finished clustered')
 
-    def doTransformSystem():
+    def doTransformSystem(globalPhone = True, studentResiduals = True, numTanhTransforms = 3):
         print
         print 'TRAINING TRANSFORM SYSTEM'
         printTime('started xf')
 
-        globalPhone = True
-        studentResiduals = True
+        print 'globalPhone =', globalPhone
+        print 'studentResiduals =', studentResiduals
         # mgcStreamDepth affects what pictures we can draw
-        print 'DEBUG: mgcStreamDepth =', mgcStreamDepth
-        numTanhTransforms = 3
+        print 'mgcStreamDepth =', mgcStreamDepth
+        print 'numTanhTransforms =', numTanhTransforms
 
         phoneList = ['global'] if globalPhone else phoneset.phoneList
 
