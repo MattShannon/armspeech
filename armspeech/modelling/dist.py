@@ -780,6 +780,12 @@ class AutoGrowingDiscreteAcc(Acc):
         self.createAcc = createAcc
         self.tag = tag
 
+    def children(self):
+        # (FIXME : the order of the result here depends on hash map details, so
+        #   could get different secHashes for resulting pickled files. Probably
+        #   not an issue, but if it was, could solve by sorting based on key.)
+        return self.accDict.values()
+
     def add(self, input, output, occ = 1.0):
         pid, acInput = input
         if not pid in self.accDict:
