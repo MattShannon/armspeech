@@ -233,6 +233,88 @@ def main(rawArgs):
                 draw.drawLabelledSeq([(trueSeqTime, trueSeq), (synthSeqTime, synthSeq)], partitionedLabelSeqs, outPdf = outPdf, figSizeRate = 10.0, ylims = ylims, colors = ['red', 'purple'])
         return drawMgc
 
+    # (FIXME : this somewhat unnecessarily uses lots of memory)
+    def doDumpCorpus(numSubLabels = 1):
+        print
+        print 'DUMPING CORPUS'
+        printTime('started dumpCorpus')
+
+        print 'numSubLabels =', numSubLabels
+        subLabels = list(range(numSubLabels))
+
+        standardizeAlignment = getStandardizeAlignment(subLabels)
+
+        def alignmentToPhoneticSeq(alignment):
+            for phoneStartTime, phoneEndTime, label, subAlignment in standardizeAlignment(alignment):
+                questionAnswers = []
+                for labelValuer, questions in questionGroups:
+                    labelValue = labelValuer(label)
+                    for question in questions:
+                        questionAnswers.append(question(labelValue))
+                for startTime, endTime, subLabel, subSubAlignment in subAlignment:
+                    assert subSubAlignment is None
+                    for time in range(startTime, endTime):
+                        yield questionAnswers, subLabel
+
+        questionGroups = questions_hts_demo.getTriphoneQuestionGroups()
+
+        # FIXME : only works if no cross-stream stuff happening. Make more robust somehow.
+        shiftToPrevTransform = xf.ShiftOutputTransform(lambda x: -x[1][-1])
+
+        dist = d.MappedInputDist(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
+            d.AutoregressiveSequenceDist(10,
+                frameSummarizer.createDist(True, lambda streamIndex:
+                    {
+                        0:
+                            mgcSummarizer.createDist(True, lambda outIndex:
+                                d.MappedOutputDist(shiftToPrevTransform,
+                                    d.DebugDist(None,
+                                        d.OracleDist()
+                                    ).withTag(('debug-mgc', outIndex))
+                                )
+                            )
+                    ,   1:
+                            d.OracleDist()
+                    ,   2:
+                            d.OracleDist()
+                    }[streamIndex]
+                )
+            )
+        )
+
+        def accumulate(acc, uttIds):
+            for uttId in uttIds:
+                input, output = corpus.data(uttId)
+                acc.add(input, output)
+
+        trainAcc = d.defaultCreateAcc(dist)
+        timed(accumulate)(trainAcc, corpus.trainUttIds)
+
+        testAcc = d.defaultCreateAcc(dist)
+        timed(accumulate)(testAcc, corpus.testUttIds)
+
+        for desc, acc in [('train', trainAcc), ('test', testAcc)]:
+            for outIndex in mgcSummarizer.outIndices:
+                debugAcc = nodetree.findTaggedNode(acc, lambda tag: tag == ('debug-mgc', outIndex))
+
+                dumpInputFn = os.path.join(outDir, 'corpus-'+desc+'-in.mgc'+str(outIndex)+'.mat')
+                with open(dumpInputFn, 'w') as f:
+                    print 'dump: dumping corpus input to:', dumpInputFn
+                    for (questionAnswers, subLabel), acInput in debugAcc.memo.inputs:
+                        f.write(' '.join(
+                            [ ('1' if questionAnswer else '0') for questionAnswer in questionAnswers ] +
+                            [ str(subLabel) ]+
+                            [ str(x) for x in acInput ]
+                        )+'\n')
+
+                dumpOutputFn = os.path.join(outDir, 'corpus-'+desc+'-out.mgc'+str(outIndex)+'.mat')
+                with open(dumpOutputFn, 'w') as f:
+                    print 'dump: dumping corpus output to:', dumpOutputFn
+                    for acOutput in debugAcc.memo.outputs:
+                        f.write(str(acOutput)+'\n')
+
+        printTime('finished dumpCorpus')
+
     def doMonophoneSystem(numSubLabels = 1):
         print
         print 'TRAINING MONOPHONE SYSTEM'
