@@ -2493,6 +2493,10 @@ class AutoregressiveNetDist(Dist):
         self.netFor = netFor
         self.durDist = durDist
         self.acDist = acDist
+        # (FIXME : could argue pruneSpec should be specified as part of
+        #   createAcc rather than part of dist itself. Would make it clumsier
+        #   to use pruning during logProb computation, though, which we
+        #   probably want to do.)
         self.pruneSpec = pruneSpec
         self.tag = tag
 
