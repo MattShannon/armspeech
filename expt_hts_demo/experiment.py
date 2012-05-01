@@ -540,7 +540,7 @@ def main(rawArgs):
 
         printTime('finished clustered')
 
-    def doTransformSystem(globalPhone = True, studentResiduals = True, numTanhTransforms = 3):
+    def doTransformSystem(globalPhone = True, studentResiduals = True, numTanhTransforms = 3, numSubLabels = 1):
         print
         print 'TRAINING TRANSFORM SYSTEM'
         printTime('started xf')
@@ -551,13 +551,21 @@ def main(rawArgs):
         print 'mgcStreamDepth =', mgcStreamDepth
         print 'numTanhTransforms =', numTanhTransforms
 
+        # N.B. would be perverse to have globalPhone == True with numSubLabels != 1, but not disallowed
         phoneList = ['global'] if globalPhone else phoneset.phoneList
 
+        print 'numSubLabels =', numSubLabels
+        subLabels = list(range(numSubLabels))
+
+        standardizeAlignment = getStandardizeAlignment(subLabels)
+
         def alignmentToPhoneticSeq(alignment):
-            for startTime, endTime, label, subAlignment in alignment:
+            for phoneStartTime, phoneEndTime, label, subAlignment in standardizeAlignment(alignment):
                 phone = label.phone
-                for time in range(startTime, endTime):
-                    yield 'global' if globalPhone else phone
+                for startTime, endTime, subLabel, subSubAlignment in subAlignment:
+                    assert subSubAlignment is None
+                    for time in range(startTime, endTime):
+                        yield 'global' if globalPhone else phone, subLabel
 
         # FIXME : only works if no cross-stream stuff happening. Make more robust somehow.
         shiftToPrevTransform = xf.ShiftOutputTransform(xf.MinusPrev())
@@ -578,32 +586,36 @@ def main(rawArgs):
 
         dist = d.MappedInputDist(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
             d.AutoregressiveSequenceDist(10,
-                d.createDiscreteDist(phoneList, lambda phone:
-                    frameSummarizer.createDist(False, lambda streamIndex:
-                        {
-                            0:
-                                mgcSummarizer.createDist(False, lambda outIndex:
-                                    d.DebugDist(None,
-                                        d.TransformedOutputDist(mgcOutputTransform[outIndex],
-                                            d.TransformedInputDist(mgcInputTransform[outIndex],
-                                                #d.MappedOutputDist(shiftToPrevTransform,
-                                                    d.DebugDist(None,
-                                                        d.MappedInputDist(xf.AddBias(),
-                                                            # arbitrary dist to get things rolling
-                                                            d.LinearGaussian(np.zeros([mgcSummarizer.vectorLength(outIndex) + 1]), 1.0)
-                                                        )
-                                                    ).withTag('debug-xfed')
-                                                #)
-                                            )
+                frameSummarizer.createDist(True, lambda streamIndex:
+                    {
+                        0:
+                            d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
+                                d.createDiscreteDist(subLabels, lambda subLabel:
+                                    d.createDiscreteDist(phoneList, lambda phone:
+                                        mgcSummarizer.createDist(False, lambda outIndex:
+                                            d.DebugDist(None,
+                                                d.TransformedOutputDist(mgcOutputTransform[outIndex],
+                                                    d.TransformedInputDist(mgcInputTransform[outIndex],
+                                                        #d.MappedOutputDist(shiftToPrevTransform,
+                                                            d.DebugDist(None,
+                                                                d.MappedInputDist(xf.AddBias(),
+                                                                    # arbitrary dist to get things rolling
+                                                                    d.LinearGaussian(np.zeros([mgcSummarizer.vectorLength(outIndex) + 1]), 1.0)
+                                                                )
+                                                            ).withTag('debug-xfed')
+                                                        #)
+                                                    )
+                                                )
+                                            ).withTag(('debug-orig', phone, subLabel, streamIndex, outIndex))
                                         )
-                                    ).withTag(('debug-orig', phone, streamIndex, outIndex))
+                                    )
                                 )
-                        ,   1:
-                                d.OracleDist()
-                        ,   2:
-                                d.OracleDist()
-                        }[streamIndex]
-                    )
+                            )
+                    ,   1:
+                            d.OracleDist()
+                    ,   2:
+                            d.OracleDist()
+                    }[streamIndex]
                 )
             )
         )
@@ -626,44 +638,45 @@ def main(rawArgs):
                 draw.drawWarping([outputWarp, inputWarp], outPdf = outPdf, xlims = lims, title = outPdf)
 
                 for phone in phoneList:
-                    accOrig = nodetree.findTaggedNode(acc, lambda tag: tag == ('debug-orig', phone, streamIndex, outIndex))
-                    distOrig = nodetree.findTaggedNode(dist, lambda tag: tag == ('debug-orig', phone, streamIndex, outIndex))
+                    for subLabel in subLabels:
+                        accOrig = nodetree.findTaggedNode(acc, lambda tag: tag == ('debug-orig', phone, subLabel, streamIndex, outIndex))
+                        distOrig = nodetree.findTaggedNode(dist, lambda tag: tag == ('debug-orig', phone, subLabel, streamIndex, outIndex))
 
-                    debugAcc = accOrig
-                    subDist = distOrig.dist
-                    if mgcStreamDepth == 1:
-                        outPdf = os.path.join(figOutDir, 'scatter-'+id+'-orig-'+str(phone)+'-'+streamId+'.pdf')
-                        draw.drawFor1DInput(debugAcc, subDist, outPdf = outPdf, xlims = lims, ylims = lims, title = outPdf)
+                        debugAcc = accOrig
+                        subDist = distOrig.dist
+                        if mgcStreamDepth == 1:
+                            outPdf = os.path.join(figOutDir, 'scatter-'+id+'-orig-'+str(phone)+'-state'+str(subLabel)+'-'+streamId+'.pdf')
+                            draw.drawFor1DInput(debugAcc, subDist, outPdf = outPdf, xlims = lims, ylims = lims, title = outPdf)
 
-                    debugAcc = nodetree.findTaggedNode(accOrig, lambda tag: tag == 'debug-xfed')
-                    subDist = nodetree.findTaggedNode(distOrig, lambda tag: tag == 'debug-xfed').dist
-                    if mgcStreamDepth == 1:
-                        outPdf = os.path.join(figOutDir, 'scatter-'+id+'-xfed-'+str(phone)+'-'+streamId+'.pdf')
-                        draw.drawFor1DInput(debugAcc, subDist, outPdf = outPdf, xlims = map(inputWarp, lims), ylims = map(outputWarp, lims), title = outPdf)
-
-                    if simpleResiduals:
                         debugAcc = nodetree.findTaggedNode(accOrig, lambda tag: tag == 'debug-xfed')
                         subDist = nodetree.findTaggedNode(distOrig, lambda tag: tag == 'debug-xfed').dist
-                        residuals = np.array([ subDist.dist.residual(xf.AddBias()(input), output) for input, output in zip(debugAcc.memo.inputs, debugAcc.memo.outputs) ])
-                        f = lambda x: -0.5 * math.log(2.0 * math.pi) - 0.5 * x * x
-                        outPdf = os.path.join(figOutDir, 'residualLogPdf-'+id+'-'+str(phone)+'-'+streamId+'.pdf')
-                        if len(residuals) > 0:
-                            draw.drawLogPdf(residuals, bins = 20, fns = [f], outPdf = outPdf, title = outPdf)
+                        if mgcStreamDepth == 1:
+                            outPdf = os.path.join(figOutDir, 'scatter-'+id+'-xfed-'+str(phone)+'-state'+str(subLabel)+'-'+streamId+'.pdf')
+                            draw.drawFor1DInput(debugAcc, subDist, outPdf = outPdf, xlims = map(inputWarp, lims), ylims = map(outputWarp, lims), title = outPdf)
 
-                    if debugResiduals:
-                        debugAcc = nodetree.findTaggedNode(accOrig, lambda tag: tag == 'debug-residual')
-                        subDist = nodetree.findTaggedNode(distOrig, lambda tag: tag == 'debug-residual').dist
-                        f = lambda output: subDist.logProb([], output)
-                        outPdf = os.path.join(figOutDir, 'residualLogPdf-'+id+'-'+str(phone)+'-'+streamId+'.pdf')
-                        if len(debugAcc.memo.outputs) > 0:
-                            draw.drawLogPdf(debugAcc.memo.outputs, bins = 20, fns = [f], outPdf = outPdf, title = outPdf)
+                        if simpleResiduals:
+                            debugAcc = nodetree.findTaggedNode(accOrig, lambda tag: tag == 'debug-xfed')
+                            subDist = nodetree.findTaggedNode(distOrig, lambda tag: tag == 'debug-xfed').dist
+                            residuals = np.array([ subDist.dist.residual(xf.AddBias()(input), output) for input, output in zip(debugAcc.memo.inputs, debugAcc.memo.outputs) ])
+                            f = lambda x: -0.5 * math.log(2.0 * math.pi) - 0.5 * x * x
+                            outPdf = os.path.join(figOutDir, 'residualLogPdf-'+id+'-'+str(phone)+'-state'+str(subLabel)+'-'+streamId+'.pdf')
+                            if len(residuals) > 0:
+                                draw.drawLogPdf(residuals, bins = 20, fns = [f], outPdf = outPdf, title = outPdf)
 
-                    # (FIXME : replace with looking up sub-transform directly once tree structure for transforms is done)
-                    residualTransforms = nodetree.findTaggedNodes(distOrig, lambda tag: tag == 'residualTransform')
-                    assert len(residualTransforms) <= 1
-                    for residualTransform in residualTransforms:
-                        outPdf = os.path.join(figOutDir, 'residualTransform-'+id+'-'+str(phone)+'-'+streamId+'.pdf')
-                        draw.drawWarping([residualTransform.transform], outPdf = outPdf, xlims = [-2.5, 2.5], title = outPdf)
+                        if debugResiduals:
+                            debugAcc = nodetree.findTaggedNode(accOrig, lambda tag: tag == 'debug-residual')
+                            subDist = nodetree.findTaggedNode(distOrig, lambda tag: tag == 'debug-residual').dist
+                            f = lambda output: subDist.logProb([], output)
+                            outPdf = os.path.join(figOutDir, 'residualLogPdf-'+id+'-'+str(phone)+'-state'+str(subLabel)+'-'+streamId+'.pdf')
+                            if len(debugAcc.memo.outputs) > 0:
+                                draw.drawLogPdf(debugAcc.memo.outputs, bins = 20, fns = [f], outPdf = outPdf, title = outPdf)
+
+                        # (FIXME : replace with looking up sub-transform directly once tree structure for transforms is done)
+                        residualTransforms = nodetree.findTaggedNodes(distOrig, lambda tag: tag == 'residualTransform')
+                        assert len(residualTransforms) <= 1
+                        for residualTransform in residualTransforms:
+                            outPdf = os.path.join(figOutDir, 'residualTransform-'+id+'-'+str(phone)+'-state'+str(subLabel)+'-'+streamId+'.pdf')
+                            draw.drawWarping([residualTransform.transform], outPdf = outPdf, xlims = [-2.5, 2.5], title = outPdf)
 
         dist, trainLogLike, trainOcc = timed(trn.trainEM)(dist, corpus.accumulate, estimate = d.defaultEstimate, minIterations = 2, maxIterations = 2)
         reportTrainLogLike(trainLogLike, trainOcc)
