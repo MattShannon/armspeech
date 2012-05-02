@@ -1,6 +1,6 @@
 """Decision tree questions from HTS demo."""
 
-# Copyright 2011 Matt Shannon
+# Copyright 2011, 2012 Matt Shannon
 # The follow copyrights may apply to the list of questions:
 #     Copyright 2001-2008 Nagoya Institute of Technology, Department of Computer Science
 #     Copyright 2001-2008 Tokyo Institute of Technology, Interdisciplinary Graduate School of Science and Engineering

@@ -6,7 +6,7 @@ phone from a full-context label). A question is a callable that maps this
 value to a boolean representing yes or no.
 """
 
-# Copyright 2011 Matt Shannon
+# Copyright 2011, 2012 Matt Shannon
 
 # This file is part of armspeech.
 # See `License` for details of license and warranty.

@@ -2,7 +2,7 @@
 
 """Convenience script to print a pickled object."""
 
-# Copyright 2011 Matt Shannon
+# Copyright 2011, 2012 Matt Shannon
 
 # This file is part of armspeech.
 # See `License` for details of license and warranty.

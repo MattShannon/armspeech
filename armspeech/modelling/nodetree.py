@@ -6,7 +6,7 @@ Node identity is (by default) represented by python object identity, which is
 based on memory location.
 """
 
-# Copyright 2011 Matt Shannon
+# Copyright 2011, 2012 Matt Shannon
 
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
