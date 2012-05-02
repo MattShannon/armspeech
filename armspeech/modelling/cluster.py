@@ -80,15 +80,16 @@ def decisionTreeGetBestSplit(labelList, accForLabel, createAcc, questionGroups, 
     bestLogLike = logLikeLeaf
     bestEstimatedYes = None
     bestEstimatedNo = None
-    for labelValuer, questions in questionGroups:
-        accFor = defaultdict(createAcc)
-        for label in labelList:
-            labelValue = labelValuer(label)
-            d.addAcc(accFor[labelValue], accForLabel(label))
+    labelValueToAccs = [ defaultdict(createAcc) for questionGroup in questionGroups ]
+    for label in labelList:
+        acc = accForLabel(label)
+        for labelValueToAcc, (labelValuer, questions) in zip(labelValueToAccs, questionGroups):
+            d.addAcc(labelValueToAcc[labelValuer(label)], acc)
+    for labelValueToAcc, (labelValuer, questions) in zip(labelValueToAccs, questionGroups):
         for question in questions:
             yes = createAcc()
             no = createAcc()
-            for labelValue, acc in accFor.iteritems():
+            for labelValue, acc in labelValueToAcc.iteritems():
                 if question(labelValue):
                     d.addAcc(yes, acc)
                 else:
