@@ -8,10 +8,9 @@
 
 from __future__ import division
 
-from minimize import checkGrad, solveToMinimize, solveByMinimize, minimize
+from minimize import checkGrad, solveToMinimize, solveByMinimize
 
 import unittest
-import math
 import numpy as np
 from numpy.random import randn, randint
 import numpy.linalg as la

@@ -12,7 +12,6 @@ import armspeech.modelling.dist as d
 
 import math
 import numpy as np
-import matplotlib
 import matplotlib.transforms as transforms
 
 def partitionSeq(xs, numPartitions):

@@ -10,7 +10,6 @@ from __future__ import division
 
 from armspeech.util.mathhelp import logSum, sigmoid, sampleDiscrete
 import nodetree
-import transform as xf
 import semiring
 import wnet
 from armspeech.util.memoize import memoize

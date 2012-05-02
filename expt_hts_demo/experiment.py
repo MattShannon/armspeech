@@ -33,7 +33,6 @@ import numpy as np
 
 import matplotlib
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 
 def readDistFile(distFile):
     with open(distFile, 'r') as f:

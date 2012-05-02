@@ -14,8 +14,6 @@ value to a boolean representing yes or no.
 
 from __future__ import division
 
-import collections
-
 class IdLabelValuer(object):
     def __init__(self):
         pass

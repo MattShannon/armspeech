@@ -9,7 +9,6 @@
 from __future__ import division
 
 import dist as d
-import transform as xf
 
 import numpy as np
 
