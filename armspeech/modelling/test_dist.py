@@ -13,6 +13,7 @@ import dist as d
 import train as trn
 import summarizer
 import transform as xf
+import cluster
 import wnet
 from armspeech.util.mathhelp import logSum
 from armspeech.util.iterhelp import chunkList
@@ -808,7 +809,9 @@ class TestDist(unittest.TestCase):
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
 
-    def test_decisionTreeCluster(self, eps = 1e-8, numDists = 20, numPoints = 100):
+    # (FIXME : add a separate, independent unit test for decisionTreeCluster
+    #   (put in test_cluster.py))
+    def test_AutoGrowingDiscreteAcc_and_decisionTreeCluster(self, eps = 1e-8, numDists = 20, numPoints = 100):
         for distIndex in range(numDists):
             dimIn = randint(0, 5)
             dist, inputGen = gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = dimIn)
@@ -819,7 +822,7 @@ class TestDist(unittest.TestCase):
                     acc.add(input, output, occ)
                     totalOcc += occ
                 mdlThresh = 0.5 * (dimIn + 1) * math.log(totalOcc + 1.0)
-                return acc.decisionTreeCluster(test_dist_questions.getQuestionGroups(), thresh = mdlThresh, minOcc = 0.0, verbosity = 0)
+                return cluster.decisionTreeCluster(acc.accDict, acc.createAcc, test_dist_questions.getQuestionGroups(), thresh = mdlThresh, minOcc = 0.0, verbosity = 0)
             if True:
                 # check decision tree clustering runs at all
                 training = [ (input, dist.synth(input), math.exp(randn())) for input, index in zip(inputGen, range(numPoints)) ]

@@ -16,6 +16,7 @@ import armspeech.modelling.dist as d
 import armspeech.modelling.train as trn
 from armspeech.modelling import summarizer
 import armspeech.modelling.transform as xf
+from armspeech.modelling import cluster
 from armspeech.speech import draw
 from armspeech.util.timing import timed, printTime
 
@@ -514,7 +515,7 @@ def main(rawArgs):
 
         def decisionTreeClusterEstimatePartial(acc, estimateChild):
             if isinstance(acc, d.AutoGrowingDiscreteAcc):
-                return timed(acc.decisionTreeCluster)(questionGroups, thresh = 500.0, minOcc = 10.0, maxOcc = None, verbosity = 3)
+                return timed(cluster.decisionTreeCluster)(acc.accDict, acc.createAcc, questionGroups, thresh = 500.0, minOcc = 10.0, maxOcc = None, verbosity = 3)
         decisionTreeClusterEstimate = d.getEstimate([decisionTreeClusterEstimatePartial, d.defaultEstimatePartial])
 
         dist, trainLogLike, trainOcc = decisionTreeClusterEstimate(acc)
