@@ -515,7 +515,7 @@ def main(rawArgs):
 
         def decisionTreeClusterEstimatePartial(acc, estimateChild):
             if isinstance(acc, d.AutoGrowingDiscreteAcc):
-                return timed(cluster.decisionTreeCluster)(acc.accDict, acc.createAcc, questionGroups, thresh = 500.0, minOcc = 10.0, maxOcc = None, verbosity = 3)
+                return timed(cluster.decisionTreeCluster)(acc.accDict.keys(), lambda label: acc.accDict[label], acc.createAcc, questionGroups, thresh = 500.0, minOcc = 10.0, maxOcc = None, verbosity = 3)
         decisionTreeClusterEstimate = d.getEstimate([decisionTreeClusterEstimatePartial, d.defaultEstimatePartial])
 
         dist, trainLogLike, trainOcc = decisionTreeClusterEstimate(acc)

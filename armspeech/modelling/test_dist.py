@@ -822,7 +822,7 @@ class TestDist(unittest.TestCase):
                     acc.add(input, output, occ)
                     totalOcc += occ
                 mdlThresh = 0.5 * (dimIn + 1) * math.log(totalOcc + 1.0)
-                return cluster.decisionTreeCluster(acc.accDict, acc.createAcc, test_dist_questions.getQuestionGroups(), thresh = mdlThresh, minOcc = 0.0, verbosity = 0)
+                return cluster.decisionTreeCluster(acc.accDict.keys(), lambda label: acc.accDict[label], acc.createAcc, test_dist_questions.getQuestionGroups(), thresh = mdlThresh, minOcc = 0.0, verbosity = 0)
             if True:
                 # check decision tree clustering runs at all
                 training = [ (input, dist.synth(input), math.exp(randn())) for input, index in zip(inputGen, range(numPoints)) ]

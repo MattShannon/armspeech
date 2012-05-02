@@ -12,21 +12,20 @@ from armspeech.util.timing import timed
 
 from collections import defaultdict
 
-def decisionTreeCluster(accDict, createAcc, questionGroups, thresh, minOcc, maxOcc = None, verbosity = 2):
+def decisionTreeCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minOcc, maxOcc = None, verbosity = 2):
     if verbosity >= 1:
         print 'cluster: decision tree clustering with thresh =', thresh, 'and minOcc =', minOcc, 'and maxOcc =', maxOcc
-    labelList = accDict.keys()
     root = createAcc()
     for label in labelList:
-        d.addAcc(root, accDict[label])
+        d.addAcc(root, accForLabel(label))
     distRoot, logLikeRoot, occRoot = d.defaultEstimate(root)
-    dist, logLike, occ = decisionTreeSubCluster(accDict, createAcc, questionGroups, thresh, minOcc, maxOcc, [], labelList, distRoot, logLikeRoot, occRoot, verbosity)
+    dist, logLike, occ = decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minOcc, maxOcc, [], distRoot, logLikeRoot, occRoot, verbosity)
     assert_allclose(occ, occRoot)
     if verbosity >= 1:
         print 'cluster: log likelihood after =', logLike / occ, '('+str(occ)+' frames)', '('+str(dist.countLeaves())+' leaves)'
     return dist, logLike, occ
 
-def decisionTreeSubCluster(accDict, createAcc, questionGroups, thresh, minOcc, maxOcc, isYesList, labelList, distLeaf, logLikeLeaf, occNode, verbosity):
+def decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minOcc, maxOcc, isYesList, distLeaf, logLikeLeaf, occNode, verbosity):
     if verbosity >= 2:
         indent = '    '+''.join([ ('|  ' if isYes else '   ') for isYes in isYesList[:-1] ])
         if not isYesList:
@@ -42,7 +41,7 @@ def decisionTreeSubCluster(accDict, createAcc, questionGroups, thresh, minOcc, m
         indent += extra2
 
     getBestSplit = timed(decisionTreeGetBestSplit, msg = 'cluster:'+indent+'choose split took') if verbosity >= 3 else decisionTreeGetBestSplit
-    bestFullQuestion, bestLogLike, bestEstimatedYes, bestEstimatedNo = getBestSplit(accDict, createAcc, questionGroups, minOcc, labelList, logLikeLeaf, occNode)
+    bestFullQuestion, bestLogLike, bestEstimatedYes, bestEstimatedNo = getBestSplit(labelList, accForLabel, createAcc, questionGroups, minOcc, logLikeLeaf, occNode)
 
     if bestFullQuestion is not None and (bestLogLike - logLikeLeaf > thresh or maxOcc is not None and occNode > maxOcc):
         bestLabelValuer, bestQuestion = bestFullQuestion
@@ -58,8 +57,8 @@ def decisionTreeSubCluster(accDict, createAcc, questionGroups, thresh, minOcc, m
         distYesLeaf, logLikeYesLeaf, occYes = bestEstimatedYes
         distNoLeaf, logLikeNoLeaf, occNo = bestEstimatedNo
         assert_allclose(occYes + occNo, occNode)
-        distYes, logLikeYes, occYes = decisionTreeSubCluster(accDict, createAcc, questionGroups, thresh, minOcc, maxOcc, isYesList + [True], labelListYes, distYesLeaf, logLikeYesLeaf, occYes, verbosity)
-        distNo, logLikeNo, occNo = decisionTreeSubCluster(accDict, createAcc, questionGroups, thresh, minOcc, maxOcc, isYesList + [False], labelListNo, distNoLeaf, logLikeNoLeaf, occNo, verbosity)
+        distYes, logLikeYes, occYes = decisionTreeSubCluster(labelListYes, accForLabel, createAcc, questionGroups, thresh, minOcc, maxOcc, isYesList + [True], distYesLeaf, logLikeYesLeaf, occYes, verbosity)
+        distNo, logLikeNo, occNo = decisionTreeSubCluster(labelListNo, accForLabel, createAcc, questionGroups, thresh, minOcc, maxOcc, isYesList + [False], distNoLeaf, logLikeNoLeaf, occNo, verbosity)
         logLike = logLikeYes + logLikeNo
         occ = occYes + occNo
         assert_allclose(occ, occNode)
@@ -69,7 +68,7 @@ def decisionTreeSubCluster(accDict, createAcc, questionGroups, thresh, minOcc, m
             print 'cluster:'+indent+'leaf'
         return d.DecisionTreeLeaf(distLeaf), logLikeLeaf, occNode
 
-def decisionTreeGetBestSplit(accDict, createAcc, questionGroups, minOcc, labelList, logLikeLeaf, occNode):
+def decisionTreeGetBestSplit(labelList, accForLabel, createAcc, questionGroups, minOcc, logLikeLeaf, occNode):
     # (N.B. Could probably get a further speed-up (over and above that
     #   obtained by using question groups) for EqualityQuestion and
     #   ThreshQuestion by doing clever stuff with subtracting accs (i.e.
@@ -85,7 +84,7 @@ def decisionTreeGetBestSplit(accDict, createAcc, questionGroups, minOcc, labelLi
         accFor = defaultdict(createAcc)
         for label in labelList:
             labelValue = labelValuer(label)
-            d.addAcc(accFor[labelValue], accDict[label])
+            d.addAcc(accFor[labelValue], accForLabel(label))
         for question in questions:
             yes = createAcc()
             no = createAcc()
