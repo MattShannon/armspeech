@@ -751,6 +751,8 @@ def main(rawArgs):
         printTime('finished xf')
 
     try:
+        doDumpCorpus()
+
         doMonophoneSystem()
 
         doTimingInfoSystem()
