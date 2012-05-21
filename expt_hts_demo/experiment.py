@@ -220,7 +220,7 @@ def main(rawArgs):
                 ]), checkDerivPositive1D = True).withTag(residualTransformTag)
 
                 subDist = d.TransformedOutputDist(residualTransform,
-                    d.LinearGaussian(np.array([]), dist.variance)
+                    d.LinearGaussian(np.array([]), dist.variance, varianceFloor = 0.0)
                 )
                 if debugTag is not None:
                     subDist = d.DebugDist(None, subDist).withTag(debugTag)
@@ -364,7 +364,7 @@ def main(rawArgs):
                                     d.createDiscreteAcc(phoneset.phoneList, lambda phone:
                                         mgcSummarizer.createAcc(False, lambda outIndex:
                                             d.MappedInputAcc(xf.AddBias(),
-                                                d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1)
+                                                d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1, varianceFloor = 0.0)
                                             )
                                         )
                                     )
@@ -380,7 +380,7 @@ def main(rawArgs):
                                         #            d.BinaryLogisticClassifierAcc(d.BinaryLogisticClassifier(np.zeros([2 * lf0StreamDepth + 1]))),
                                         #            [
                                         #                d.FixedValueAcc(None),
-                                        #                d.LinearGaussianAcc(inputLength = 2 * lf0StreamDepth + 1)
+                                        #                d.LinearGaussianAcc(inputLength = 2 * lf0StreamDepth + 1, varianceFloor = 0.0)
                                         #            ]
                                         #        )
                                         #    )
@@ -468,7 +468,7 @@ def main(rawArgs):
                                         mgcSummarizer.createAcc(True, lambda outIndex:
                                             d.MappedInputAcc(np.concatenate,
                                                 d.MappedInputAcc(xf.AddBias(),
-                                                    d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + extraLength + 1)
+                                                    d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + extraLength + 1, varianceFloor = 0.0)
                                                 )
                                             )
                                         )
@@ -525,7 +525,7 @@ def main(rawArgs):
                                     d.AutoGrowingDiscreteAcc(lambda:
                                         mgcSummarizer.createAcc(False, lambda outIndex:
                                             d.MappedInputAcc(xf.AddBias(),
-                                                d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1)
+                                                d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1, varianceFloor = 0.0)
                                             )
                                         )
                                     )
@@ -635,7 +635,7 @@ def main(rawArgs):
                                                             d.DebugDist(None,
                                                                 d.MappedInputDist(xf.AddBias(),
                                                                     # arbitrary dist to get things rolling
-                                                                    d.LinearGaussian(np.zeros([mgcSummarizer.vectorLength(outIndex) + 1]), 1.0)
+                                                                    d.LinearGaussian(np.zeros([mgcSummarizer.vectorLength(outIndex) + 1]), 1.0, varianceFloor = 0.0)
                                                                 )
                                                             ).withTag('debug-xfed')
                                                         #)

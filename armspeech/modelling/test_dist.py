@@ -62,7 +62,7 @@ def simpleInputGen(dimIn, bias = False):
 def gen_LinearGaussian(dimIn = 3, bias = False):
     coeff = randn(dimIn)
     variance = math.exp(randn())
-    dist = d.LinearGaussian(coeff, variance).withTag(randTag())
+    dist = d.LinearGaussian(coeff, variance, varianceFloor = 0.0).withTag(randTag())
     return dist, simpleInputGen(dimIn, bias = bias)
 
 def gen_StudentDist(dimIn = 3):
@@ -705,7 +705,7 @@ class TestDist(unittest.TestCase):
                 initEstDist = gen_LinearGaussian(dimIn)[0]
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
-                createAcc = lambda: d.LinearGaussianAcc(inputLength = dimIn).withTag(randTag())
+                createAcc = lambda: d.LinearGaussianAcc(inputLength = dimIn, varianceFloor = 0.0).withTag(randTag())
                 check_est(dist, getTrainFromAcc(createAcc), inputGen, hasParams = True)
 
     def test_StudentDist(self, eps = 1e-8, numDists = 50, numPoints = 100):
@@ -752,7 +752,7 @@ class TestDist(unittest.TestCase):
                     def accumulate(acc):
                         for input, output, occ in training:
                             acc.add(input, output, occ)
-                    acc = d.LinearGaussianAcc(inputLength = dimIn)
+                    acc = d.LinearGaussianAcc(inputLength = dimIn, varianceFloor = 0.0)
                     accumulate(acc)
                     initDist, initLogLike, initOcc = acc.estimateInitialMixtureOfTwoExperts()
                     return trn.trainEM(initDist, accumulate, deltaThresh = 1e-9)
@@ -816,7 +816,7 @@ class TestDist(unittest.TestCase):
             dimIn = randint(0, 5)
             dist, inputGen = gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = dimIn)
             def train(training):
-                acc = d.AutoGrowingDiscreteAcc(createAcc = lambda: d.LinearGaussianAcc(inputLength = dimIn))
+                acc = d.AutoGrowingDiscreteAcc(createAcc = lambda: d.LinearGaussianAcc(inputLength = dimIn, varianceFloor = 0.0))
                 for input, output, occ in training:
                     acc.add(input, output, occ)
                 return cluster.decisionTreeCluster(acc.accDict.keys(), lambda label: acc.accDict[label], acc.createAcc, test_dist_questions.getQuestionGroups(), thresh = None, minOcc = 0.0, verbosity = 0)
@@ -1097,7 +1097,7 @@ def testMixtureOfTwoExpertsInitialization():
 
     plotData()
 
-    acc = d.LinearGaussianAcc(inputLength = dim + 1)
+    acc = d.LinearGaussianAcc(inputLength = dim + 1, varianceFloor = 0.0)
     accumulate(acc)
     dist, trainLogLike, trainOcc = acc.estimateInitialMixtureOfTwoExperts()
     blc = dist.classDist

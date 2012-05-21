@@ -378,16 +378,22 @@ class OracleAcc(TermAcc):
         return OracleDist(tag = self.tag), 0.0, self.occ
 
 class LinearGaussianAcc(TermAcc):
-    def __init__(self, distPrev = None, inputLength = None, tag = None):
+    def __init__(self, distPrev = None, inputLength = None, varianceFloor = None, tag = None):
         self.distPrev = distPrev
+        self.varianceFloor = 0.0
         if distPrev is not None:
             inputLength = len(distPrev.coeff)
+            self.varianceFloor = distPrev.varianceFloor
+        if varianceFloor is not None:
+            self.varianceFloor = varianceFloor
         self.tag = tag
 
         self.occ = 0.0
         self.sumSqr = 0.0
         self.sumTarget = np.zeros([inputLength])
         self.sumOuter = np.zeros([inputLength, inputLength])
+
+        assert self.varianceFloor >= 0.0
 
     def add(self, input, output, occ = 1.0):
         self.occ += occ
@@ -419,7 +425,6 @@ class LinearGaussianAcc(TermAcc):
     def derivParamsSingle(self):
         return self.auxDerivParams(self.distPrev.coeff, self.distPrev.variance)
 
-    # FIXME : variance flooring?
     def estimateSingle(self):
         try:
             if self.occ == 0.0:
@@ -430,18 +435,20 @@ class LinearGaussianAcc(TermAcc):
                 raise EstimationError('could not compute pseudo-inverse: '+str(detail))
             coeff = np.dot(sumOuterInv, self.sumTarget)
             variance = (self.sumSqr - np.dot(coeff, self.sumTarget)) / self.occ
+            if variance < self.varianceFloor:
+                variance = self.varianceFloor
             if variance <= 0.0:
                 raise EstimationError('computed variance is zero or negative: '+str(variance))
             elif variance < 1e-10:
                 raise EstimationError('computed variance too miniscule (variances this small can lead to substantial loss of precision during accumulation): '+str(variance))
             auxValue = self.logLikeSingle() if self.distPrev is not None else self.aux(coeff, variance)
-            return LinearGaussian(coeff, variance, tag = self.tag), auxValue, self.occ
+            return LinearGaussian(coeff, variance, self.varianceFloor, tag = self.tag), auxValue, self.occ
         except EstimationError, detail:
             if self.distPrev is None:
                 raise
             else:
                 sys.stderr.write('WARNING: reverting to previous dist due to error during LinearGaussian estimation: '+str(detail)+'\n')
-                return LinearGaussian(self.distPrev.coeff, self.distPrev.variance, tag = self.tag), self.logLikeSingle(), self.occ
+                return LinearGaussian(self.distPrev.coeff, self.distPrev.variance, self.varianceFloor, tag = self.tag), self.logLikeSingle(), self.occ
 
     # N.B. assumes last component of input vector is bias (weakly checked)
     # (N.B. is geometric -- not invariant with respect to scaling of individual summarizers (at least for depth > 0))
@@ -461,8 +468,8 @@ class LinearGaussianAcc(TermAcc):
             dist, logLike, occ = self.estimateSingle()
             mean = dist.coeff[0]
             variance = dist.variance
-            dist0 = LinearGaussian(np.array([mean - 0.2 * math.sqrt(variance)]), variance)
-            dist1 = LinearGaussian(np.array([mean + 0.2 * math.sqrt(variance)]), variance)
+            dist0 = LinearGaussian(np.array([mean - 0.2 * math.sqrt(variance)]), variance, self.varianceFloor)
+            dist1 = LinearGaussian(np.array([mean + 0.2 * math.sqrt(variance)]), variance, self.varianceFloor)
             return MixtureDist(blc, [dist0, dist1]), logLike, occ
         else:
             l, U = la.eigh(S - np.outer(mu, mu))
@@ -1389,21 +1396,24 @@ class OracleDist(TermDist):
         return OracleDist(tag = self.tag), params
 
 class LinearGaussian(TermDist):
-    def __init__(self, coeff, variance, tag = None):
+    def __init__(self, coeff, variance, varianceFloor, tag = None):
         self.coeff = coeff
         self.variance = variance
+        self.varianceFloor = varianceFloor
         self.tag = tag
         self.gConst = -0.5 * math.log(2.0 * math.pi)
 
+        assert self.varianceFloor >= 0.0
+        assert self.variance >= self.varianceFloor
         assert self.variance > 0.0
         if self.variance < 1e-10:
             raise RuntimeError('LinearGaussian variance too miniscule (variances this small can lead to substantial loss of precision during accumulation): '+str(self.variance))
 
     def __repr__(self):
-        return 'LinearGaussian('+repr(self.coeff)+', '+repr(self.variance)+', tag = '+repr(self.tag)+')'
+        return 'LinearGaussian('+repr(self.coeff)+', '+repr(self.variance)+', '+repr(self.varianceFloor)+', tag = '+repr(self.tag)+')'
 
     def mapChildren(self, mapChild):
-        return LinearGaussian(self.coeff, self.variance, tag = self.tag)
+        return LinearGaussian(self.coeff, self.variance, self.varianceFloor, tag = self.tag)
 
     def logProb(self, input, output):
         mean = np.dot(self.coeff, input)
@@ -1440,7 +1450,7 @@ class LinearGaussian(TermDist):
         n = len(self.coeff)
         coeff = params[:n]
         variance = math.exp(-params[n])
-        return LinearGaussian(coeff, variance, tag = self.tag), params[n + 1:]
+        return LinearGaussian(coeff, variance, self.varianceFloor, tag = self.tag), params[n + 1:]
 
 class StudentDist(TermDist):
     def __init__(self, df, precision, tag = None):
