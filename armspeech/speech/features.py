@@ -1,4 +1,4 @@
-"""Representation and I/O for acoustic features."""
+"""Representation, I/O and utility functions for acoustic features."""
 
 # Copyright 2011, 2012 Matt Shannon
 
@@ -12,9 +12,17 @@ from __future__ import with_statement
 import os
 import sys
 import struct
+import math
 import numpy as np
+import numpy.linalg as la
 import itertools
 import subprocess
+
+mcdConstant = 10.0 / math.log(10.0) * math.sqrt(2.0)
+def stdCepDist(synthVec, actualVec):
+    return mcdConstant * la.norm(np.asarray(synthVec)[1:] - np.asarray(actualVec)[1:])
+def stdCepDistIncZero(synthVec, actualVec):
+    return mcdConstant * la.norm(np.asarray(synthVec) - np.asarray(actualVec))
 
 def readParamFile(paramFile, paramOrder, decode = None):
     floatLittleEndian = struct.Struct('<'+''.join([ 'f' for i in range(paramOrder) ]))

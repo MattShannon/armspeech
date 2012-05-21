@@ -17,6 +17,7 @@ import armspeech.modelling.train as trn
 from armspeech.modelling import summarizer
 import armspeech.modelling.transform as xf
 from armspeech.modelling import cluster
+from armspeech.speech.features import stdCepDist, stdCepDistIncZero
 from armspeech.speech import draw
 from armspeech.util.timing import timed, printTime
 
@@ -158,13 +159,14 @@ def main(rawArgs):
         print 'test set log prob =', testLogProb / testOcc, '('+str(testOcc)+' frames)'
         print
 
-    def evaluateMgcCepDist(dist, corpus, includeCepZero = False):
-        def extractVectorSeq(acousticSeq):
-            return [ (mgcFrame if includeCepZero else mgcFrame[1:]) for mgcFrame, lf0Frame, bapFrame in acousticSeq ]
-        trainCd, trainOcc = corpus.cepDist_frames(dist, corpus.trainUttIds, extractVectorSeq)
-        print 'train set MCD =', trainCd / trainOcc, '('+str(trainOcc)+' frames)'
-        testCd, testOcc = corpus.cepDist_frames(dist, corpus.testUttIds, extractVectorSeq)
-        print 'test set MCD =', testCd / testOcc, '('+str(testOcc)+' frames)'
+    def evaluateMgcOutError(dist, corpus, vecError = stdCepDist, desc = 'MCD'):
+        def frameToVec(frame):
+            mgcFrame, lf0Frame, bapFrame = frame
+            return mgcFrame
+        trainError, trainOcc = corpus.outError_frames(dist, corpus.trainUttIds, vecError, frameToVec)
+        print 'train set %s = %s (%s frames)' % (desc, trainError / trainOcc, trainOcc)
+        testError, testOcc = corpus.outError_frames(dist, corpus.testUttIds, vecError, frameToVec)
+        print 'test set %s = %s (%s frames)' % (desc, testError / testOcc, testOcc)
         print
 
     def evaluateSynthesize(dist, corpus, exptTag, afterSynth = None):
@@ -396,7 +398,7 @@ def main(rawArgs):
         reportTrainLogLike(trainLogLike, trainOcc)
         writeDistFile(os.path.join(distOutDir, 'mono.dist'), dist)
         evaluateLogProb(dist, corpus)
-        evaluateMgcCepDist(dist, corpus, includeCepZero = True)
+        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'mono', afterSynth = getDrawMgc())
 
         print
@@ -404,14 +406,14 @@ def main(rawArgs):
         dist = mixup(dist, corpus.accumulate)
         writeDistFile(os.path.join(distOutDir, 'mono.2mix.dist'), dist)
         evaluateLogProb(dist, corpus)
-        evaluateMgcCepDist(dist, corpus, includeCepZero = True)
+        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'mono.2mix', afterSynth = getDrawMgc())
         print
         print 'MIXING UP (to 4 components)'
         dist = mixup(dist, corpus.accumulate)
         writeDistFile(os.path.join(distOutDir, 'mono.4mix.dist'), dist)
         evaluateLogProb(dist, corpus)
-        evaluateMgcCepDist(dist, corpus, includeCepZero = True)
+        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'mono.4mix', afterSynth = getDrawMgc())
 
         printTime('finished mono')
@@ -475,7 +477,7 @@ def main(rawArgs):
         reportTrainLogLike(trainLogLike, trainOcc)
         writeDistFile(os.path.join(distOutDir, 'timinginfo.dist'), dist)
         evaluateLogProb(dist, corpus)
-        evaluateMgcCepDist(dist, corpus, includeCepZero = True)
+        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'timinginfo', afterSynth = getDrawMgc())
 
         printTime('finished timinginfo')
@@ -536,7 +538,7 @@ def main(rawArgs):
         reportTrainLogLike(trainLogLike, trainOcc)
         writeDistFile(os.path.join(distOutDir, 'clustered.dist'), dist)
         evaluateLogProb(dist, corpus)
-        evaluateMgcCepDist(dist, corpus, includeCepZero = True)
+        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'clustered', afterSynth = getDrawMgc())
 
         print
@@ -544,14 +546,14 @@ def main(rawArgs):
         dist = mixup(dist, corpus.accumulate)
         writeDistFile(os.path.join(distOutDir, 'clustered.2mix.dist'), dist)
         evaluateLogProb(dist, corpus)
-        evaluateMgcCepDist(dist, corpus, includeCepZero = True)
+        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'clustered.2mix', afterSynth = getDrawMgc())
         print
         print 'MIXING UP (to 4 components)'
         dist = mixup(dist, corpus.accumulate)
         writeDistFile(os.path.join(distOutDir, 'clustered.4mix.dist'), dist)
         evaluateLogProb(dist, corpus)
-        evaluateMgcCepDist(dist, corpus, includeCepZero = True)
+        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'clustered.4mix', afterSynth = getDrawMgc())
 
         printTime('finished clustered')
@@ -699,7 +701,7 @@ def main(rawArgs):
         writeDistFile(os.path.join(distOutDir, 'xf_init.dist'), dist)
         timed(drawVarious)(dist, id = 'xf_init', simpleResiduals = True)
         evaluateLogProb(dist, corpus)
-        evaluateMgcCepDist(dist, corpus, includeCepZero = True)
+        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'xf_init', afterSynth = getDrawMgc())
 
         print
@@ -713,7 +715,7 @@ def main(rawArgs):
         writeDistFile(os.path.join(distOutDir, 'xf.dist'), dist)
         timed(drawVarious)(dist, id = 'xf', simpleResiduals = True)
         evaluateLogProb(dist, corpus)
-        evaluateMgcCepDist(dist, corpus, includeCepZero = True)
+        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'xf', afterSynth = getDrawMgc())
 
         if studentResiduals:
@@ -735,7 +737,7 @@ def main(rawArgs):
         writeDistFile(os.path.join(distOutDir, 'xf.res.dist'), dist)
         timed(drawVarious)(dist, id = 'xf.res', debugResiduals = True)
         evaluateLogProb(dist, corpus)
-        evaluateMgcCepDist(dist, corpus, includeCepZero = True)
+        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'xf.res', afterSynth = getDrawMgc())
 
         print
@@ -745,7 +747,7 @@ def main(rawArgs):
         writeDistFile(os.path.join(distOutDir, 'xf.res.xf.dist'), dist)
         timed(drawVarious)(dist, id = 'xf.res.xf', debugResiduals = True)
         evaluateLogProb(dist, corpus)
-        evaluateMgcCepDist(dist, corpus, includeCepZero = True)
+        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'xf.res.xf', afterSynth = getDrawMgc())
 
         printTime('finished xf')
