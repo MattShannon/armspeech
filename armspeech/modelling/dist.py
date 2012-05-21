@@ -751,8 +751,8 @@ class DiscreteAcc(Acc):
         return sum([ acc.occ for acc in self.accDict.values() ])
 
     def add(self, input, output, occ = 1.0):
-        pid, acInput = input
-        self.accDict[pid].add(acInput, output, occ)
+        label, acInput = input
+        self.accDict[label].add(acInput, output, occ)
 
     def addAccSingle(self, acc):
         assert self.keys == acc.keys
@@ -767,8 +767,8 @@ class DiscreteAcc(Acc):
         distDict = dict()
         logLikeTot = 0.0
         occTot = 0.0
-        for pid in self.accDict:
-            distDict[pid], logLike, occ = estimateChild(self.accDict[pid])
+        for label in self.accDict:
+            distDict[label], logLike, occ = estimateChild(self.accDict[label])
             logLikeTot += logLike
             occTot += occ
         return DiscreteDist(self.keys, distDict, tag = self.tag), logLikeTot, occTot
@@ -792,20 +792,20 @@ class AutoGrowingDiscreteAcc(Acc):
         return self.accDict.values()
 
     def add(self, input, output, occ = 1.0):
-        pid, acInput = input
-        if not pid in self.accDict:
-            self.accDict[pid] = self.createAcc()
-        self.accDict[pid].add(acInput, output, occ)
+        label, acInput = input
+        if not label in self.accDict:
+            self.accDict[label] = self.createAcc()
+        self.accDict[label].add(acInput, output, occ)
 
     def addAccSingle(self, acc):
         pass
 
     def addAccChildPairs(self, acc):
         ret = []
-        for pid in acc.accDict:
-            if not pid in self.accDict:
-                self.accDict[pid] = self.createAcc()
-            ret.append((self.accDict[pid], acc.accDict[pid]))
+        for label in acc.accDict:
+            if not label in self.accDict:
+                self.accDict[label] = self.createAcc()
+            ret.append((self.accDict[label], acc.accDict[label]))
         return ret
 
 class DecisionTreeAcc(Acc):
@@ -1833,31 +1833,31 @@ class DiscreteDist(Dist):
 
     def mapChildren(self, mapChild):
         distDict = dict()
-        for pid in self.distDict:
-            distDict[pid] = mapChild(self.distDict[pid])
+        for label in self.distDict:
+            distDict[label] = mapChild(self.distDict[label])
         return DiscreteDist(self.keys, distDict, tag = self.tag)
 
     def logProb(self, input, output):
-        pid, acInput = input
-        return self.distDict[pid].logProb(acInput, output)
+        label, acInput = input
+        return self.distDict[label].logProb(acInput, output)
 
     def logProbDerivInput(self, input, output):
-        pid, acInput = input
-        return self.distDict[pid].logProbDerivInput(acInput, output)
+        label, acInput = input
+        return self.distDict[label].logProbDerivInput(acInput, output)
 
     def logProbDerivOutput(self, input, output):
-        pid, acInput = input
-        return self.distDict[pid].logProbDerivOutput(acInput, output)
+        label, acInput = input
+        return self.distDict[label].logProbDerivOutput(acInput, output)
 
     def createAcc(self, createAccChild):
         accDict = dict()
-        for pid in self.distDict:
-            accDict[pid] = createAccChild(self.distDict[pid])
+        for label in self.distDict:
+            accDict[label] = createAccChild(self.distDict[label])
         return DiscreteAcc(self.keys, accDict, tag = self.tag)
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
-        pid, acInput = input
-        return self.distDict[pid].synth(acInput, method, actualOutput)
+        label, acInput = input
+        return self.distDict[label].synth(acInput, method, actualOutput)
 
     def paramsSingle(self):
         return []
