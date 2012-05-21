@@ -480,7 +480,7 @@ def main(rawArgs):
 
         printTime('finished timinginfo')
 
-    def doDecisionTreeClusteredSystem(numSubLabels = 1):
+    def doDecisionTreeClusteredSystem(numSubLabels = 1, mdlFactor = 0.3):
         print
         print 'DECISION TREE CLUSTERING'
         printTime('started clustered')
@@ -528,7 +528,7 @@ def main(rawArgs):
 
         def decisionTreeClusterEstimatePartial(acc, estimateChild):
             if isinstance(acc, d.AutoGrowingDiscreteAcc):
-                return timed(cluster.decisionTreeCluster)(acc.accDict.keys(), lambda label: acc.accDict[label], acc.createAcc, questionGroups, thresh = 500.0, minOcc = 10.0, maxOcc = None, verbosity = 3)
+                return timed(cluster.decisionTreeCluster)(acc.accDict.keys(), lambda label: acc.accDict[label], acc.createAcc, questionGroups, thresh = None, mdlFactor = 0.3, minOcc = 10.0, maxOcc = None, verbosity = 3)
         decisionTreeClusterEstimate = d.getEstimate([decisionTreeClusterEstimatePartial, d.defaultEstimatePartial])
 
         dist, trainLogLike, trainOcc = decisionTreeClusterEstimate(acc)

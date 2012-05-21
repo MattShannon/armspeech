@@ -10,15 +10,22 @@ import dist as d
 from armspeech.util.mathhelp import assert_allclose
 from armspeech.util.timing import timed
 
+import math
 from collections import defaultdict
 
-def decisionTreeCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minOcc, maxOcc = None, verbosity = 2):
-    if verbosity >= 1:
-        print 'cluster: decision tree clustering with thresh =', thresh, 'and minOcc =', minOcc, 'and maxOcc =', maxOcc
+def decisionTreeCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minOcc, maxOcc = None, mdlFactor = 1.0, verbosity = 2):
     root = createAcc()
     for label in labelList:
         d.addAcc(root, accForLabel(label))
     distRoot, logLikeRoot, occRoot = d.defaultEstimate(root)
+    if thresh is None:
+        numParamsPerLeaf = len(d.defaultParamSpec.params(distRoot))
+        totalOcc = root.occ
+        thresh = 0.5 * mdlFactor * numParamsPerLeaf * math.log(totalOcc + 1.0)
+        if verbosity >= 1:
+            print 'cluster: setting thresh using MDL: mdlFactor =', mdlFactor, 'and numParamsPerLeaf =', numParamsPerLeaf, 'and occ =', totalOcc
+    if verbosity >= 1:
+        print 'cluster: decision tree clustering with thresh =', thresh, 'and minOcc =', minOcc, 'and maxOcc =', maxOcc
     dist, logLike, occ = decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minOcc, maxOcc, [], distRoot, logLikeRoot, occRoot, verbosity)
     assert_allclose(occ, occRoot)
     if verbosity >= 1:
