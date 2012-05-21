@@ -453,6 +453,9 @@ class LinearGaussianAcc(TermAcc):
     # N.B. assumes last component of input vector is bias (weakly checked)
     # (N.B. is geometric -- not invariant with respect to scaling of individual summarizers (at least for depth > 0))
     def estimateInitialMixtureOfTwoExperts(self):
+        if self.occ == 0.0:
+            sys.stderr.write('WARNING: not mixing up LinearGaussian with occ == 0.0\n')
+            return self.estimateSingle()
         sigmoidAbscissaAtOneStdev = 0.5
         occRecompute = self.sumOuter[-1, -1]
         S = self.sumOuter[:-1, :-1] / occRecompute
@@ -474,6 +477,9 @@ class LinearGaussianAcc(TermAcc):
         else:
             l, U = la.eigh(S - np.outer(mu, mu))
             eigVal, (index, eigVec) = max(zip(l, enumerate(np.transpose(U))))
+            if eigVal == 0.0:
+                sys.stderr.write('WARNING: not mixing up LinearGaussian since eigenvalue 0.0\n')
+                return self.estimateSingle()
             w = eigVec * sigmoidAbscissaAtOneStdev / math.sqrt(eigVal)
             w0 = -np.dot(w, mu)
             blc = BinaryLogisticClassifier(np.append(w, w0))
