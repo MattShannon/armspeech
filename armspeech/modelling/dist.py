@@ -393,6 +393,7 @@ class LinearGaussianAcc(TermAcc):
         self.sumTarget = np.zeros([inputLength])
         self.sumOuter = np.zeros([inputLength, inputLength])
 
+        assert self.varianceFloor is not None
         assert self.varianceFloor >= 0.0
 
     def add(self, input, output, occ = 1.0):
@@ -1409,6 +1410,7 @@ class LinearGaussian(TermDist):
         self.tag = tag
         self.gConst = -0.5 * math.log(2.0 * math.pi)
 
+        assert self.varianceFloor is not None
         assert self.varianceFloor >= 0.0
         assert self.variance >= self.varianceFloor
         assert self.variance > 0.0
