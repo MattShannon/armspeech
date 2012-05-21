@@ -1536,7 +1536,7 @@ class ConstantClassifier(TermDist):
         probs = np.exp(self.logProbs)
         assert_allclose(sum(probs), 1.0)
         if method == SynthMethod.Meanish:
-            prob, classIndex = max((prob, classIndex) for classIndex, prob in enumerate(probs))
+            prob, classIndex = max([ (prob, classIndex) for classIndex, prob in enumerate(probs) ])
             return classIndex
         elif method == SynthMethod.Sample:
             return sampleDiscrete(list(enumerate(probs)))
