@@ -159,6 +159,16 @@ def main(rawArgs):
         print 'test set log prob =', testLogProb / testOcc, '('+str(testOcc)+' frames)'
         print
 
+    def evaluateMgcArOutError(dist, corpus, vecError = stdCepDist, desc = 'MARCD'):
+        def frameToVec(frame):
+            mgcFrame, lf0Frame, bapFrame = frame
+            return mgcFrame
+        trainError, trainOcc = corpus.arOutError_frames(dist, corpus.trainUttIds, vecError, frameToVec)
+        print 'train set %s = %s (%s frames)' % (desc, trainError / trainOcc, trainOcc)
+        testError, testOcc = corpus.arOutError_frames(dist, corpus.testUttIds, vecError, frameToVec)
+        print 'test set %s = %s (%s frames)' % (desc, testError / testOcc, testOcc)
+        print
+
     def evaluateMgcOutError(dist, corpus, vecError = stdCepDist, desc = 'MCD'):
         def frameToVec(frame):
             mgcFrame, lf0Frame, bapFrame = frame
@@ -399,6 +409,7 @@ def main(rawArgs):
         writeDistFile(os.path.join(distOutDir, 'mono.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'mono', afterSynth = getDrawMgc())
 
         print
@@ -407,6 +418,7 @@ def main(rawArgs):
         writeDistFile(os.path.join(distOutDir, 'mono.2mix.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'mono.2mix', afterSynth = getDrawMgc())
         print
         print 'MIXING UP (to 4 components)'
@@ -414,6 +426,7 @@ def main(rawArgs):
         writeDistFile(os.path.join(distOutDir, 'mono.4mix.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'mono.4mix', afterSynth = getDrawMgc())
 
         printTime('finished mono')
@@ -478,6 +491,7 @@ def main(rawArgs):
         writeDistFile(os.path.join(distOutDir, 'timinginfo.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'timinginfo', afterSynth = getDrawMgc())
 
         printTime('finished timinginfo')
@@ -539,6 +553,7 @@ def main(rawArgs):
         writeDistFile(os.path.join(distOutDir, 'clustered.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'clustered', afterSynth = getDrawMgc())
 
         print
@@ -547,6 +562,7 @@ def main(rawArgs):
         writeDistFile(os.path.join(distOutDir, 'clustered.2mix.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'clustered.2mix', afterSynth = getDrawMgc())
         print
         print 'MIXING UP (to 4 components)'
@@ -554,6 +570,7 @@ def main(rawArgs):
         writeDistFile(os.path.join(distOutDir, 'clustered.4mix.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'clustered.4mix', afterSynth = getDrawMgc())
 
         printTime('finished clustered')
@@ -702,6 +719,7 @@ def main(rawArgs):
         timed(drawVarious)(dist, id = 'xf_init', simpleResiduals = True)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'xf_init', afterSynth = getDrawMgc())
 
         print
@@ -716,6 +734,7 @@ def main(rawArgs):
         timed(drawVarious)(dist, id = 'xf', simpleResiduals = True)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'xf', afterSynth = getDrawMgc())
 
         if studentResiduals:
@@ -738,6 +757,7 @@ def main(rawArgs):
         timed(drawVarious)(dist, id = 'xf.res', debugResiduals = True)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'xf.res', afterSynth = getDrawMgc())
 
         print
@@ -748,6 +768,7 @@ def main(rawArgs):
         timed(drawVarious)(dist, id = 'xf.res.xf', debugResiduals = True)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateSynthesize(dist, corpus, 'xf.res.xf', afterSynth = getDrawMgc())
 
         printTime('finished xf')

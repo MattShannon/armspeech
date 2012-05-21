@@ -2008,6 +2008,10 @@ class MappedInputDist(Dist):
     def logProbDerivOutput(self, input, output):
         return self.dist.logProbDerivOutput(self.inputTransform(input), output)
 
+    # (FIXME : not ideal to have to have this here)
+    def arError_frames(self, input, output, distError):
+        return self.dist.arError_frames(self.inputTransform(input), output, distError)
+
     def createAcc(self, createAccChild):
         acc = createAccChild(self.dist)
         return MappedInputAcc(self.inputTransform, acc, tag = self.tag)
@@ -2318,6 +2322,16 @@ class AutoregressiveSequenceDist(Dist):
         # FIXME : complete
         notyetimplemented
 
+    def arError_frames(self, inSeq, outSeq, distError):
+        error = 0.0
+        frames = 0
+        assert len(inSeq) == len(outSeq)
+        for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq)):
+            if len(outContext) == self.depth:
+                error += distError(self.dist, (inFrame, outContext), outFrame)
+                frames += 1
+        return error, frames
+
     def createAcc(self, createAccChild):
         return AutoregressiveSequenceAcc(self.depth, createAccChild(self.dist), tag = self.tag)
 
@@ -2479,6 +2493,10 @@ class AutoregressiveNetDist(Dist):
 
     def logProbDerivOutput(self, input, output):
         # FIXME : complete
+        notyetimplemented
+
+    def arError_frames(self, input, output, distError):
+        # FIXME : complete (compute using expectation semiring?)
         notyetimplemented
 
     def createAcc(self, createAccChild, verbosity = 0):
