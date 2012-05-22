@@ -380,12 +380,9 @@ class OracleAcc(TermAcc):
 class LinearGaussianAcc(TermAcc):
     def __init__(self, distPrev = None, inputLength = None, varianceFloor = None, tag = None):
         self.distPrev = distPrev
-        self.varianceFloor = 0.0
         if distPrev is not None:
             inputLength = len(distPrev.coeff)
-            self.varianceFloor = distPrev.varianceFloor
-        if varianceFloor is not None:
-            self.varianceFloor = varianceFloor
+        self.varianceFloor = varianceFloor if varianceFloor is not None else (distPrev.varianceFloor if distPrev is not None else 0.0)
         self.tag = tag
 
         self.occ = 0.0
