@@ -382,6 +382,7 @@ class LinearGaussianAcc(TermAcc):
         self.distPrev = distPrev
         if distPrev is not None:
             inputLength = len(distPrev.coeff)
+        assert inputLength >= 0
         self.varianceFloor = varianceFloor if varianceFloor is not None else (distPrev.varianceFloor if distPrev is not None else 0.0)
         self.tag = tag
 
@@ -1525,12 +1526,12 @@ class StudentDist(TermDist):
         return StudentDist(df, precision, tag = self.tag), params[2:]
 
 class ConstantClassifier(TermDist):
-    # N.B. assume logProbs (log-)sum to 1
-    #   (may relax this in future)
     def __init__(self, logProbs, tag = None):
-        assert len(logProbs) >= 1
         self.logProbs = logProbs
         self.tag = tag
+
+        assert len(self.logProbs) >= 1
+        assert_allclose(sum(np.exp(self.logProbs)), 1.0)
 
     def __repr__(self):
         return 'ConstantClassifier('+repr(self.logProbs)+', tag = '+repr(self.tag)+')'
