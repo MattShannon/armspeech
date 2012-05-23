@@ -74,7 +74,7 @@ def gen_StudentDist(dimIn = 3):
 def gen_ConstantClassifier(numClasses = 5):
     probs = np.exp(randn(numClasses))
     probs = probs / sum(probs)
-    dist = d.ConstantClassifier(probs).withTag(randTag())
+    dist = d.ConstantClassifier(probs, probFloors = np.zeros((numClasses,))).withTag(randTag())
     return dist, simpleInputGen(0)
 
 def gen_BinaryLogisticClassifier(dimIn = 3, bias = False, useZeroCoeff = False):
@@ -728,7 +728,7 @@ class TestDist(unittest.TestCase):
                 initEstDist = gen_ConstantClassifier(numClasses)[0]
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
-                createAcc = lambda: d.ConstantClassifierAcc(numClasses = numClasses).withTag(randTag())
+                createAcc = lambda: d.ConstantClassifierAcc(numClasses = numClasses, probFloors = np.zeros((numClasses,))).withTag(randTag())
                 check_est(dist, getTrainFromAcc(createAcc), inputGen, hasParams = True)
 
     def test_BinaryLogisticClassifier(self, eps = 1e-8, numDists = 50, numPoints = 100):

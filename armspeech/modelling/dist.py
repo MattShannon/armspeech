@@ -491,15 +491,21 @@ class LinearGaussianAcc(TermAcc):
             return MixtureDist(blc, [dist0, dist1]), logLike, occ
 
 class ConstantClassifierAcc(TermAcc):
-    def __init__(self, distPrev = None, numClasses = None, tag = None):
+    def __init__(self, distPrev = None, numClasses = None, probFloors = None, tag = None):
         self.distPrev = distPrev
         if distPrev is not None:
             numClasses = len(distPrev.probs)
         assert numClasses >= 1
+        self.probFloors = probFloors if probFloors is not None else (distPrev.probFloors if distPrev is not None else np.zeros((numClasses,)))
         self.tag = tag
 
         self.occ = 0.0
         self.occs = np.zeros([numClasses])
+
+        assert self.probFloors is not None
+        assert len(self.probFloors) == len(self.occs)
+        assert all(self.probFloors >= 0.0)
+        assert sum(self.probFloors) <= 1.0
 
     def add(self, input, classIndex, occ = 1.0):
         self.occ += occ
@@ -528,14 +534,38 @@ class ConstantClassifierAcc(TermAcc):
             if self.occ == 0.0:
                 raise EstimationError('require occ > 0')
             probs = self.occs / self.occ
+
+            # find the probs which maximize the auxiliary function, subject to
+            #   the given flooring constraints
+            # FIXME : think more about maths of flooring procedure below. It
+            #   is guaranteed to terminate, but think there are cases (for more
+            #   than 2 classes) where it doesn't find the constrained ML
+            #   optimum.
+            assert self.probFloors is not None
+            assert len(self.probFloors) == len(self.occs)
+            assert all(self.probFloors >= 0.0)
+            assert sum(self.probFloors) <= 1.0
+            floored = (probs < self.probFloors)
+            done = False
+            while not done:
+                probsBelow = self.probFloors * floored
+                probsAbove = probs * (-floored)
+                probsAbove = probsAbove / sum(probsAbove) * (1.0 - sum(probsBelow))
+                flooredOld = floored
+                floored = floored + (probsAbove < self.probFloors)
+                done = all(flooredOld == floored)
+            probs = probsBelow + probsAbove
+            assert_allclose(sum(probs), 1.0)
+            assert all(probs >= self.probFloors)
+
             auxValue = self.logLikeSingle() if self.distPrev is not None else self.aux(probs)
-            return ConstantClassifier(probs, tag = self.tag), auxValue, self.occ
+            return ConstantClassifier(probs, self.probFloors, tag = self.tag), auxValue, self.occ
         except EstimationError, detail:
             if self.distPrev is None:
                 raise
             else:
                 sys.stderr.write('WARNING: reverting to previous dist due to error during ConstantClassifier estimation: '+str(detail)+'\n')
-                return ConstantClassifier(self.distPrev.probs, tag = self.tag), self.logLikeSingle(), self.occ
+                return ConstantClassifier(self.distPrev.probs, self.probFloors, tag = self.tag), self.logLikeSingle(), self.occ
 
 class BinaryLogisticClassifierAcc(TermAcc):
     def __init__(self, distPrev, tag = None):
@@ -1529,18 +1559,24 @@ class StudentDist(TermDist):
         return StudentDist(df, precision, tag = self.tag), params[2:]
 
 class ConstantClassifier(TermDist):
-    def __init__(self, probs, tag = None):
+    def __init__(self, probs, probFloors, tag = None):
         self.probs = probs
+        self.probFloors = probFloors
         self.tag = tag
 
         assert len(self.probs) >= 1
         assert_allclose(sum(self.probs), 1.0)
+        assert self.probFloors is not None
+        assert len(self.probFloors) == len(self.probs)
+        assert all(self.probFloors >= 0.0)
+        assert sum(self.probFloors) <= 1.0
+        assert all(self.probs >= self.probFloors)
 
     def __repr__(self):
-        return 'ConstantClassifier('+repr(self.probs)+', tag = '+repr(self.tag)+')'
+        return 'ConstantClassifier('+repr(self.probs)+', '+repr(self.probFloors)+', tag = '+repr(self.tag)+')'
 
     def mapChildren(self, mapChild):
-        return ConstantClassifier(self.probs, tag = self.tag)
+        return ConstantClassifier(self.probs, self.probFloors, tag = self.tag)
 
     def logProb(self, input, classIndex):
         prob = self.probs[classIndex]
@@ -1577,7 +1613,7 @@ class ConstantClassifier(TermDist):
         assert_allclose(sum(sumZeroLogProbs), 0.0)
         probs = np.exp(sumZeroLogProbs)
         probs = probs / sum(probs)
-        return ConstantClassifier(probs, tag = self.tag), params[n:]
+        return ConstantClassifier(probs, self.probFloors, tag = self.tag), params[n:]
 
 class BinaryLogisticClassifier(TermDist):
     def __init__(self, coeff, tag = None):
