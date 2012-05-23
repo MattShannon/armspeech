@@ -72,9 +72,9 @@ def gen_StudentDist(dimIn = 3):
     return dist, simpleInputGen(dimIn)
 
 def gen_ConstantClassifier(numClasses = 5):
-    logProbs = randn(numClasses)
-    logProbs -= logSum(logProbs)
-    dist = d.ConstantClassifier(logProbs).withTag(randTag())
+    probs = np.exp(randn(numClasses))
+    probs = probs / sum(probs)
+    dist = d.ConstantClassifier(probs).withTag(randTag())
     return dist, simpleInputGen(0)
 
 def gen_BinaryLogisticClassifier(dimIn = 3, bias = False, useZeroCoeff = False):

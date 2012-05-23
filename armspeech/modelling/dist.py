@@ -490,7 +490,7 @@ class ConstantClassifierAcc(TermAcc):
     def __init__(self, distPrev = None, numClasses = None, tag = None):
         self.distPrev = distPrev
         if distPrev is not None:
-            numClasses = len(distPrev.logProbs)
+            numClasses = len(distPrev.probs)
         assert numClasses >= 1
         self.tag = tag
 
@@ -507,32 +507,31 @@ class ConstantClassifierAcc(TermAcc):
         self.occ += acc.occ
         self.occs += acc.occs
 
-    def aux(self, logProbs):
-        return sum([ occ * logProb for occ, logProb in zip(self.occs, logProbs) if occ > 0.0 ])
+    def aux(self, probs):
+        return sum([ occ * logProb for occ, logProb in zip(self.occs, np.log(probs)) if occ > 0.0 ])
 
     def logLikeSingle(self):
-        return self.aux(self.distPrev.logProbs)
+        return self.aux(self.distPrev.probs)
 
-    def auxDerivParams(self, logProbs):
-        probs = np.exp(logProbs)
+    def auxDerivParams(self, probs):
         return self.occs[:-1] - self.occs[-1] - (probs[:-1] - probs[-1]) * self.occ
 
     def derivParamsSingle(self):
-        return self.auxDerivParams(self.distPrev.logProbs)
+        return self.auxDerivParams(self.distPrev.probs)
 
     def estimateSingle(self):
         try:
             if self.occ == 0.0:
                 raise EstimationError('require occ > 0')
-            logProbs = np.log(self.occs / self.occ)
-            auxValue = self.logLikeSingle() if self.distPrev is not None else self.aux(logProbs)
-            return ConstantClassifier(logProbs, tag = self.tag), auxValue, self.occ
+            probs = self.occs / self.occ
+            auxValue = self.logLikeSingle() if self.distPrev is not None else self.aux(probs)
+            return ConstantClassifier(probs, tag = self.tag), auxValue, self.occ
         except EstimationError, detail:
             if self.distPrev is None:
                 raise
             else:
                 sys.stderr.write('WARNING: reverting to previous dist due to error during ConstantClassifier estimation: '+str(detail)+'\n')
-                return ConstantClassifier(self.distPrev.logProbs, tag = self.tag), self.logLikeSingle(), self.occ
+                return ConstantClassifier(self.distPrev.probs, tag = self.tag), self.logLikeSingle(), self.occ
 
 class BinaryLogisticClassifierAcc(TermAcc):
     def __init__(self, distPrev, tag = None):
@@ -1526,21 +1525,22 @@ class StudentDist(TermDist):
         return StudentDist(df, precision, tag = self.tag), params[2:]
 
 class ConstantClassifier(TermDist):
-    def __init__(self, logProbs, tag = None):
-        self.logProbs = logProbs
+    def __init__(self, probs, tag = None):
+        self.probs = probs
         self.tag = tag
 
-        assert len(self.logProbs) >= 1
-        assert_allclose(sum(np.exp(self.logProbs)), 1.0)
+        assert len(self.probs) >= 1
+        assert_allclose(sum(self.probs), 1.0)
 
     def __repr__(self):
-        return 'ConstantClassifier('+repr(self.logProbs)+', tag = '+repr(self.tag)+')'
+        return 'ConstantClassifier('+repr(self.probs)+', tag = '+repr(self.tag)+')'
 
     def mapChildren(self, mapChild):
-        return ConstantClassifier(self.logProbs, tag = self.tag)
+        return ConstantClassifier(self.probs, tag = self.tag)
 
     def logProb(self, input, classIndex):
-        return self.logProbs[classIndex]
+        prob = self.probs[classIndex]
+        return math.log(prob) if prob != 0.0 else float('-inf')
 
     def logProbDerivInput(self, input, classIndex):
         return np.zeros(np.shape(input))
@@ -1549,31 +1549,31 @@ class ConstantClassifier(TermDist):
         return ConstantClassifierAcc(distPrev = self, tag = self.tag)
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
-        probs = np.exp(self.logProbs)
-        assert_allclose(sum(probs), 1.0)
         if method == SynthMethod.Meanish:
-            prob, classIndex = max([ (prob, classIndex) for classIndex, prob in enumerate(probs) ])
+            prob, classIndex = max([ (prob, classIndex) for classIndex, prob in enumerate(self.probs) ])
             return classIndex
         elif method == SynthMethod.Sample:
-            return sampleDiscrete(list(enumerate(probs)))
+            return sampleDiscrete(list(enumerate(self.probs)))
         else:
             raise RuntimeError('unknown SynthMethod '+repr(method))
 
     def paramsSingle(self):
-        if not np.all(np.isfinite(self.logProbs)):
-            raise RuntimeError('this parameterization of ConstantClassifier cannot cope with zero (or NaN) probabilities (logProbs = '+repr(self.logProbs)+')')
-        sumZeroLogProbs = self.logProbs - np.mean(self.logProbs)
+        logProbs = np.log(self.probs)
+        if not np.all(np.isfinite(logProbs)):
+            raise RuntimeError('this parameterization of ConstantClassifier cannot cope with zero (or NaN) probabilities (probs = '+repr(self.probs)+')')
+        sumZeroLogProbs = logProbs - np.mean(logProbs)
         return sumZeroLogProbs[:-1]
 
     def parseSingle(self, params):
-        n = len(self.logProbs) - 1
+        n = len(self.probs) - 1
         p = params[:n]
         if not np.all(np.isfinite(p)):
             raise RuntimeError('invalid parameters for ConstantClassifier: '+repr(p))
         sumZeroLogProbs = np.append(p, -sum(p))
         assert_allclose(sum(sumZeroLogProbs), 0.0)
-        logProbs = sumZeroLogProbs - logSum(sumZeroLogProbs)
-        return ConstantClassifier(logProbs, tag = self.tag), params[n:]
+        probs = np.exp(sumZeroLogProbs)
+        probs = probs / sum(probs)
+        return ConstantClassifier(probs, tag = self.tag), params[n:]
 
 class BinaryLogisticClassifier(TermDist):
     def __init__(self, coeff, tag = None):
