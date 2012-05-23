@@ -946,14 +946,14 @@ def testBinaryLogisticClassifier():
             yield np.append(randn(dim), 1.0)
 
     dim = 2
-    blcTrue = d.BinaryLogisticClassifier(randn(dim + 1))
+    blcTrue = gen_BinaryLogisticClassifier(dimIn = dim + 1)[0]
     num = 10000
     trainData = list((input, blcTrue.synth(input)) for input in inputGen(num))
     def accumulate(acc):
         for input, output in trainData:
             acc.add(input, output)
 
-    blc = d.BinaryLogisticClassifier(np.zeros([dim + 1]))
+    blc = gen_BinaryLogisticClassifier(dimIn = dim + 1, useZeroCoeff = True)[0]
     blc, trainLogLike, trainOcc = trn.trainEM(blc, accumulate, deltaThresh = 1e-10, minIterations = 10, verbosity = 2)
     print 'training log likelihood =', trainLogLike / trainOcc, '('+str(trainOcc)+' frames)'
     trainLogProb, trainOcc = logProb_frames(blc, trainData)
@@ -990,8 +990,8 @@ def testBinaryLogisticClassifierFunGraph():
             raise RuntimeError('value at bdyPoint should be 0.5 but is '+str(bdyPointProb))
         return mag, normal, bdyPoint
     dim = 2
-    wTrue = randn(dim + 1)
-    blcTrue = d.BinaryLogisticClassifier(wTrue)
+    blcTrue = gen_BinaryLogisticClassifier(dimIn = dim + 1)[0]
+    wTrue = blcTrue.coeff
     print 'DEBUG: wTrue =', wTrue
     print
     def inputGen(num):
@@ -1034,7 +1034,7 @@ def testBinaryLogisticClassifierFunGraph():
     plotData()
     plotBdy(blcTrue)
 
-    blc = d.BinaryLogisticClassifier(np.zeros([dim + 1]))
+    blc = gen_BinaryLogisticClassifier(dimIn = dim + 1, useZeroCoeff = True)[0]
     blc, trainLogLike, trainOcc = trn.trainEM(blc, accumulate, deltaThresh = 1e-4, minIterations = 10, maxIterations = 50, afterEst = afterEst, verbosity = 2)
     print 'DEBUG: w estimated final =', blc.coeff
     print 'training log likelihood =', trainLogLike / trainOcc, '('+str(trainOcc)+' frames)'
