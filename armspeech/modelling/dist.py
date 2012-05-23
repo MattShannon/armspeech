@@ -434,8 +434,12 @@ class LinearGaussianAcc(TermAcc):
                 raise EstimationError('could not compute pseudo-inverse: '+str(detail))
             coeff = np.dot(sumOuterInv, self.sumTarget)
             variance = (self.sumSqr - np.dot(coeff, self.sumTarget)) / self.occ
+
+            assert self.varianceFloor is not None
+            assert self.varianceFloor >= 0.0
             if variance < self.varianceFloor:
                 variance = self.varianceFloor
+
             if variance <= 0.0:
                 raise EstimationError('computed variance is zero or negative: '+str(variance))
             elif variance < 1e-10:
