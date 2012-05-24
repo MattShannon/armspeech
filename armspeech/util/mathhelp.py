@@ -15,7 +15,13 @@ import random
 negInf = float('-inf')
 
 def assert_allclose(actual, desired, rtol = 1e-7, atol = 1e-14, msg = 'items not almost equal'):
-    if np.shape(actual) != np.shape(desired) or not np.allclose(actual, desired, rtol, atol):
+    if np.shape(actual) != np.shape(desired):
+        raise AssertionError(
+            msg+' (wrong shape)'+
+            '\n ACTUAL:  '+repr(actual)+
+            '\n DESIRED: '+repr(desired)
+        )
+    if not np.allclose(actual, desired, rtol, atol):
         absErr = np.abs(actual - desired)
         relErr = np.abs((actual - desired) / desired)
         raise AssertionError(
