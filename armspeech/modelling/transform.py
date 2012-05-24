@@ -637,7 +637,9 @@ class SimpleOutputTransform(OutputTransform):
             raise DerivativeNotPositiveError('derivative '+repr(ret)+' should be > 0.0')
         return ret
     def derivInput(self, input, realOutput):
-        return np.zeros(np.shape(input))
+        assert len(np.shape(input)) <= 1
+        assert len(np.shape(realOutput)) <= 1
+        return np.zeros(np.shape(input) + np.shape(realOutput))
     def derivParams(self, input, realOutput):
         return self.transform.derivParams(realOutput)
     def logJac(self, input, realOutput):
