@@ -78,11 +78,12 @@ def gen_ConstantClassifier(numClasses = 5):
     return dist, simpleInputGen(0)
 
 def gen_BinaryLogisticClassifier(dimIn = 3, bias = False, useZeroCoeff = False):
+    coeffFloor = np.ones((dimIn,)) * float('inf')
     if useZeroCoeff:
-        w = np.zeros([dimIn])
+        coeff = np.zeros((dimIn,))
     else:
-        w = randn(dimIn)
-    dist = d.BinaryLogisticClassifier(w).withTag(randTag())
+        coeff = randn(dimIn)
+    dist = d.BinaryLogisticClassifier(coeff, coeffFloor).withTag(randTag())
     return dist, simpleInputGen(dimIn, bias = bias)
 
 def gen_classifier(numClasses, dimIn, bias = False):

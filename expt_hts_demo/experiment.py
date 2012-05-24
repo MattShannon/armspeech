@@ -377,7 +377,7 @@ def main(rawArgs):
                                         #d.MappedInputAcc(xf.Msd01ToVector(),
                                         #    d.MappedInputAcc(xf.AddBias(),
                                         #        d.IdentifiableMixtureAcc(
-                                        #            d.BinaryLogisticClassifierAcc(d.BinaryLogisticClassifier(np.zeros([2 * lf0StreamDepth + 1]))),
+                                        #            d.BinaryLogisticClassifierAcc(d.BinaryLogisticClassifier(coeff = np.zeros((2 * lf0StreamDepth + 1,)), coeffFloor = np.ones((2 * lf0StreamDepth + 1,)) * 5.0)),
                                         #            [
                                         #                d.FixedValueAcc(None),
                                         #                d.LinearGaussianAcc(inputLength = 2 * lf0StreamDepth + 1, varianceFloor = 0.0)

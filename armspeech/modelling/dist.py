@@ -468,9 +468,10 @@ class LinearGaussianAcc(TermAcc):
         # FIXME : completely different behaviour for depth 0 case!
         #   Can we unify (or improve depth > 0 case with something HTK-like)?
         # FIXME : what about len(self.sumOuter) == 0 case?
+        # (FIXME : hard-coded flooring of 5.0)
         if len(self.sumOuter) == 1:
             # HTK-style mixture incrementing
-            blc = BinaryLogisticClassifier(np.array([0.0]))
+            blc = BinaryLogisticClassifier(coeff = np.array([0.0]), coeffFloor = np.array([5.0]))
             dist, logLike, occ = self.estimateSingle()
             mean = dist.coeff[0]
             variance = dist.variance
@@ -485,7 +486,7 @@ class LinearGaussianAcc(TermAcc):
                 return self.estimateSingle()
             w = eigVec * sigmoidAbscissaAtOneStdev / math.sqrt(eigVal)
             w0 = -np.dot(w, mu)
-            blc = BinaryLogisticClassifier(np.append(w, w0))
+            blc = BinaryLogisticClassifier(coeff = np.append(w, w0), coeffFloor = np.ones((len(w) + 1,)) * 5.0)
             dist0, logLike, occ = self.estimateSingle()
             dist1, logLike, occ = self.estimateSingle()
             return MixtureDist(blc, [dist0, dist1]), logLike, occ
@@ -611,8 +612,6 @@ class BinaryLogisticClassifierAcc(TermAcc):
     #   or other forms of regularization (though conceptually this is solving
     #   a different problem -- shouldn't have to use any regularization to get
     #   the nice non-linearly-separable case to work!).)
-    # FIXME : "flooring" to stop decision boundary getting too sharp? (have observed this seeming to happen, but not sure it's a problem)
-    #   (set floor (i.e. maximum norm of coeff vector) to a hard value of 5.0?)
     def estimateSingle(self):
         try:
             if self.occ == 0.0:
@@ -622,10 +621,16 @@ class BinaryLogisticClassifierAcc(TermAcc):
             except la.LinAlgError, detail:
                 raise EstimationError('could not compute pseudo-inverse: '+str(detail))
             coeff = self.distPrev.coeff - np.dot(sumOuterInv, self.sumTarget)
-            return BinaryLogisticClassifier(coeff, tag = self.tag), self.logLikeSingle(), self.occ
+
+            # FIXME : algorithm below is just heuristic (it isn't constrained ML or anything)
+            coeff = np.minimum(coeff, self.distPrev.coeffFloor)
+            coeff = np.maximum(coeff, -self.distPrev.coeffFloor)
+            assert all(np.abs(coeff) <= self.distPrev.coeffFloor)
+
+            return BinaryLogisticClassifier(coeff, self.distPrev.coeffFloor, tag = self.tag), self.logLikeSingle(), self.occ
         except EstimationError, detail:
             sys.stderr.write('WARNING: reverting to previous dist due to error during BinaryLogisticClassifier estimation: '+str(detail)+'\n')
-            return BinaryLogisticClassifier(self.distPrev.coeff, tag = self.tag), self.logLikeSingle(), self.occ
+            return BinaryLogisticClassifier(self.distPrev.coeff, self.distPrev.coeffFloor, tag = self.tag), self.logLikeSingle(), self.occ
 
 class MixtureAcc(Acc):
     def __init__(self, distPrev, classAcc, regAccs, tag = None):
@@ -1616,15 +1621,20 @@ class ConstantClassifier(TermDist):
         return ConstantClassifier(probs, self.probFloors, tag = self.tag), params[n:]
 
 class BinaryLogisticClassifier(TermDist):
-    def __init__(self, coeff, tag = None):
+    def __init__(self, coeff, coeffFloor, tag = None):
         self.coeff = coeff
+        self.coeffFloor = coeffFloor
         self.tag = tag
 
+        assert len(self.coeffFloor) == len(self.coeff)
+        assert all(self.coeffFloor >= 0.0)
+        assert all(np.abs(self.coeff) <= self.coeffFloor)
+
     def __repr__(self):
-        return 'BinaryLogisticClassifier('+repr(self.coeff)+', tag = '+repr(self.tag)+')'
+        return 'BinaryLogisticClassifier('+repr(self.coeff)+', '+repr(self.coeffFloor)+', tag = '+repr(self.tag)+')'
 
     def mapChildren(self, mapChild):
-        return BinaryLogisticClassifier(self.coeff, tag = self.tag)
+        return BinaryLogisticClassifier(self.coeff, self.coeffFloor, tag = self.tag)
 
     def logProb(self, input, classIndex):
         prob = self.prob(input, classIndex)
@@ -1664,7 +1674,7 @@ class BinaryLogisticClassifier(TermDist):
     def parseSingle(self, params):
         n = len(self.coeff)
         coeff = params[:n]
-        return BinaryLogisticClassifier(coeff, tag = self.tag), params[n:]
+        return BinaryLogisticClassifier(coeff, self.coeffFloor, tag = self.tag), params[n:]
 
 class MixtureDist(Dist):
     def __init__(self, classDist, regDists, tag = None):
