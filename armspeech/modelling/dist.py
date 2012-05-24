@@ -471,7 +471,9 @@ class LinearGaussianAcc(TermAcc):
         # (FIXME : hard-coded flooring of 5.0)
         if len(self.sumOuter) == 1:
             # HTK-style mixture incrementing
-            blc = BinaryLogisticClassifier(coeff = np.array([0.0]), coeffFloor = np.array([5.0]))
+            coeff = np.array([0.0])
+            coeffFloor = np.array([float('inf')])
+            blc = BinaryLogisticClassifier(coeff, coeffFloor)
             dist, logLike, occ = self.estimateSingle()
             mean = dist.coeff[0]
             variance = dist.variance
@@ -486,7 +488,9 @@ class LinearGaussianAcc(TermAcc):
                 return self.estimateSingle()
             w = eigVec * sigmoidAbscissaAtOneStdev / math.sqrt(eigVal)
             w0 = -np.dot(w, mu)
-            blc = BinaryLogisticClassifier(coeff = np.append(w, w0), coeffFloor = np.ones((len(w) + 1,)) * 5.0)
+            coeff = np.append(w, w0)
+            coeffFloor = np.append(np.ones((len(w),)) * 5.0, float('inf'))
+            blc = BinaryLogisticClassifier(coeff, coeffFloor)
             dist0, logLike, occ = self.estimateSingle()
             dist1, logLike, occ = self.estimateSingle()
             return MixtureDist(blc, [dist0, dist1]), logLike, occ
