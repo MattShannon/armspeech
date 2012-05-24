@@ -59,7 +59,6 @@ def simpleInputGen(dimIn, bias = False):
         yield ret
 
 # (FIXME : add tests to test full range of shapes for transform stuff)
-# (FIXME : add tests for logProbDerivInput and logProbDerivOutput for dists where either input or output has a discrete component (applies to lots of below tests, e.g. logProbDerivOutput for IdentifiableMixtureDist))
 # (FIXME : add tests for Transformed(Input|Output)Learn(Dist|Transform)AccEM (for the Transform ones, have to first add a transform that can be re-estimated using EM))
 # (FIXME : deep test for Transformed(Input|Output)Dist doesn't seem to converge to close to true dist in terms of parameters. Multiple local minima? Or just very insensitive to details? For more complicated transforms might the test procedure never converge?)
 
@@ -457,10 +456,22 @@ def check_logProbDerivInput(dist, input, output, eps):
     analyticDeriv = np.dot(inputDirection, dist.logProbDerivInput(input, output))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 
+def check_logProbDerivInput_hasDiscrete(dist, (disc, input), output, eps):
+    inputDirection = randn(*np.shape(input))
+    numericDeriv = (dist.logProb((disc, input + inputDirection * eps), output) - dist.logProb((disc, input), output)) / eps
+    analyticDeriv = np.dot(inputDirection, dist.logProbDerivInput((disc, input), output))
+    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
+
 def check_logProbDerivOutput(dist, input, output, eps):
     outputDirection = randn(*np.shape(output))
     numericDeriv = (dist.logProb(input, output + outputDirection * eps) - dist.logProb(input, output)) / eps
     analyticDeriv = np.dot(outputDirection, dist.logProbDerivOutput(input, output))
+    assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
+
+def check_logProbDerivOutput_hasDiscrete(dist, input, (disc, output), eps):
+    outputDirection = randn(*np.shape(output))
+    numericDeriv = (dist.logProb(input, (disc, output + outputDirection * eps)) - dist.logProb(input, (disc, output))) / eps
+    analyticDeriv = np.dot(outputDirection, dist.logProbDerivOutput(input, (disc, output)))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 
 def check_addAcc(dist, trainingAll, ps):
@@ -611,7 +622,7 @@ def getTrainingSet(dist, inputGen, typicalSize, iid, unitOcc):
     assert len(trainingSet) == trainingSetSize
     return trainingSet
 
-def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = False, hasEM = True, canEval = True, ps = d.defaultParamSpec, logProbDerivInputCheck = False, logProbDerivOutputCheck = False, checkAdditional = None):
+def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = False, hasEM = True, canEval = True, ps = d.defaultParamSpec, logProbDerivInputCheck = False, logProbDerivInput_hasDiscrete_check = False, logProbDerivOutputCheck = False, logProbDerivOutput_hasDiscrete_checkFor = lambda output: False, checkAdditional = None):
     # (FIXME : add pickle test)
     assert dist.tag is not None
     if hasEM:
@@ -653,8 +664,12 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
                 assert_allclose(distParsed.logProb(input, output), lp)
             if logProbDerivInputCheck:
                 check_logProbDerivInput(dist, input, output, eps)
+            if logProbDerivInput_hasDiscrete_check:
+                check_logProbDerivInput_hasDiscrete(dist, input, output, eps)
             if logProbDerivOutputCheck:
                 check_logProbDerivOutput(dist, input, output, eps)
+            if logProbDerivOutput_hasDiscrete_checkFor(output):
+                check_logProbDerivOutput_hasDiscrete(dist, input, output, eps)
         else:
             print 'NOTE: skipping point with logProb =', dist.logProb(input, output), 'for dist =', dist, 'input =', input, 'output =', output
 
@@ -774,7 +789,7 @@ class TestDist(unittest.TestCase):
         for distIndex in range(numDists):
             dimIn = randint(0, 5)
             dist, inputGen = gen_IdentifiableMixtureDist(dimIn)
-            checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivInputCheck = True)
+            checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivInputCheck = True, logProbDerivOutput_hasDiscrete_checkFor = lambda (comp, acOutput): acOutput is not None)
             if self.deepTest:
                 initEstDist = gen_IdentifiableMixtureDist(dimIn, blcUseZeroCoeff = True)[0]
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
@@ -796,7 +811,7 @@ class TestDist(unittest.TestCase):
             keys = list('abcde')[:randint(1, 5)]
             dimIn = randint(0, 5)
             dist, inputGen = gen_DiscreteDist(keys, dimIn)
-            checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivOutputCheck = True)
+            checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivInput_hasDiscrete_check = True, logProbDerivOutputCheck = True)
             if self.deepTest:
                 initEstDist = gen_DiscreteDist(keys, dimIn)[0]
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
@@ -806,7 +821,7 @@ class TestDist(unittest.TestCase):
         for distIndex in range(numDists):
             dimIn = randint(0, 5)
             dist, inputGen = gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = dimIn)
-            checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivOutputCheck = True)
+            checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivInput_hasDiscrete_check = True, logProbDerivOutputCheck = True)
             if self.deepTest:
                 initEstDist = randomizeParams(dist)
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
