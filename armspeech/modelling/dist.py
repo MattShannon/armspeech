@@ -152,6 +152,15 @@ noLocalPartial = (
     defaultCreateAccGPartial
 )
 
+def isolateDist(dist):
+    """Returns an isolated copy of a distribution.
+
+    Creates a new DAG with the same content as the sub-DAG with head dist but
+    with fresh objects at each node. Therefore no nodes in the new DAG are
+    shared outside the new DAG.
+    """
+    return nodetree.defaultMap(dist)
+
 def getByTagParamSpec(f):
     def byTagParamsPartial(node, paramsChild):
         if f(node.tag):

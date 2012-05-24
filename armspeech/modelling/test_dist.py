@@ -630,7 +630,7 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
     if hasParams:
         paramsBefore = ps.params(dist)
 
-    distMapped = nodetree.defaultMap(dist)
+    distMapped = d.isolateDist(dist)
     assert id(distMapped) != id(dist)
     assert distMapped.tag == dist.tag
     if canEval:
