@@ -36,6 +36,10 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 
+np.seterr(all = 'raise')
+np.seterr(under = 'ignore')
+np.set_printoptions(precision = 17, linewidth = 10000)
+
 def readDistFile(distFile):
     with open(distFile, 'r') as f:
         distString = f.read().strip()
