@@ -25,6 +25,7 @@ import armspeech.util.mylinalg as mla
 
 def eval_local(reprString):
     from numpy import array, eye, float64
+
     return eval(reprString)
 
 def parseConcat(parsers, params):

@@ -42,7 +42,7 @@ class SubsetQuestion(Question):
         self.subset = subset
         self.name = name
     def __repr__(self):
-        return 'SubsetQuestion('+repr(self.name)+')'
+        return 'SubsetQuestion('+repr(self.subset)+', '+repr(self.name)+')'
     def shortRepr(self):
         return 'is '+self.name
     def __call__(self, value):

@@ -93,3 +93,11 @@ def sampleDiscrete(valueProbList, absTol = 1e-6):
         if cumul > rand:
             break
     return value
+
+class AsArray(object):
+    def __init__(self):
+        pass
+    def __repr__(self):
+        return 'AsArray()'
+    def __call__(self, x):
+        return np.asarray(x)

@@ -18,6 +18,8 @@ import wnet
 from armspeech.util.mathhelp import logSum
 from armspeech.util.iterhelp import chunkList
 from armspeech.util.mathhelp import assert_allclose
+from armspeech.util.mathhelp import AsArray
+from armspeech.util.util import ConstantFunction
 
 import test_dist_questions
 import test_transform
@@ -32,6 +34,8 @@ from numpy.random import randn, randint
 import numpy.linalg as la
 from scipy import stats
 import string
+
+np.set_printoptions(precision = 17)
 
 def logProb_frames(dist, trainData):
     lp = 0.0
@@ -125,7 +129,7 @@ def gen_VectorDist(order = 10, depth = 3):
     depths = dict([ (outIndex, depth) for outIndex in range(order) ])
     vectorSummarizer = summarizer.VectorSeqSummarizer(order, depths)
     dist = vectorSummarizer.createDist(False, lambda outIndex:
-        d.MappedInputDist(np.array,
+        d.MappedInputDist(AsArray(),
             gen_LinearGaussian(depths[outIndex])[0]
         )
     ).withTag(randTag())
@@ -244,7 +248,7 @@ def gen_DebugDist(maxOcc = None, dimIn = 3):
     return d.DebugDist(maxOcc, subDist).withTag(randTag()), inputGen
 
 def gen_autoregressive_dist(depth = 2):
-    dist = d.MappedInputDist(np.asarray,
+    dist = d.MappedInputDist(AsArray(),
         d.MappedInputDist(xf.AddBias(),
             gen_LinearGaussian(dimIn = depth + 1)[0]
         )
@@ -356,26 +360,20 @@ def gen_constant_AutoregressiveNetDist(depth = 2):
         numEmitting = len([ node for node in nodeSet if net.elem(node) is not None ])
         if numEmitting >= 2 or numEmitting == 1 and randint(0, 4) == 0 or numEmitting == 0 and randint(0, 10) == 0:
             break
-    def makeFullDepth(acInput):
-        if len(acInput) < depth:
-            acInput = np.concatenate((np.zeros((depth - len(acInput),)), acInput))
-        return np.asarray(acInput)
     durDist = d.createDiscreteDist(phInputToNumClassesDur.keys(), lambda phInput:
-        d.MappedInputDist(makeFullDepth,
+        d.MappedInputDist(d.FillZerosToDepth(depth),
             d.MappedInputDist(xf.AddBias(),
                 gen_classifier(numClasses = phInputToNumClassesDur[phInput], dimIn = depth + 1)[0]
             )
         )
     )
     acDist = d.createDiscreteDist(list(phInputsAc), lambda phInput:
-        d.MappedInputDist(makeFullDepth,
+        d.MappedInputDist(d.FillZerosToDepth(depth),
             gen_stable_autoregressive_dist(depth)[0]
         )
     )
-    def netFor(input):
-        return net
     pruneSpec = None if randBool() else d.SimplePruneSpec(betaThresh = (None if randBool() else 1000.0), logOccThresh = (None if randBool() else 1000.0))
-    dist = d.AutoregressiveNetDist(depth, netFor, durDist, acDist, pruneSpec).withTag(randTag())
+    dist = d.AutoregressiveNetDist(depth, ConstantFunction(net), durDist, acDist, pruneSpec).withTag(randTag())
 
     def getInputGen():
         while True:
@@ -387,35 +385,21 @@ def gen_inSeq_AutoregressiveNetDist(depth = 2):
     labels = string.lowercase[:randint(1, 10)]
     numSubLabels = randint(1, 5)
     subLabels = list(range(numSubLabels))
-    def netFor(labelSeq):
-        net = wnet.FlatMappedNet(
-            # (FIXME : any reason to memoize this?)
-            lambda label: wnet.probLeftToRightNet(
-                [ (label, subLabel) for subLabel in subLabels ],
-                [ [ ((label, subLabel), adv) for adv in [0, 1] ] for subLabel in subLabels ]
-            ),
-            wnet.SequenceNet(labelSeq, None)
-        )
-        return net
-    def makeFullDepth(acInput):
-        if len(acInput) < depth:
-            acInput = np.concatenate((np.zeros((depth - len(acInput),)), acInput))
-        return np.asarray(acInput)
     labelledSubLabels = [ (label, subLabel) for label in labels for subLabel in subLabels ]
     durDist = d.createDiscreteDist(labelledSubLabels, lambda (label, subLabel):
-        d.MappedInputDist(makeFullDepth,
+        d.MappedInputDist(d.FillZerosToDepth(depth),
             d.MappedInputDist(xf.AddBias(),
                 gen_classifier(numClasses = 2, dimIn = depth + 1)[0]
             )
         )
     )
     acDist = d.createDiscreteDist(labelledSubLabels, lambda (label, subLabel):
-        d.MappedInputDist(makeFullDepth,
+        d.MappedInputDist(d.FillZerosToDepth(depth),
             gen_stable_autoregressive_dist(depth)[0]
         )
     )
     pruneSpec = None if randBool() else d.SimplePruneSpec(betaThresh = (None if randBool() else 1000.0), logOccThresh = (None if randBool() else 1000.0))
-    dist = d.AutoregressiveNetDist(depth, netFor, durDist, acDist, pruneSpec).withTag(randTag())
+    dist = d.AutoregressiveNetDist(depth, d.SimpleLeftToRightNetFor(subLabels), durDist, acDist, pruneSpec).withTag(randTag())
 
     def getInputGen():
         while True:
@@ -627,9 +611,8 @@ def getTrainingSet(dist, inputGen, typicalSize, iid, unitOcc):
     assert len(trainingSet) == trainingSetSize
     return trainingSet
 
-def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = False, hasEM = True, ps = d.defaultParamSpec, logProbDerivInputCheck = False, logProbDerivOutputCheck = False, checkAdditional = None):
+def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = False, hasEM = True, canEval = True, ps = d.defaultParamSpec, logProbDerivInputCheck = False, logProbDerivOutputCheck = False, checkAdditional = None):
     # (FIXME : add pickle test)
-    # (FIXME : add eval test)
     assert dist.tag is not None
     if hasEM:
         assert d.defaultCreateAcc(dist).tag == dist.tag
@@ -650,6 +633,12 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
     distMapped = nodetree.defaultMap(dist)
     assert id(distMapped) != id(dist)
     assert distMapped.tag == dist.tag
+    if canEval:
+        distEvaled = d.eval_local(repr(dist))
+        assert distEvaled.tag == dist.tag
+        assert repr(dist) == repr(distEvaled)
+        if hasParams:
+            assert_allclose(ps.params(distEvaled), ps.params(dist))
     if hasParams:
         distParsed = reparse(dist, ps)
     for input, output in points:
@@ -658,6 +647,8 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
                 checkAdditional(dist, input, output, eps)
             lp = dist.logProb(input, output)
             assert_allclose(distMapped.logProb(input, output), lp)
+            if canEval:
+                assert_allclose(distEvaled.logProb(input, output), lp)
             if hasParams:
                 assert_allclose(distParsed.logProb(input, output), lp)
             if logProbDerivInputCheck:
@@ -922,7 +913,7 @@ class TestDist(unittest.TestCase):
             keys = list('abcde')[:randint(1, 5)]
             dimIn = randint(0, 5)
             dist, inputGen = gen_shared_DiscreteDist(keys, dimIn)
-            checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivOutputCheck = True)
+            checkLots(dist, inputGen, canEval = False, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivOutputCheck = True)
             if self.deepTest:
                 initEstDist = gen_shared_DiscreteDist(keys, dimIn)[0]
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)

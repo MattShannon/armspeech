@@ -290,6 +290,8 @@ class ConcreteNet(Net):
 
         assert len(self.edgesBackwards) == self.numNodes
         basicChecks(self)
+    def __repr__(self):
+        return 'ConcreteNet('+', '.join(map(repr, [self.startNode, self.endNode, self.elems, self.edgesForwards, self.edgesBackwards]))+')'
     def start(self, forwards):
         return self.startNode if forwards else self.endNode
     def elem(self, node):

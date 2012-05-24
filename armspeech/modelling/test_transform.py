@@ -18,6 +18,8 @@ import random
 import numpy as np
 from numpy.random import randn, randint
 
+np.set_printoptions(precision = 17)
+
 # FIXME : add explicit tests for transform_acc
 
 def randBool():
@@ -181,13 +183,13 @@ def checkTransform(transform, shapeIn, invertible, hasParams, is1D, eps, its, ch
         transformParsed = transform.parseAll(params)
         assert transformParsed.tag == transform.tag
         assert_allclose(transformParsed.params, params)
-        assert_allclose(transformEvaled.params, params, rtol = 1e-5)
+        assert_allclose(transformEvaled.params, params)
     for it in range(its):
         x = randn(*shapeIn)
         if checkAdditional is not None:
             checkAdditional(transform, x, eps)
         if True:
-            assert_allclose(transformEvaled(x), transform(x), rtol = 5e-4)
+            assert_allclose(transformEvaled(x), transform(x))
         if hasParams:
             assert_allclose(transformParsed(x), transform(x))
         if True:
@@ -331,7 +333,7 @@ def checkOutputTransform(outputTransform, shapeInput, shapeOutput, hasParams, ep
         params = outputTransform.params
         outputTransformParsed = outputTransform.parseAll(params)
         assert_allclose(outputTransformParsed.params, params)
-        assert_allclose(outputTransformEvaled.params, params, rtol = 1e-5)
+        assert_allclose(outputTransformEvaled.params, params)
     for it in range(its):
         input = randn(*shapeInput)
         x = randn(*shapeOutput)
@@ -341,7 +343,7 @@ def checkOutputTransform(outputTransform, shapeInput, shapeOutput, hasParams, ep
         if True:
             assert_allclose(outputTransform(input, x), transform(x))
         if True:
-            assert_allclose(outputTransformEvaled(input, x), outputTransform(input, x), rtol = 5e-4)
+            assert_allclose(outputTransformEvaled(input, x), outputTransform(input, x))
         if hasParams:
             assert_allclose(outputTransformParsed(input, x), outputTransform(input, x))
         if True:

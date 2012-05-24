@@ -14,6 +14,7 @@ import semiring
 import wnet
 from armspeech.util.memoize import memoize
 from armspeech.util.mathhelp import assert_allclose
+from armspeech.util.util import orderedDictRepr
 
 import math
 import numpy as np
@@ -33,6 +34,19 @@ from collections import deque
 # FIXME : occ doesn't cope with sharing
 
 # FIXME : make estimate return just the dist (seems philosophically better)
+
+def eval_local(reprString):
+    # (FIXME : the contents of test_dist affects what needs to be included here)
+    from questions import IdLabelValuer, SubsetQuestion
+    from summarizer import VectorSeqSummarizer
+    from transform import AddBias, LinearTransform, ShiftOutputTransform, VectorizeTransform, DotProductTransform, PolynomialTransform1D
+    from wnet import ConcreteNet
+    from armspeech.util.mathhelp import AsArray
+    from armspeech.util.util import ConstantFunction
+
+    from numpy import array, eye, float64, Inf
+
+    return eval(reprString)
 
 class SynthMethod(object):
     Meanish = 0
@@ -195,6 +209,20 @@ class SimplePruneSpec(PruneSpec):
         self.logOccThresh = logOccThresh
     def __repr__(self):
         return 'SimplePruneSpec('+repr(self.betaThresh)+', '+repr(self.logOccThresh)+')'
+
+class FillZerosToDepth(object):
+    def __init__(self, depth):
+        self.depth = depth
+        assert self.depth >= 0
+    def __repr__(self):
+        return 'FillZerosToDepth('+repr(self.depth)+')'
+    def __call__(self, acInput):
+        acInput = np.asarray(acInput)
+        assert len(np.shape(acInput)) == 1
+        assert len(acInput) <= self.depth
+        if len(acInput) < self.depth:
+            acInput = np.concatenate((np.zeros((self.depth - len(acInput),)), acInput))
+        return acInput
 
 class Memo(object):
     def __init__(self, maxOcc):
@@ -1817,7 +1845,7 @@ class VectorDist(Dist):
         self.tag = tag
 
     def __repr__(self):
-        return 'VectorDist('+repr(self.order)+', '+repr(self.vectorSummarizer)+', '+repr(self.keys)+', '+repr(self.distComps)+', tag = '+repr(self.tag)+')'
+        return 'VectorDist('+repr(self.order)+', '+repr(self.vectorSummarizer)+', '+repr(self.keys)+', '+orderedDictRepr(self.keys, self.distComps)+', tag = '+repr(self.tag)+')'
 
     def children(self):
         return [ self.distComps[key] for key in self.keys ]
@@ -1886,7 +1914,7 @@ class DiscreteDist(Dist):
         self.tag = tag
 
     def __repr__(self):
-        return 'DiscreteDist('+repr(self.keys)+', '+repr(self.distDict)+', tag = '+repr(self.tag)+')'
+        return 'DiscreteDist('+repr(self.keys)+', '+orderedDictRepr(self.keys, self.distDict)+', tag = '+repr(self.tag)+')'
 
     def children(self):
         return [ self.distDict[key] for key in self.keys ]
@@ -2432,6 +2460,21 @@ class AutoregressiveSequenceDist(Dist):
     def parseChildren(self, params, parseChild):
         dist, paramsLeft = parseChild(self.dist, params)
         return AutoregressiveSequenceDist(self.depth, dist, tag = self.tag), paramsLeft
+
+class SimpleLeftToRightNetFor(object):
+    def __init__(self, subLabels):
+        self.subLabels = subLabels
+    def __repr__(self):
+        return 'SimpleLeftToRightNetFor('+repr(self.subLabels)+')'
+    def __call__(self, labelSeq):
+        net = wnet.FlatMappedNet(
+            lambda label: wnet.probLeftToRightNet(
+                [ (label, subLabel) for subLabel in self.subLabels ],
+                [ [ ((label, subLabel), adv) for adv in [0, 1] ] for subLabel in self.subLabels ]
+            ),
+            wnet.SequenceNet(labelSeq, None)
+        )
+        return net
 
 class AutoregressiveNetDist(Dist):
     """An autoregressive distribution over sequences.
