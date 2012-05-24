@@ -348,12 +348,16 @@ def checkOutputTransform(outputTransform, shapeInput, shapeOutput, hasParams, ep
             assert_allclose(outputTransformParsed(input, x), outputTransform(input, x))
         if True:
             check_deriv(transform, x, eps)
+        if True:
+            check_derivInput(outputTransform, input, x, eps)
         if hasParams:
             check_derivParams(transform, x, eps)
         if True:
             check_logJac(transform, x)
         if True:
             check_logJacDeriv(transform, x, eps)
+        if True:
+            check_logJacDerivInput(outputTransform, input, x, eps)
         if hasParams:
             check_logJacDerivParams(transform, x, eps)
         if True:
