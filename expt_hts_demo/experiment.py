@@ -40,22 +40,12 @@ np.seterr(all = 'raise')
 np.seterr(under = 'ignore')
 np.set_printoptions(precision = 17, linewidth = 10000)
 
-def readDistFile(distFile):
-    with open(distFile, 'r') as f:
-        distString = f.read().strip()
-    dist = eval(distString)
-    print 'DEBUG: read dist from file', distFile
-    return dist
-
-# FIXME : roundtripping using writeDistFile (using readDistFile to load a distribution
-#   file saved with writeDistFile) requires every distribution to output all relevant
-#   details, including any functions / closures. This isn't currently the case.
-#   Even if this was the case, might want to just use pickle instead -- less fragile,
-#   doesn't lose precision outputting floats (though maybe this could be overcome by
-#   using better routines than the numpy default ones) and doesn't waste space
-#   representing multiple copies of shared immutable objects.
-# FIXME : better serialization and deserialization of dists using pickle?
 def writeDistFile(distFile, dist):
+    """Writes repr of a dist to a file.
+
+    N.B. Just for logging (actual serialization and deserialization of dists
+    should use pickle instead).
+    """
     distString = repr(dist)
     with open(distFile, 'w') as f:
         f.write(distString)
