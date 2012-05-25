@@ -472,8 +472,6 @@ class LinearGaussianAcc(TermAcc):
             coeff = np.dot(sumOuterInv, self.sumTarget)
             variance = (self.sumSqr - np.dot(coeff, self.sumTarget)) / self.occ
 
-            assert self.varianceFloor is not None
-            assert self.varianceFloor >= 0.0
             if variance < self.varianceFloor:
                 variance = self.varianceFloor
 
@@ -585,10 +583,6 @@ class ConstantClassifierAcc(TermAcc):
             #   is guaranteed to terminate, but think there are cases (for more
             #   than 2 classes) where it doesn't find the constrained ML
             #   optimum.
-            assert self.probFloors is not None
-            assert len(self.probFloors) == len(self.occs)
-            assert all(self.probFloors >= 0.0)
-            assert sum(self.probFloors) <= 1.0
             floored = (probs < self.probFloors)
             done = False
             while not done:
