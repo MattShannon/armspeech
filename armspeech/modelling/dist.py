@@ -1416,8 +1416,6 @@ class TermDist(Dist):
     def parseChildren(self, params, parseChild):
         return self, params
 
-# FIXME : repr for all dists doesn't work when there is sharing
-
 class FixedValueDist(TermDist):
     def __init__(self, value, tag = None):
         self.value = value
