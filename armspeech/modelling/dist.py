@@ -527,6 +527,8 @@ class LinearGaussianAcc(TermAcc):
             w0 = -np.dot(w, mu)
             coeff = np.append(w, w0)
             coeffFloor = np.append(np.ones((len(w),)) * 5.0, float('inf'))
+            coeff = np.minimum(coeff, coeffFloor)
+            coeff = np.maximum(coeff, -coeffFloor)
             blc = BinaryLogisticClassifier(coeff, coeffFloor)
             dist0, logLike, occ = self.estimateSingle()
             dist1, logLike, occ = self.estimateSingle()
