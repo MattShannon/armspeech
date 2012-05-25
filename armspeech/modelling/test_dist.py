@@ -67,6 +67,7 @@ def gen_LinearGaussian(dimIn = 3, bias = False):
     varianceFloor = 0.0 if randBool() else math.exp(randn()) * 0.01
     variance = math.exp(randn()) + varianceFloor
     dist = d.LinearGaussian(coeff, variance, varianceFloor).withTag(randTag())
+    numFloored, numFlooredDenom = dist.flooredSingle()
     return dist, simpleInputGen(dimIn, bias = bias)
 
 def gen_StudentDist(dimIn = 3):
@@ -87,6 +88,7 @@ def gen_ConstantClassifier(numClasses = 5):
         probExtras = probExtras / sum(probExtras) * 0.99
         probs = probExtras + probFloors
     dist = d.ConstantClassifier(probs, probFloors).withTag(randTag())
+    numFloored, numFlooredDenom = dist.flooredSingle()
     return dist, simpleInputGen(0)
 
 def gen_BinaryLogisticClassifier(dimIn = 3, bias = False, useZeroCoeff = False):
@@ -98,6 +100,7 @@ def gen_BinaryLogisticClassifier(dimIn = 3, bias = False, useZeroCoeff = False):
         coeff = np.minimum(coeff, coeffFloor)
         coeff = np.maximum(coeff, -coeffFloor)
     dist = d.BinaryLogisticClassifier(coeff, coeffFloor).withTag(randTag())
+    numFloored, numFlooredDenom = dist.flooredSingle()
     return dist, simpleInputGen(dimIn, bias = bias)
 
 def gen_classifier(numClasses, dimIn, bias = False):

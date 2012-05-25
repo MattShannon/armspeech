@@ -1392,6 +1392,8 @@ class Dist(object):
         abstract
     def parseChildren(self, params, parseChild):
         abstract
+    def flooredSingle(self):
+        return 0, 0
     def withTag(self, tag):
         """Set tag and return self.
 
@@ -1531,6 +1533,9 @@ class LinearGaussian(TermDist):
         variance = math.exp(-params[n])
         return LinearGaussian(coeff, variance, self.varianceFloor, tag = self.tag), params[n + 1:]
 
+    def flooredSingle(self):
+        return (1, 1) if np.allclose(self.variance, self.varianceFloor) else (0, 1)
+
 class StudentDist(TermDist):
     def __init__(self, df, precision, tag = None):
         if df <= 0.0:
@@ -1655,6 +1660,14 @@ class ConstantClassifier(TermDist):
         probs = probs / sum(probs)
         return ConstantClassifier(probs, self.probFloors, tag = self.tag), params[n:]
 
+    def flooredSingle(self):
+        numFloored = sum([ (1 if np.allclose(prob, probFloor) else 0) for prob, probFloor in zip(self.probs, self.probFloors) ])
+        if np.allclose(sum(self.probFloors), 1.0):
+            assert numFloored == len(self.probs)
+            return numFloored, len(self.probs)
+        else:
+            return numFloored, len(self.probs) - 1
+
 class BinaryLogisticClassifier(TermDist):
     def __init__(self, coeff, coeffFloor, tag = None):
         self.coeff = coeff
@@ -1710,6 +1723,10 @@ class BinaryLogisticClassifier(TermDist):
         n = len(self.coeff)
         coeff = params[:n]
         return BinaryLogisticClassifier(coeff, self.coeffFloor, tag = self.tag), params[n:]
+
+    def flooredSingle(self):
+        numFloored = sum([ (1 if np.allclose(abs(coeffValue), coeffFloorValue) else 0) for coeffValue, coeffFloorValue in zip(self.coeff, self.coeffFloor) ])
+        return numFloored, len(self.coeff)
 
 class MixtureDist(Dist):
     def __init__(self, classDist, regDists, tag = None):
