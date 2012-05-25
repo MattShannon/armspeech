@@ -99,6 +99,18 @@ def getStandardizeAlignment(subLabels):
         return alignmentOut
     return standardizeAlignment
 
+def reportFloored(distRoot, rootTag):
+    dists = d.distNodeList(distRoot)
+    taggedDistTypes = [('LG', d.LinearGaussian), ('CC', d.ConstantClassifier), ('BLC', d.BinaryLogisticClassifier)]
+    numFlooreds = [ np.array([0, 0]) for distTypeIndex, (distTypeTag, distType) in enumerate(taggedDistTypes) ]
+    for dist in dists:
+        for distTypeIndex, (distTypeTag, distType) in enumerate(taggedDistTypes):
+            if isinstance(dist, distType):
+                numFlooreds[distTypeIndex] += dist.flooredSingle()
+    summary = ', '.join([ distTypeTag+(': %s of %s' % tuple(numFlooreds[distTypeIndex])) for distTypeIndex, (distTypeTag, distType) in enumerate(taggedDistTypes) if numFlooreds[distTypeIndex][1] > 0 ])
+    if summary:
+        print 'flooring: %s: %s' % (rootTag, summary)
+
 def main(rawArgs):
     parser = argparse.ArgumentParser(
         description = 'Runs example experiments that use the same data as the HTS demo.',
@@ -229,6 +241,11 @@ def main(rawArgs):
 
         return transformedGaussianResidualsMap(dist)
 
+    def reportFlooredPerStream(dist):
+        for stream in corpus.streams:
+            distRoot = nodetree.findTaggedNode(dist, lambda tag: tag == ('stream', stream.name))
+            reportFloored(distRoot, rootTag = stream.name)
+
     def getDrawMgc(ylims = None, includeGivenLabels = True, extraLabelSeqs = []):
         streamIndex = 0
         def drawMgc(synthOutput, uttId, exptTag):
@@ -338,6 +355,9 @@ def main(rawArgs):
         print 'numSubLabels =', numSubLabels
         subLabels = list(range(numSubLabels))
 
+        lgVarianceFloorMult = 1e-3
+        print 'lgVarianceFloorMult =', lgVarianceFloorMult
+
         standardizeAlignment = getStandardizeAlignment(subLabels)
 
         def alignmentToPhoneticSeq(alignment):
@@ -353,53 +373,64 @@ def main(rawArgs):
                 frameSummarizer.createAcc(True, lambda streamIndex:
                     {
                         0:
-                            d.MappedInputAcc(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
-                                d.createDiscreteAcc(subLabels, lambda subLabel:
-                                    d.createDiscreteAcc(phoneset.phoneList, lambda phone:
-                                        mgcSummarizer.createAcc(False, lambda outIndex:
-                                            d.MappedInputAcc(xf.AddBias(),
-                                                d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1, varianceFloor = 0.0)
-                                            )
-                                        )
+                            d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
+                                mgcSummarizer.createAcc(False, lambda outIndex:
+                                    d.MappedInputAcc(xf.AddBias(),
+                                        d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1).withTag('setFloor')
                                     )
                                 )
-                            )
+                            ).withTag(('stream', corpus.streams[streamIndex].name))
                     ,   1:
-                            d.MappedInputAcc(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
-                                d.createDiscreteAcc(subLabels, lambda subLabel:
-                                    d.createDiscreteAcc(phoneset.phoneList, lambda phone:
-                                        #d.MappedInputAcc(xf.Msd01ToVector(),
-                                        #    d.MappedInputAcc(xf.AddBias(),
-                                        #        d.IdentifiableMixtureAcc(
-                                        #            d.BinaryLogisticClassifierAcc(d.BinaryLogisticClassifier(coeff = np.zeros((2 * lf0StreamDepth + 1,)), coeffFloor = np.ones((2 * lf0StreamDepth + 1,)) * 5.0)),
-                                        #            [
-                                        #                d.FixedValueAcc(None),
-                                        #                d.LinearGaussianAcc(inputLength = 2 * lf0StreamDepth + 1, varianceFloor = 0.0)
-                                        #            ]
-                                        #        )
-                                        #    )
-                                        #)
-                                        d.OracleAcc()
-                                    )
-                                )
-                            )
+                            d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
+                                #d.MappedInputAcc(xf.Msd01ToVector(),
+                                #    d.MappedInputAcc(xf.AddBias(),
+                                #        d.IdentifiableMixtureAcc(
+                                #            d.BinaryLogisticClassifierAcc(d.BinaryLogisticClassifier(coeff = np.zeros((2 * lf0StreamDepth + 1,)), coeffFloor = np.ones((2 * lf0StreamDepth + 1,)) * 5.0)),
+                                #            [
+                                #                d.FixedValueAcc(None),
+                                #                d.LinearGaussianAcc(inputLength = 2 * lf0StreamDepth + 1).withTag('setFloor')
+                                #            ]
+                                #        )
+                                #    )
+                                #)
+                                d.OracleAcc()
+                            ).withTag(('stream', corpus.streams[streamIndex].name))
                     ,   2:
-                            d.MappedInputAcc(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
-                                d.createDiscreteAcc(subLabels, lambda subLabel:
-                                    d.createDiscreteAcc(phoneset.phoneList, lambda phone:
-                                        d.OracleAcc()
-                                    )
-                                )
-                            )
+                            d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
+                                d.OracleAcc()
+                            ).withTag(('stream', corpus.streams[streamIndex].name))
                     }[streamIndex]
                 )
             )
         )
 
-        timed(corpus.accumulate)(acc)
+        def setFloorMapPartial(dist, mapChild):
+            if isinstance(dist, d.LinearGaussian) and dist.tag == 'setFloor':
+                return d.LinearGaussian(dist.coeff, dist.variance, dist.variance * lgVarianceFloorMult)
 
+        def globalToMonophoneMapPartial(dist, mapChild):
+            if isinstance(dist, d.MappedInputDist) and getFirst(dist.tag) == 'stream':
+                subDist = dist.dist
+                return d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
+                    d.createDiscreteDist(subLabels, lambda subLabel:
+                        d.createDiscreteDist(phoneset.phoneList, lambda phone:
+                            d.isolateDist(subDist)
+                        )
+                    )
+                ).withTag(dist.tag)
+
+        print 'DEBUG: estimating global dist'
+        timed(corpus.accumulate)(acc)
         dist, trainLogLike, trainOcc = timed(d.defaultEstimate)(acc)
-        reportTrainLogLike(trainLogLike, trainOcc)
+
+        print 'DEBUG: setting floors'
+        dist = nodetree.getDagMap([setFloorMapPartial, nodetree.defaultMapPartial])(dist)
+        print 'DEBUG: converting global dist to monophone dist'
+        dist = nodetree.getDagMap([globalToMonophoneMapPartial, nodetree.defaultMapPartial])(dist)
+
+        print 'DEBUG: estimating monophone dist'
+        dist, trainLogLike, trainOcc = timed(trn.trainEM)(dist, corpus.accumulate, minIterations = 1, maxIterations = 1)
+        reportFlooredPerStream(dist)
         writeDistFile(os.path.join(distOutDir, 'mono.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -409,6 +440,7 @@ def main(rawArgs):
         print
         print 'MIXING UP (to 2 components)'
         dist = mixup(dist, corpus.accumulate)
+        reportFlooredPerStream(dist)
         writeDistFile(os.path.join(distOutDir, 'mono.2mix.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -417,6 +449,7 @@ def main(rawArgs):
         print
         print 'MIXING UP (to 4 components)'
         dist = mixup(dist, corpus.accumulate)
+        reportFlooredPerStream(dist)
         writeDistFile(os.path.join(distOutDir, 'mono.4mix.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
