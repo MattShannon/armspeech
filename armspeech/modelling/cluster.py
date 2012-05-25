@@ -13,6 +13,12 @@ from armspeech.util.timing import timed
 import math
 from collections import defaultdict
 
+# FIXME : decision tree clustering needs to work with auxValues not logLikes,
+#   and currently there is an inconsistency with which of these gets returned
+#   by estimate methods. Need to fix this for decision tree clustering to work
+#   consistently for various different dists (and not fail silently where it's
+#   incorrectly using logLikes).
+
 def decisionTreeCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minOcc, maxOcc = None, mdlFactor = 1.0, verbosity = 2):
     root = createAcc()
     for label in labelList:
