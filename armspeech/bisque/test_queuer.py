@@ -20,7 +20,7 @@ from armspeech.util.filehelp import TempDir
 from armspeech.util import persist
 
 import unittest
-import sys
+import logging
 import time
 
 def simpleTestDag():
@@ -82,7 +82,7 @@ class TestDistribute(unittest.TestCase):
             assert len(liveJobDirs) == totJobs
             assert len(finalLiveJobs) == finalJobs
             if totSubmitted == totJobs:
-                sys.stderr.write('WARNING: re-use of submitted jobs for MockSgeQueuer not properly tested, since jobs completed too fast\n')
+                logging.warning('re-use of submitted jobs for MockSgeQueuer not properly tested, since jobs completed too fast')
             while not all([ liveJob.hasEnded() for liveJob in finalLiveJobs ]):
                 time.sleep(0.1)
             for art, expectedValue in testDag:

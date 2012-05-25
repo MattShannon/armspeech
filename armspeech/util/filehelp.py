@@ -9,7 +9,7 @@
 from __future__ import division
 
 import os
-import sys
+import logging
 import shutil
 import tempfile
 
@@ -20,4 +20,4 @@ class TempDir(object):
         shutil.rmtree(self.location)
     def __del__(self):
         if os.path.isdir(self.location):
-            sys.stderr.write('\nWARNING: temporary directory '+self.location+' not deleted. You probably want to do this manually after looking at its contents.\n')
+            logging.warning('temporary directory '+self.location+' not deleted. You probably want to do this manually after looking at its contents.')

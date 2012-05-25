@@ -19,6 +19,7 @@ from armspeech.util import persist
 import re
 import os
 import sys
+import logging
 import subprocess
 from subprocess import PIPE
 from armspeech.util import subprocesshelp
@@ -107,13 +108,13 @@ class MockSgeQueuer(SgeQueuer):
                             print 'mock_sge_queuer: job', jid, 'finished'
                     elif p.returncode == 100:
                         self.queueState.mockStatus[jid] = 11
-                        sys.stderr.write('WARNING: mock_sge_queuer: error in job '+str(jid)+' (holding successors)\n')
+                        logging.warning('mock_sge_queuer: error in job '+str(jid)+' (holding successors)')
                     else:
                         self.queueState.mockStatus[jid] = 10
-                        sys.stderr.write('WARNING: mock_sge_queuer: error in job '+str(jid)+'\n')
+                        logging.warning('mock_sge_queuer: error in job '+str(jid)+'')
                 except:
                     self.queueState.mockStatus[jid] = 10
-                    sys.stderr.write('WARNING: mock_sge_queuer: error in job '+str(jid)+'\n')
+                    logging.warning('mock_sge_queuer: error in job '+str(jid)+'')
                     raise
                 finally:
                     self.runNext(jid, verbosity)

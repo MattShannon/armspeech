@@ -16,13 +16,13 @@ from armspeech.util.memoize import memoize
 from armspeech.util.mathhelp import assert_allclose
 from armspeech.util.util import orderedDictRepr
 
+import logging
 import math
 import numpy as np
 import numpy.linalg as la
 import armspeech.util.mylinalg as mla
 from scipy import special
 import random
-import sys
 from itertools import izip
 from armspeech.util.iterhelp import contextualizeIter
 from collections import deque
@@ -485,14 +485,14 @@ class LinearGaussianAcc(TermAcc):
             if self.distPrev is None:
                 raise
             else:
-                sys.stderr.write('WARNING: reverting to previous dist due to error during LinearGaussian estimation: '+str(detail)+'\n')
+                logging.warning('reverting to previous dist due to error during LinearGaussian estimation: '+str(detail))
                 return LinearGaussian(self.distPrev.coeff, self.distPrev.variance, self.varianceFloor, tag = self.tag), self.logLikeSingle(), self.occ
 
     # N.B. assumes last component of input vector is bias (weakly checked)
     # (N.B. is geometric -- not invariant with respect to scaling of individual summarizers (at least for depth > 0))
     def estimateInitialMixtureOfTwoExperts(self):
         if self.occ == 0.0:
-            sys.stderr.write('WARNING: not mixing up LinearGaussian with occ == 0.0\n')
+            logging.warning('not mixing up LinearGaussian with occ == 0.0')
             return self.estimateSingle()
         sigmoidAbscissaAtOneStdev = 0.5
         occRecompute = self.sumOuter[-1, -1]
@@ -519,7 +519,7 @@ class LinearGaussianAcc(TermAcc):
             l, U = la.eigh(S - np.outer(mu, mu))
             eigVal, (index, eigVec) = max(zip(l, enumerate(np.transpose(U))))
             if eigVal == 0.0:
-                sys.stderr.write('WARNING: not mixing up LinearGaussian since eigenvalue 0.0\n')
+                logging.warning('not mixing up LinearGaussian since eigenvalue 0.0')
                 return self.estimateSingle()
             w = eigVec * sigmoidAbscissaAtOneStdev / math.sqrt(eigVal)
             w0 = -np.dot(w, mu)
@@ -602,7 +602,7 @@ class ConstantClassifierAcc(TermAcc):
             if self.distPrev is None:
                 raise
             else:
-                sys.stderr.write('WARNING: reverting to previous dist due to error during ConstantClassifier estimation: '+str(detail)+'\n')
+                logging.warning('reverting to previous dist due to error during ConstantClassifier estimation: '+str(detail))
                 return ConstantClassifier(self.distPrev.probs, self.probFloors, tag = self.tag), self.logLikeSingle(), self.occ
 
 class BinaryLogisticClassifierAcc(TermAcc):
@@ -666,7 +666,7 @@ class BinaryLogisticClassifierAcc(TermAcc):
 
             return BinaryLogisticClassifier(coeff, self.distPrev.coeffFloor, tag = self.tag), self.logLikeSingle(), self.occ
         except EstimationError, detail:
-            sys.stderr.write('WARNING: reverting to previous dist due to error during BinaryLogisticClassifier estimation: '+str(detail)+'\n')
+            logging.warning('reverting to previous dist due to error during BinaryLogisticClassifier estimation: '+str(detail))
             return BinaryLogisticClassifier(self.distPrev.coeff, self.distPrev.coeffFloor, tag = self.tag), self.logLikeSingle(), self.occ
 
 class MixtureAcc(Acc):

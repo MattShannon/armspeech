@@ -10,7 +10,7 @@ from __future__ import division
 from __future__ import with_statement
 
 import os
-import sys
+import logging
 import struct
 import math
 import numpy as np
@@ -100,7 +100,7 @@ def doHtsDemoWaveformGeneration(scriptsDir, synthOutDir, basenames, logFile = No
     p = subprocess.Popen(args, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
     logOutput = p.communicate()[0]
     if p.returncode != 0:
-        sys.stderr.write('WARNING: waveform generation failed (exit code '+str(p.returncode)+')\n')
+        logging.warning('waveform generation failed (exit code '+str(p.returncode)+')')
     if logFile is not None:
         with open(logFile, 'w') as f:
             f.write(logOutput)

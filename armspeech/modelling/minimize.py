@@ -9,10 +9,11 @@
 
 from __future__ import division
 
+import sys
+import logging
+import traceback
 from numpy import array, zeros, shape, dot, isnan, isinf, isreal, sqrt, finfo, double
 from numpy.random import randn
-import sys
-import traceback
 
 def checkGrad(f, dim, drawInput = lambda dim: 2.0 * randn(dim), numPoints = 500, relTol = 1e-2, absTol = 1e-3):
     """checks analytic gradient returned by f agrees with numerical gradient at randomly chosen points (fairly weak test but still very useful)"""
@@ -88,7 +89,7 @@ def minimize(f, X, length, red = 1.0, verbosity = 0):
                 except KeyboardInterrupt:
                     raise
                 except Exception, e:
-                    sys.stderr.write('WARNING: '+e.__class__.__name__+' during function evaluation during minimize\n')
+                    logging.warning(e.__class__.__name__+' during function evaluation during minimize')
                     if verbosity >= 3:
                         print 'minimize:', '-'*60
                         print 'minimize: exception during function evaluation:'

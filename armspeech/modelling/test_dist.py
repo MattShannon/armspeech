@@ -25,7 +25,7 @@ import test_dist_questions
 import test_transform
 
 import unittest
-import sys
+import logging
 from collections import deque
 import math
 import random
@@ -992,7 +992,7 @@ def testBinaryLogisticClassifier():
     print '(Euclidean distance =', dist, ')'
 
     if dist > 0.1:
-        sys.stderr.write('WARNING: unusually large discrepancy between estimated and true dist during BinaryLogisticClassifier test\n')
+        logging.warning('unusually large discrepancy between estimated and true dist during BinaryLogisticClassifier test')
 
 # (N.B. not a unit test. Just draws pictures to help you assess whether results seem reasonable.)
 def testBinaryLogisticClassifierFunGraph():
