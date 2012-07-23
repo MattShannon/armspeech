@@ -626,8 +626,11 @@ class BinaryLogisticClassifierAcc(TermAcc):
 
     # N.B. assumes class 0 in self corresponds to class 0 in acc, etc.
     #   Also assumes distPrev is the same for self and acc (not checked).
-    # (FIXME : does this cause problems during decision tree clustering?)
-    # (FIXME : generalize to add the two local quadratic approximations instead, even if they're around different points?)
+    # (FIXME : accumulated values encode a local quadratic approx of likelihood
+    #   function at current params. However should the origin in parameter space
+    #   be treated as absolute zero rather than the current params?
+    #   Would allow decision tree clustering with BinaryLogisticClassifier (although
+    #   quadratic approx may not be very good in this situation).)
     def addAccSingle(self, acc):
         self.occ += acc.occ
         self.sumTarget += acc.sumTarget
