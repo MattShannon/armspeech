@@ -10,6 +10,7 @@ import dist as d
 from armspeech.util.mathhelp import assert_allclose
 from armspeech.util.timing import timed
 
+import logging
 import math
 from collections import defaultdict
 
@@ -77,6 +78,9 @@ def decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups, th
         assert_allclose(occ, occNode)
         return d.DecisionTreeNode(bestFullQuestion, distYes, distNo), logLike, occ
     else:
+        if maxCount is not None and countNode > maxCount:
+            assert bestFullQuestion is None
+            logging.warning('decision tree leaf has count = %s > maxCount = %s, but no further splitting possible' % (countNode, maxCount))
         if verbosity >= 2:
             print 'cluster:'+indent+'leaf'
         return d.DecisionTreeLeaf(distLeaf), logLikeLeaf, occNode
