@@ -66,9 +66,9 @@ class TestPersist(unittest.TestCase):
         assert persist.secHashObject(0) == '27b9b44c6234ee94be9ee6f1af3aca8f77c42194'
         assert persist.secHashObject(1) == 'aaabe6ddf3884ad6332f7ba21ebde77cfa56020f'
         assert persist.secHashObject(2) == 'f90d0d7dda12125e6e903c7fe294ef5a18b5c38d'
-        assert persist.secHashObject([]) == '6ccf6a7be71ec79dd18ad65cba281d751e31fae1'
+        assert persist.secHashObject([]) == 'a766f8f1a671877187d2e4cc90987785f7323bde'
         assert persist.secHashObject(None) == '6ae75066bc250a2c28d6871cbb2e5e6089800440'
-        assert persist.secHashObject(dict()) == '29c40cda94351229c1ed18850732694b1aa17920'
+        assert persist.secHashObject(dict()) == '10c1a6c4ca5103c9310a788b6ac71b1eb03026f3'
         assert persist.secHashObject(l) == '4af396d95ed2d87f7330f8418f1d7619623e5f42'
         assert persist.secHashObject(d) == 'bebad045b5f2d023efed1d4fc1840a28c532789e'
 

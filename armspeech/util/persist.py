@@ -44,12 +44,15 @@ def roundTrip(obj):
     return pickle.loads(pickle.dumps(obj, protocol = 2))
 
 def checkRoundTrip(obj):
-    assert pickle.dumps(pickle.loads(pickle.dumps(obj, protocol = 2)), protocol = 2) == pickle.dumps(obj, protocol = 2)
+    assert pickle.dumps(roundTrip(obj), protocol = 2) == pickle.dumps(obj, protocol = 2)
 
 def secHashObject(obj):
     """Computes git-style hash of the pickled version of an object."""
     m = hashlib.sha1()
-    pickledObj = pickle.dumps(obj, protocol = 2)
+    # N.B. round-tripping here seems to help ensure that secHash is immune to
+    #   round-tripping (that is, computing the secHash of an object gives the
+    #   same result as pickling, unpickling, then computing the secHash).
+    pickledObj = pickle.dumps(roundTrip(obj), protocol = 2)
     m.update('blob '+str(len(pickledObj))+'\0')
     m.update(pickledObj)
     return m.hexdigest()

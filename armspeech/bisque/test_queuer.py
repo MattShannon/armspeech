@@ -17,7 +17,6 @@ import armspeech.bisque.queuer as qr
 from armspeech.bisque import sge_queuer
 import armspeech.bisque.test_queuer_jobs as jobs
 from armspeech.util.filehelp import TempDir
-from armspeech.util import persist
 
 import unittest
 import logging
@@ -30,10 +29,7 @@ def simpleTestDag():
     addJobB = jobs.AddJob(oneJob2.valueOut, addJobA.valueOut, name = 'addJobB')
     addJobC = jobs.AddJob(addJobA.valueOut, addJobB.valueOut, name = 'addJobC')
     addJobD = jobs.AddJob(oneJob1.valueOut, addJobB.valueOut, name = 'addJobD')
-    # FIXME : investigate why round-tripping is necessary in some cases
-    ret = persist.roundTrip([(addJobC.valueOut, 5), (addJobD.valueOut, 4)])
-    persist.checkRoundTrip(ret)
-    return ret, 6, 2
+    return [(addJobC.valueOut, 5), (addJobD.valueOut, 4)], 6, 2
 
 class TestDistribute(unittest.TestCase):
     def test_LocalQueuer(self):
