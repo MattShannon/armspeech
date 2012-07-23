@@ -44,7 +44,7 @@ def eval_local(reprString):
     from armspeech.util.mathhelp import AsArray
     from armspeech.util.util import ConstantFunction
 
-    from numpy import array, eye, float64, Inf
+    from numpy import array, eye, float64, Inf, inf
 
     return eval(reprString)
 
