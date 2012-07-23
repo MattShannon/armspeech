@@ -64,7 +64,7 @@ def getDagMap(
     storeValue = lambda ret, args: ret,
     restoreValue = lambda stored, args: stored
 ):
-    """Map an object DAG by recursively applying a function to each sub-DAG.
+    """Maps an object DAG by recursively applying a function to each sub-DAG.
 
     This function provides a flexible mechanism to traverse an object DAG,
     possibly creating a new object DAG with similar structure.
