@@ -37,8 +37,9 @@ import armspeech.numpy_settings
 import matplotlib
 matplotlib.use('Agg')
 
-np.seterr(all = 'raise')
-np.seterr(under = 'ignore')
+# (FIXME : could change this to 'raise' if we extensively test all experiments
+#   to make sure they never fail incorrectly with this setting)
+np.seterr(all = 'ignore')
 np.set_printoptions(precision = 17, linewidth = 10000)
 
 def writeDistFile(distFile, dist):
