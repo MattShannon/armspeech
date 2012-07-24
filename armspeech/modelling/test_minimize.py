@@ -12,6 +12,7 @@ from minimize import checkGrad, solveToMinimize, solveByMinimize
 
 import unittest
 import numpy as np
+import armspeech.numpy_settings
 from numpy.random import randn, randint
 import numpy.linalg as la
 

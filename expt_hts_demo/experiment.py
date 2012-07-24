@@ -32,6 +32,7 @@ import tempfile
 import traceback
 import math
 import numpy as np
+import armspeech.numpy_settings
 
 import matplotlib
 matplotlib.use('Agg')

@@ -14,6 +14,7 @@ import logging
 import struct
 import math
 import numpy as np
+import armspeech.numpy_settings
 import numpy.linalg as la
 import itertools
 import subprocess

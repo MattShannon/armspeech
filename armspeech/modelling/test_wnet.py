@@ -15,6 +15,7 @@ from armspeech.util.memoize import memoize
 import unittest
 import random
 from numpy.random import randn, randint
+import armspeech.numpy_settings
 
 def randBool():
     return randint(0, 2) == 0

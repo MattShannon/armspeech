@@ -16,6 +16,7 @@ from armspeech.util.lazy import lazyproperty
 
 import math
 import numpy as np
+import armspeech.numpy_settings
 import armspeech.util.mylinalg as mla
 
 # (FIXME : current parsing potentially involves _a lot_ of list copying.

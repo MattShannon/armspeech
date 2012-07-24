@@ -30,12 +30,11 @@ from collections import deque
 import math
 import random
 import numpy as np
+import armspeech.numpy_settings
 from numpy.random import randn, randint
 import numpy.linalg as la
 from scipy import stats
 import string
-
-np.set_printoptions(precision = 17)
 
 def logProb_frames(dist, trainData):
     lp = 0.0

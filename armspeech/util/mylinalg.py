@@ -14,6 +14,7 @@ routines to check for these special cases.
 from __future__ import division
 
 import numpy as np
+import armspeech.numpy_settings
 import numpy.linalg as la
 import scipy.linalg as sla
 

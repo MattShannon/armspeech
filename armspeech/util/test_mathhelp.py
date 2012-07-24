@@ -13,6 +13,7 @@ from armspeech.util.mathhelp import assert_allclose
 
 import unittest
 import numpy as np
+import armspeech.numpy_settings
 import numpy.linalg as la
 from numpy.random import randn, randint
 

@@ -16,9 +16,8 @@ import unittest
 import math
 import random
 import numpy as np
+import armspeech.numpy_settings
 from numpy.random import randn, randint
-
-np.set_printoptions(precision = 17)
 
 # FIXME : add explicit tests for transform_acc
 

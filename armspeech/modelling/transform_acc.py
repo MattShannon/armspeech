@@ -11,6 +11,7 @@ from __future__ import division
 import dist as d
 
 import numpy as np
+import armspeech.numpy_settings
 
 class TransformAccG(d.AccG):
     pass

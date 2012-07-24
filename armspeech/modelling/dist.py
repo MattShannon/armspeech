@@ -19,6 +19,7 @@ from armspeech.util.util import orderedDictRepr
 import logging
 import math
 import numpy as np
+import armspeech.numpy_settings
 import numpy.linalg as la
 import armspeech.util.mylinalg as mla
 from scipy import special
