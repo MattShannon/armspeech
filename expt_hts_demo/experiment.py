@@ -539,6 +539,9 @@ def main(rawArgs):
         print 'numSubLabels =', numSubLabels
         subLabels = list(range(numSubLabels))
 
+        lgVarianceFloorMult = 1e-3
+        print 'lgVarianceFloorMult =', lgVarianceFloorMult
+
         standardizeAlignment = getStandardizeAlignment(subLabels)
 
         def alignmentToPhoneticSeq(alignment):
@@ -555,26 +558,53 @@ def main(rawArgs):
                 frameSummarizer.createAcc(True, lambda streamIndex:
                     {
                         0:
-                            d.MappedInputAcc(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
-                                d.createDiscreteAcc(subLabels, lambda subLabel:
-                                    d.AutoGrowingDiscreteAcc(lambda:
-                                        mgcSummarizer.createAcc(False, lambda outIndex:
-                                            d.MappedInputAcc(xf.AddBias(),
-                                                d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1, varianceFloor = 0.0)
-                                            )
-                                        )
+                            d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
+                                mgcSummarizer.createAcc(False, lambda outIndex:
+                                    d.MappedInputAcc(xf.AddBias(),
+                                        d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1).withTag('setFloor')
                                     )
                                 )
-                            )
+                            ).withTag(('stream', corpus.streams[streamIndex].name))
                     ,   1:
-                            d.OracleAcc()
+                            d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
+                                d.OracleAcc()
+                            ).withTag(('stream', corpus.streams[streamIndex].name))
                     ,   2:
-                            d.OracleAcc()
+                            d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
+                                d.OracleAcc()
+                            ).withTag(('stream', corpus.streams[streamIndex].name))
                     }[streamIndex]
                 )
             )
         )
 
+        def setFloorMapPartial(dist, mapChild):
+            if isinstance(dist, d.LinearGaussian) and dist.tag == 'setFloor':
+                return d.LinearGaussian(dist.coeff, dist.variance, dist.variance * lgVarianceFloorMult)
+
+        def globalToFullCtxCreateAccPartial(dist, createAccChild):
+            if isinstance(dist, d.MappedInputDist) and getFirst(dist.tag) == 'stream':
+                rootDist = dist.dist
+                def createAcc():
+                    leafAcc = d.defaultCreateAcc(rootDist)
+                    return leafAcc
+                return d.MappedInputAcc(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
+                    d.createDiscreteAcc(subLabels, lambda subLabel:
+                        d.AutoGrowingDiscreteAcc(createAcc)
+                    )
+                ).withTag(dist.tag)
+
+        print 'DEBUG: estimating global dist'
+        timed(corpus.accumulate)(acc)
+        dist, (trainAux, trainAuxRat) = d.defaultEstimateTotAux(acc)
+        reportTrainAux((trainAux, trainAuxRat), acc.count())
+
+        print 'DEBUG: setting floors'
+        dist = nodetree.getDagMap([setFloorMapPartial, nodetree.defaultMapPartial])(dist)
+        print 'DEBUG: converting global dist to full ctx acc'
+        acc = nodetree.getDagMap([globalToFullCtxCreateAccPartial, d.defaultCreateAccPartial])(dist)
+
+        print 'DEBUG: accumulating for decision tree clustering'
         timed(corpus.accumulate)(acc)
 
         def decisionTreeClusterEstimatePartial(acc, estimateChild):
@@ -584,7 +614,7 @@ def main(rawArgs):
 
         dist = decisionTreeClusterEstimate(acc)
         print
-        evaluateTrainLogLike(dist, corpus)
+        reportFlooredPerStream(dist)
         writeDistFile(os.path.join(distOutDir, 'clustered.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -594,6 +624,7 @@ def main(rawArgs):
         print
         print 'MIXING UP (to 2 components)'
         dist = mixup(dist, corpus.accumulate)
+        reportFlooredPerStream(dist)
         writeDistFile(os.path.join(distOutDir, 'clustered.2mix.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -602,6 +633,7 @@ def main(rawArgs):
         print
         print 'MIXING UP (to 4 components)'
         dist = mixup(dist, corpus.accumulate)
+        reportFlooredPerStream(dist)
         writeDistFile(os.path.join(distOutDir, 'clustered.4mix.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
