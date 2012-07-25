@@ -703,11 +703,13 @@ class BinaryLogisticClassifierAcc(TermAcc):
                 sumOuterInv = mla.pinv(self.sumOuter)
             except la.LinAlgError, detail:
                 raise EstimationError('could not compute pseudo-inverse: '+str(detail))
-            coeff = self.distPrev.coeff - np.dot(sumOuterInv, self.sumTarget)
+            coeffDelta = -np.dot(sumOuterInv, self.sumTarget)
 
-            # FIXME : algorithm below is just heuristic (it isn't constrained ML or anything)
-            coeff = np.minimum(coeff, self.distPrev.coeffFloor)
-            coeff = np.maximum(coeff, -self.distPrev.coeffFloor)
+            # approximate constrained maximum likelihood
+            step = 0.7
+            while any(np.abs(self.distPrev.coeff + coeffDelta * step) > self.distPrev.coeffFloor):
+                step *= 0.5
+            coeff = self.distPrev.coeff + coeffDelta * step
             assert all(np.abs(coeff) <= self.distPrev.coeffFloor)
 
             return BinaryLogisticClassifier(coeff, self.distPrev.coeffFloor, tag = self.tag), self.auxFn(coeff)
