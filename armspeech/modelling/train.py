@@ -80,7 +80,7 @@ def trainCG(distInit, accumulate, ps = d.defaultParamSpec, length = -50, verbosi
         print 'trainCG: final params =', params
         print 'trainCG: final derivParams =', -negLogLike_derivParams(params)[1]
     if verbosity >= 1:
-        print 'trainCG: logLike', -negLogLikes[0], '->', -negLogLikes[-1], '( delta =', negLogLikes[0] - negLogLikes[-1], ')'
+        print 'trainCG: logLike %s -> %s (delta = %s)' % (-negLogLikes[0], -negLogLikes[-1], negLogLikes[0] - negLogLikes[-1])
         print 'trainCG: (used', lengthUsed, 'function evaluations)'
     dist = ps.parseAll(distInit, params)
 
@@ -98,7 +98,6 @@ def trainCGandEM(distInit, accumulate, ps = d.defaultParamSpec, createAccEM = d.
 
         acc = createAccEM(dist)
         (timed(accumulate) if verbosity >= 2 else accumulate)(acc)
-        count = acc.count()
         dist = estimate(acc)
 
         if afterEst is not None:
