@@ -702,7 +702,7 @@ def main(rawArgs):
                                                             d.DebugDist(None,
                                                                 d.MappedInputDist(xf.AddBias(),
                                                                     # arbitrary dist to get things rolling
-                                                                    d.LinearGaussian(np.zeros([mgcSummarizer.vectorLength(outIndex) + 1]), 1.0, varianceFloor = 0.0)
+                                                                    d.LinearGaussian(np.zeros((mgcSummarizer.vectorLength(outIndex) + 1,)), 1.0, varianceFloor = 0.0)
                                                                 )
                                                             ).withTag('debug-xfed')
                                                         #)
