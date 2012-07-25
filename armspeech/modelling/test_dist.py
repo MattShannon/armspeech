@@ -36,14 +36,6 @@ import numpy.linalg as la
 from scipy import stats
 import string
 
-def logProb_frames(dist, trainData):
-    lp = 0.0
-    frames = 0
-    for input, output in trainData:
-        lp += dist.logProb(input, output)
-        frames += 1
-    return lp, frames
-
 def randBool():
     return randint(0, 2) == 0
 
@@ -478,6 +470,8 @@ def check_logProbDerivOutput_hasDiscrete(dist, input, (disc, output), eps):
 
 def check_addAcc(dist, trainingAll, ps):
     accAll = trainedAccG(dist, trainingAll, ps = ps)
+    occAll = accAll.occ
+    countAll = accAll.count()
     logLikeAll = accAll.logLike()
     derivParamsAll = ps.derivParams(accAll)
 
@@ -486,20 +480,27 @@ def check_addAcc(dist, trainingAll, ps):
     accFull = accs[0]
     for acc in accs[1:]:
         d.addAcc(accFull, acc)
+    occFull = accFull.occ
+    countFull = accFull.count()
     logLikeFull = accFull.logLike()
     derivParamsFull = ps.derivParams(accFull)
 
+    assert_allclose(occFull, occAll)
+    assert_allclose(countFull, countAll)
     assert_allclose(logLikeFull, logLikeAll, atol = 1e-10)
     assert_allclose(derivParamsFull, derivParamsAll, atol = 1e-10)
 
-def check_logLike(dist, training, iid, hasEM):
+def check_occ_and_logLike(dist, training, iid, hasEM):
     assert iid == True
+    totOcc = sum([ occ for input, output, occ in training ])
     logLikeFromDist = iidLogProb(dist, training)
     if hasEM:
-        logLikeEM = trainedAcc(dist, training).logLike()
-        assert_allclose(logLikeEM, logLikeFromDist, atol = 1e-10)
-    logLikeG = trainedAccG(dist, training).logLike()
-    assert_allclose(logLikeG, logLikeFromDist, atol = 1e-10)
+        acc = trainedAcc(dist, training)
+        assert_allclose(acc.occ, totOcc)
+        assert_allclose(acc.logLike(), logLikeFromDist, atol = 1e-10)
+    acc = trainedAccG(dist, training)
+    assert_allclose(acc.occ, totOcc)
+    assert_allclose(acc.logLike(), logLikeFromDist, atol = 1e-10)
 
 def check_derivParams(dist, training, ps, eps):
     params = ps.params(dist)
@@ -520,10 +521,10 @@ def getTrainEM(initEstDist, maxIterations = None, verbosity = 0):
         def accumulate(acc):
             for input, output, occ in training:
                 acc.add(input, output, occ)
-        dist, logLike, occ = trn.trainEM(initEstDist, accumulate, deltaThresh = 1e-9, maxIterations = maxIterations, verbosity = verbosity)
+        dist = trn.trainEM(initEstDist, accumulate, deltaThresh = 1e-9, maxIterations = maxIterations, verbosity = verbosity)
         assert initEstDist.tag is not None
         assert dist.tag == initEstDist.tag
-        return dist, logLike, occ
+        return dist
     return doTrainEM
 
 def getTrainCG(initEstDist, ps = d.defaultParamSpec, length = -500, verbosity = 0):
@@ -531,10 +532,10 @@ def getTrainCG(initEstDist, ps = d.defaultParamSpec, length = -500, verbosity = 
         def accumulate(acc):
             for input, output, occ in training:
                 acc.add(input, output, occ)
-        dist, logLike, occ = trn.trainCG(initEstDist, accumulate, ps = ps, length = length, verbosity = verbosity)
+        dist = trn.trainCG(initEstDist, accumulate, ps = ps, length = length, verbosity = verbosity)
         assert initEstDist.tag is not None
         assert dist.tag == initEstDist.tag
-        return dist, logLike, occ
+        return dist
     return doTrainCG
 
 def getTrainFromAcc(createAcc):
@@ -542,10 +543,10 @@ def getTrainFromAcc(createAcc):
         acc = createAcc()
         for input, output, occ in training:
             acc.add(input, output, occ)
-        dist, logLike, occ = d.defaultEstimate(acc)
+        dist = d.defaultEstimate(acc)
         assert acc.tag is not None
         assert dist.tag == acc.tag
-        return dist, logLike, occ
+        return dist
     return doTrainFromAcc
 
 def check_est(trueDist, train, inputGen, hasParams, iid = True, unitOcc = False, ps = d.defaultParamSpec, logLikeThresh = 2e-2, tslpThresh = 2e-2, testSetSize = 50, initTrainingSetSize = 100, trainingSetMult = 5, maxTrainingSetSize = 100000):
@@ -585,25 +586,22 @@ def check_est(trueDist, train, inputGen, hasParams, iid = True, unitOcc = False,
     converged = False
     while not converged and len(training) < maxTrainingSetSize:
         extendTrainingSet((trainingSetMult - 1) * len(training) + initTrainingSetSize)
-        trueLogProb = iidLogProb(trueDist, training)
-        estDist, estLogLike, estOcc = train(training)
-        # N.B. tests both that training has converged and that logLike from estimate agrees with iid logProb from dist
-        # (FIXME : might be nice to separate these two criterion)
-        assert_allclose(estLogLike, iidLogProb(estDist, training), atol = 1e-10)
-        assert_allclose(estOcc, sum([ occ for input, output, occ in training ]))
+        totOcc = sum([ occ for input, output, occ in training ])
+        estDist = train(training)
+        logLikeTrue = iidLogProb(trueDist, training)
+        logLikeEst = iidLogProb(estDist, training)
         tslpTrue = iidLogProb(trueDist, testSet)
         tslpEst = iidLogProb(estDist, testSet)
         if hasParams:
             newAcc = trainedAccG(estDist, training, ps = ps)
-            assert_allclose(newAcc.occ, estOcc)
             derivParams = ps.derivParams(newAcc)
-            assert_allclose(derivParams / estOcc, np.zeros([len(derivParams)]), atol = 1e-4)
-        if math.isinf(estLogLike):
-            print 'NOTE: singularity in likelihood function (training set size =', len(training), ', occ '+repr(estOcc)+', estDist =', estDist, ', estLogLike =', estLogLike, ')'
-        if abs(trueLogProb - estLogLike) / estOcc < logLikeThresh and abs(tslpTrue - tslpEst) / testOcc < tslpThresh:
+            assert_allclose(derivParams / totOcc, np.zeros([len(derivParams)]), atol = 1e-4)
+        if math.isinf(logLikeEst):
+            print 'NOTE: singularity in likelihood function (training set size =', len(training), ', occ '+repr(totOcc)+', estDist =', estDist, ', logLikeEst =', logLikeEst / totOcc, ')'
+        if abs(logLikeTrue - logLikeEst) / totOcc < logLikeThresh and abs(tslpTrue - tslpEst) / testOcc < tslpThresh:
             converged = True
     if not converged:
-        raise AssertionError('estimated dist did not converge to true dist\n\ttraining set size = '+str(len(training))+'\n\ttrueLogProb = '+str(trueLogProb / estOcc)+' vs estLogLike = '+str(estLogLike / estOcc)+'\n\ttslpTrue = '+str(tslpTrue / testOcc)+' vs tslpEst = '+str(tslpEst / testOcc)+'\n\ttrueDist = '+repr(trueDist)+'\n\testDist = '+repr(estDist))
+        raise AssertionError('estimated dist did not converge to true dist\n\ttraining set size = '+str(len(training))+'\n\tlogLikeTrue = '+str(logLikeTrue / totOcc)+' vs logLikeEst = '+str(logLikeEst / totOcc)+'\n\ttslpTrue = '+str(tslpTrue / testOcc)+' vs tslpEst = '+str(tslpEst / testOcc)+'\n\ttrueDist = '+repr(trueDist)+'\n\testDist = '+repr(estDist))
 
 def getTrainingSet(dist, inputGen, typicalSize, iid, unitOcc):
     trainingSetSize = random.choice([0, 1, 2, typicalSize - 1, typicalSize, typicalSize + 1, 2 * typicalSize - 1, 2 * typicalSize, 2 * typicalSize + 1])
@@ -619,7 +617,7 @@ def getTrainingSet(dist, inputGen, typicalSize, iid, unitOcc):
             acc = d.defaultCreateAcc(updatedDist)
             for input, output, occ in trainingSet:
                 acc.add(input, output, occ)
-            updatedDist = d.defaultEstimate(acc)[0]
+            updatedDist = d.defaultEstimate(acc)
             trainingSet.append((inputNew, updatedDist.synth(inputNew), 1.0))
     assert len(trainingSet) == trainingSetSize
     return trainingSet
@@ -679,7 +677,7 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
         # (FIXME : add addAcc check for Accs which are not AccGs)
         check_addAcc(dist, training, ps)
     if iid:
-        check_logLike(dist, training, iid = iid, hasEM = hasEM)
+        check_occ_and_logLike(dist, training, iid = iid, hasEM = hasEM)
     if hasParams:
         check_derivParams(dist, training, ps, eps = eps)
 
@@ -692,10 +690,10 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
     if hasEM:
         # check EM estimation runs at all (if there is a decent amount of data)
         if len(training) >= numPoints - 1:
-            estDist, estLogLike, estOcc = getTrainEM(dist, maxIterations = 1)(training)
+            getTrainEM(dist, maxIterations = 1)(training)
     if True:
         # check CG estimation runs at all
-        estDist, estLogLike, estOcc = getTrainCG(dist, length = -2)(training)
+        getTrainCG(dist, length = -2)(training)
 
 class TestDist(unittest.TestCase):
     def setUp(self):
@@ -774,7 +772,7 @@ class TestDist(unittest.TestCase):
                             acc.add(input, output, occ)
                     acc = d.LinearGaussianAcc(inputLength = dimIn, varianceFloor = 0.0)
                     accumulate(acc)
-                    initDist, initLogLike, initOcc = acc.estimateInitialMixtureOfTwoExperts()
+                    initDist = acc.estimateInitialMixtureOfTwoExperts()
                     return trn.trainEM(initDist, accumulate, deltaThresh = 1e-9)
                 check_est(dist, train, inputGen, hasParams = True)
 
@@ -839,11 +837,11 @@ class TestDist(unittest.TestCase):
                 acc = d.AutoGrowingDiscreteAcc(createAcc = lambda: d.LinearGaussianAcc(inputLength = dimIn, varianceFloor = 0.0))
                 for input, output, occ in training:
                     acc.add(input, output, occ)
-                return cluster.decisionTreeCluster(acc.accDict.keys(), lambda label: acc.accDict[label], acc.createAcc, test_dist_questions.getQuestionGroups(), thresh = None, minOcc = 0.0, verbosity = 0)
+                return cluster.decisionTreeCluster(acc.accDict.keys(), lambda label: acc.accDict[label], acc.createAcc, test_dist_questions.getQuestionGroups(), thresh = None, minCount = 0.0, verbosity = 0)
             if True:
                 # check decision tree clustering runs at all
                 training = [ (input, dist.synth(input), math.exp(randn())) for input, index in zip(inputGen, range(numPoints)) ]
-                estDist, estLogLike, estOcc = train(training)
+                estDist = train(training)
             if self.deepTest:
                 check_est(dist, train, inputGen, hasParams = True)
 
@@ -959,6 +957,14 @@ class TestDist(unittest.TestCase):
                 check_est(dist, getTrainEM(dist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(dist), inputGen, hasParams = True)
 
+def logProb_occ(dist, trainData):
+    lp = 0.0
+    occ = 0
+    for input, output in trainData:
+        lp += dist.logProb(input, output)
+        occ += 1
+    return lp, occ
+
 # FIXME : this is nowhere near a proper unit test (need to make it more robust, automated, etc)
 def testBinaryLogisticClassifier():
     def inputGen(num):
@@ -974,10 +980,9 @@ def testBinaryLogisticClassifier():
             acc.add(input, output)
 
     blc = gen_BinaryLogisticClassifier(dimIn = dim + 1, useZeroCoeff = True)[0]
-    blc, trainLogLike, trainOcc = trn.trainEM(blc, accumulate, deltaThresh = 1e-10, minIterations = 10, verbosity = 2)
-    print 'training log likelihood =', trainLogLike / trainOcc, '('+str(trainOcc)+' frames)'
-    trainLogProb, trainOcc = logProb_frames(blc, trainData)
-    print 'train set log prob =', trainLogProb / trainOcc, '('+str(trainOcc)+' frames)'
+    blc = trn.trainEM(blc, accumulate, deltaThresh = 1e-10, minIterations = 10, verbosity = 2)
+    trainLogProb, trainOcc = logProb_occ(blc, trainData)
+    print 'train set log prob = %s (%s frames)' % (trainLogProb / trainOcc, trainOcc)
 
     print
     print 'DEBUG: (training data set size is', len(trainData), 'of which:'
@@ -1055,11 +1060,10 @@ def testBinaryLogisticClassifierFunGraph():
     plotBdy(blcTrue)
 
     blc = gen_BinaryLogisticClassifier(dimIn = dim + 1, useZeroCoeff = True)[0]
-    blc, trainLogLike, trainOcc = trn.trainEM(blc, accumulate, deltaThresh = 1e-4, minIterations = 10, maxIterations = 50, afterEst = afterEst, verbosity = 2)
+    blc = trn.trainEM(blc, accumulate, deltaThresh = 1e-4, minIterations = 10, maxIterations = 50, afterEst = afterEst, verbosity = 2)
     print 'DEBUG: w estimated final =', blc.coeff
-    print 'training log likelihood =', trainLogLike / trainOcc, '('+str(trainOcc)+' frames)'
-    trainLogProb, trainOcc = logProb_frames(blc, trainData)
-    print 'train set log prob =', trainLogProb / trainOcc, '('+str(trainOcc)+' frames)'
+    trainLogProb, trainOcc = logProb_occ(blc, trainData)
+    print 'train set log prob = %s (%s frames)' % (trainLogProb / trainOcc, trainOcc)
 
     pylab.show()
 
@@ -1119,7 +1123,7 @@ def testMixtureOfTwoExpertsInitialization():
 
     acc = d.LinearGaussianAcc(inputLength = dim + 1, varianceFloor = 0.0)
     accumulate(acc)
-    dist, trainLogLike, trainOcc = acc.estimateInitialMixtureOfTwoExperts()
+    dist = acc.estimateInitialMixtureOfTwoExperts()
     blc = dist.classDist
     plotBdy(blc)
     print 'DEBUG: w estimated final =', blc.coeff

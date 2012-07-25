@@ -157,8 +157,12 @@ def main(rawArgs):
     bapSummarizer = summarizer.IndexSpecSummarizer([], fromOffset = 0, toOffset = 0, order = bapStream.order, depth = bapStreamDepth)
 
 
-    def reportTrainLogLike(trainLogLike, trainOcc):
-        print 'training log likelihood =', trainLogLike / trainOcc, '('+str(trainOcc)+' frames)'
+    def reportTrainAux((trainAux, trainAuxRat), trainFrames):
+        print 'training aux = %s (%s) (%s frames)' % (trainAux / trainFrames, d.ratToString(trainAuxRat), trainFrames)
+
+    def evaluateTrainLogLike(dist, corpus):
+        logLike, count = corpus.logProb_frames(dist, corpus.trainUttIds)
+        print 'train set log like = %s (%s count)' % (logLike / count, count)
 
     def evaluateLogProb(dist, corpus):
         trainLogProb, trainOcc = corpus.logProb_frames(dist, corpus.trainUttIds)
@@ -194,10 +198,11 @@ def main(rawArgs):
     def mixup(dist, accumulate):
         acc = d.defaultCreateAcc(dist)
         accumulate(acc)
-        dist, trainLogLike, trainOcc = trn.mixupLinearGaussianEstimate(acc)
-        reportTrainLogLike(trainLogLike, trainOcc)
-        dist, trainLogLike, trainOcc = trn.trainEM(dist, accumulate, deltaThresh = 1e-4, minIterations = 4, maxIterations = 8, verbosity = 2)
-        reportTrainLogLike(trainLogLike, trainOcc)
+        logLikeInit = acc.logLike()
+        framesInit = acc.count()
+        print 'initial training log likelihood = %s (%s frames)' % (logLikeInit / framesInit, framesInit)
+        dist = trn.mixupLinearGaussianEstimate(acc)
+        dist = trn.trainEM(dist, accumulate, deltaThresh = 1e-4, minIterations = 4, maxIterations = 8, verbosity = 2)
         return dist
 
     def convertToStudentResiduals(dist, studentTag = None, debugTag = None, subtractMeanTag = None):
@@ -423,7 +428,8 @@ def main(rawArgs):
 
         print 'DEBUG: estimating global dist'
         timed(corpus.accumulate)(acc)
-        dist, trainLogLike, trainOcc = timed(d.defaultEstimate)(acc)
+        dist, (trainAux, trainAuxRat) = d.defaultEstimateTotAux(acc)
+        reportTrainAux((trainAux, trainAuxRat), acc.count())
 
         print 'DEBUG: setting floors'
         dist = nodetree.getDagMap([setFloorMapPartial, nodetree.defaultMapPartial])(dist)
@@ -431,7 +437,7 @@ def main(rawArgs):
         dist = nodetree.getDagMap([globalToMonophoneMapPartial, nodetree.defaultMapPartial])(dist)
 
         print 'DEBUG: estimating monophone dist'
-        dist, trainLogLike, trainOcc = timed(trn.trainEM)(dist, corpus.accumulate, minIterations = 1, maxIterations = 1)
+        dist, trainLogLike, (trainAux, trainAuxRat), trainFrames = trn.expectationMaximization(dist, timed(corpus.accumulate), verbosity = 3)
         reportFlooredPerStream(dist)
         writeDistFile(os.path.join(distOutDir, 'mono.dist'), dist)
         evaluateLogProb(dist, corpus)
@@ -514,9 +520,9 @@ def main(rawArgs):
         )
 
         timed(corpus.accumulate)(acc)
+        dist, (trainAux, trainAuxRat) = d.defaultEstimateTotAux(acc)
+        reportTrainAux((trainAux, trainAuxRat), acc.count())
 
-        dist, trainLogLike, trainOcc = timed(d.defaultEstimate)(acc)
-        reportTrainLogLike(trainLogLike, trainOcc)
         writeDistFile(os.path.join(distOutDir, 'timinginfo.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -573,12 +579,12 @@ def main(rawArgs):
 
         def decisionTreeClusterEstimatePartial(acc, estimateChild):
             if isinstance(acc, d.AutoGrowingDiscreteAcc):
-                return timed(cluster.decisionTreeCluster)(acc.accDict.keys(), lambda label: acc.accDict[label], acc.createAcc, questionGroups, thresh = None, mdlFactor = mdlFactor, minOcc = 10.0, maxOcc = None, verbosity = 3)
-        decisionTreeClusterEstimate = d.getEstimate([decisionTreeClusterEstimatePartial, d.defaultEstimatePartial])
+                return timed(cluster.decisionTreeCluster)(acc.accDict.keys(), lambda label: acc.accDict[label], acc.createAcc, questionGroups, thresh = None, mdlFactor = mdlFactor, minCount = 10.0, maxCount = None, verbosity = 3)
+        decisionTreeClusterEstimate = nodetree.getDagMap([decisionTreeClusterEstimatePartial, d.defaultEstimatePartial])
 
-        dist, trainLogLike, trainOcc = decisionTreeClusterEstimate(acc)
+        dist = decisionTreeClusterEstimate(acc)
         print
-        reportTrainLogLike(trainLogLike, trainOcc)
+        evaluateTrainLogLike(dist, corpus)
         writeDistFile(os.path.join(distOutDir, 'clustered.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -742,8 +748,7 @@ def main(rawArgs):
                             outPdf = os.path.join(figOutDir, 'residualTransform-'+id+'-'+str(phone)+'-state'+str(subLabel)+'-'+streamId+'.pdf')
                             draw.drawWarping([residualTransform.transform], outPdf = outPdf, xlims = [-2.5, 2.5], title = outPdf)
 
-        dist, trainLogLike, trainOcc = timed(trn.trainEM)(dist, corpus.accumulate, estimate = d.defaultEstimate, minIterations = 2, maxIterations = 2)
-        reportTrainLogLike(trainLogLike, trainOcc)
+        dist = timed(trn.trainEM)(dist, corpus.accumulate, minIterations = 2, maxIterations = 2)
         writeDistFile(os.path.join(distOutDir, 'xf_init.dist'), dist)
         timed(drawVarious)(dist, id = 'xf_init', simpleResiduals = True)
         evaluateLogProb(dist, corpus)
@@ -753,12 +758,12 @@ def main(rawArgs):
 
         print
         print 'ESTIMATING "GAUSSIANIZATION" TRANSFORMS'
-        def afterEst(dist, logLike, occ, it):
-            reportTrainLogLike(logLike, occ)
+        def afterEst(dist, it):
             #timed(drawVarious)(dist, id = 'xf-it'+str(it))
+            pass
         # (FIXME : change mgcInputTransform to mgcInputWarp and mgcOutputTransform to mgcOutputWarp once tree structure for transforms is done)
         mgcWarpParamSpec = d.getByTagParamSpec(lambda tag: getFirst(tag) == 'mgcInputTransform' or getFirst(tag) == 'mgcOutputTransform')
-        dist, trainLogLike, trainOcc = timed(trn.trainCGandEM)(dist, corpus.accumulate, ps = mgcWarpParamSpec, iterations = 5, length = -25, afterEst = afterEst, verbosity = 2)
+        dist = timed(trn.trainCGandEM)(dist, corpus.accumulate, ps = mgcWarpParamSpec, iterations = 5, length = -25, afterEst = afterEst, verbosity = 2)
         writeDistFile(os.path.join(distOutDir, 'xf.dist'), dist)
         timed(drawVarious)(dist, id = 'xf', simpleResiduals = True)
         evaluateLogProb(dist, corpus)
@@ -779,9 +784,9 @@ def main(rawArgs):
             residualParamSpec = d.getByTagParamSpec(lambda tag: tag == 'residualTransform')
             subtractMeanParamSpec = d.getByTagParamSpec(lambda tag: tag == 'subtractMean')
         timed(drawVarious)(dist, id = 'xf.res_init', debugResiduals = True)
-        dist, trainLogLike, trainOcc = timed(trn.trainCG)(dist, corpus.accumulate, ps = residualParamSpec, length = -50, verbosity = 2)
-        dist, trainLogLike, trainOcc = timed(trn.trainCG)(dist, corpus.accumulate, ps = subtractMeanParamSpec, length = -50, verbosity = 2)
-        reportTrainLogLike(trainLogLike, trainOcc)
+        dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = residualParamSpec, length = -50, verbosity = 2)
+        dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = subtractMeanParamSpec, length = -50, verbosity = 2)
+        evaluateTrainLogLike(dist, corpus)
         writeDistFile(os.path.join(distOutDir, 'xf.res.dist'), dist)
         timed(drawVarious)(dist, id = 'xf.res', debugResiduals = True)
         evaluateLogProb(dist, corpus)
@@ -791,8 +796,8 @@ def main(rawArgs):
 
         print
         print 'ESTIMATING ALL PARAMETERS'
-        dist, trainLogLike, trainOcc = timed(trn.trainCG)(dist, corpus.accumulate, ps = d.defaultParamSpec, length = -200, verbosity = 2)
-        reportTrainLogLike(trainLogLike, trainOcc)
+        dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = d.defaultParamSpec, length = -200, verbosity = 2)
+        evaluateTrainLogLike(dist, corpus)
         writeDistFile(os.path.join(distOutDir, 'xf.res.xf.dist'), dist)
         timed(drawVarious)(dist, id = 'xf.res.xf', debugResiduals = True)
         evaluateLogProb(dist, corpus)

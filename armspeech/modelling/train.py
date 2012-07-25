@@ -8,56 +8,65 @@
 
 from __future__ import division
 
+import nodetree
 import dist as d
 from minimize import minimize
 from armspeech.util.timing import timed
 
-def trainEM(distInit, accumulate, createAcc = d.defaultCreateAcc, estimate = d.defaultEstimate, deltaThresh = 1e-8, minIterations = 1, maxIterations = None, beforeAcc = None, afterAcc = None, afterEst = None, monotone = False, verbosity = 0):
+def expectationMaximization(distPrev, accumulate, createAcc = d.defaultCreateAcc, estimateTotAux = d.defaultEstimateTotAux, afterAcc = None, monotoneAux = True, verbosity = 0):
+    """Performs one step of expectation-maximization."""
+    acc = createAcc(distPrev)
+    accumulate(acc)
+    if afterAcc is not None:
+        afterAcc(acc)
+    logLikePrev = acc.logLike()
+    count = acc.count()
+    dist, (aux, auxRat) = estimateTotAux(acc)
+    if monotoneAux and aux < logLikePrev:
+        raise RuntimeError('re-estimated auxiliary value (%s) less than previous log likelihood (%s) during expectation-maximization' % (aux / count, logLikePrev / count))
+    if verbosity >= 2:
+        print 'trainEM:    logLikePrev = %s -> aux = %s (%s) (%s count)' % (logLikePrev / count, aux / count, d.ratToString(auxRat), count)
+    return dist, logLikePrev, (aux, auxRat), count
+
+def trainEM(distInit, accumulate, createAcc = d.defaultCreateAcc, estimateTotAux = d.defaultEstimateTotAux, logLikePrevInit = float('-inf'), deltaThresh = 1e-8, minIterations = 1, maxIterations = None, beforeAcc = None, afterAcc = None, afterEst = None, monotone = False, monotoneAux = True, verbosity = 0):
     assert minIterations >= 1
     assert maxIterations is None or maxIterations >= minIterations
 
-    def estimateSubCore(distPrev, logLikePrevPrev):
-        if beforeAcc is not None:
-            beforeAcc(distPrev)
-        acc = createAcc(distPrev)
-        accumulate(acc)
-        if afterAcc is not None:
-            afterAcc(acc)
-        dist, logLikePrev, occ = estimate(acc)
-        deltaPrev = logLikePrev - logLikePrevPrev
-        if monotone and deltaPrev < 0.0:
-            raise RuntimeError('log likelihood decreased during expectation-maximization')
-        return dist, logLikePrev, deltaPrev, occ
-
-    estimateSub = timed(estimateSubCore) if verbosity >= 2 else estimateSubCore
-
+    dist = distInit
+    logLikePrev = logLikePrevInit
     it = 0
-    dist, logLikePrev, deltaPrev, occ = estimateSub(distInit, float('-inf'))
-    if afterEst is not None:
-        afterEst(dist = dist, it = it)
-    it += 1
-    if verbosity >= 2:
-        print '(trainEM: (after it', it, ', logLikePrev =', logLikePrev / occ, ', deltaPrev =', deltaPrev / occ, '))'
-    while it < minIterations or abs(deltaPrev / occ) > deltaThresh and (maxIterations is None or it < maxIterations):
-        dist, logLikePrev, deltaPrev, occ = estimateSub(dist, logLikePrev)
+    converged = False
+    while it < minIterations or (not converged) and (maxIterations is None or it < maxIterations):
+        if beforeAcc is not None:
+            beforeAcc(dist)
+        logLikePrevPrev = logLikePrev
+        if verbosity >= 2:
+            print 'trainEM: it %s:' % (it + 1)
+        dist, logLikePrev, (aux, auxRat), count = expectationMaximization(dist, accumulate, createAcc = createAcc, estimateTotAux = estimateTotAux, afterAcc = afterAcc, monotoneAux = monotoneAux, verbosity = verbosity)
+        deltaLogLikePrev = logLikePrev - logLikePrevPrev
+        if monotone and deltaLogLikePrev < 0.0:
+            raise RuntimeError('log likelihood decreased during expectation-maximization')
+        if verbosity >= 2:
+            print 'trainEM:    deltaLogLikePrev = %s' % (deltaLogLikePrev / count)
         if afterEst is not None:
             afterEst(dist = dist, it = it)
+        converged = (abs(deltaLogLikePrev) <= deltaThresh * count)
         it += 1
-        if verbosity >= 2:
-            print '(trainEM: (after it', it, ', logLikePrev =', logLikePrev / occ, ', deltaPrev =', deltaPrev / occ, '))'
+
     if verbosity >= 1:
-        if abs(deltaPrev / occ) <= deltaThresh:
+        if converged:
             print 'trainEM: converged at thresh', deltaThresh, 'in', it, 'iterations'
         else:
             print 'trainEM: did NOT converge at thresh', deltaThresh, 'in', it, 'iterations'
-    return dist, logLikePrev, occ
+
+    return dist
 
 def trainCG(distInit, accumulate, ps = d.defaultParamSpec, length = -50, verbosity = 0):
     def negLogLike_derivParams(params):
         dist = ps.parseAll(distInit, params)
         acc = ps.createAccG(dist)
         accumulate(acc)
-        # FIXME : is it better to return logLike or logLike-per-frame? (i.e. for which of these is minimize typically faster?)
+        # FIXME : is it better to return logLike or logLike-per-count (e.g. logLike-per-frame)? (i.e. for which of these is minimize typically faster?)
         return -acc.logLike(), -ps.derivParams(acc)
 
     params = ps.params(distInit)
@@ -75,13 +84,7 @@ def trainCG(distInit, accumulate, ps = d.defaultParamSpec, length = -50, verbosi
         print 'trainCG: (used', lengthUsed, 'function evaluations)'
     dist = ps.parseAll(distInit, params)
 
-    # FIXME : temporary (until all estimate routines return just the dist)
-    acc = ps.createAccG(dist)
-    accumulate(acc)
-    logLike = acc.logLike()
-    occ = acc.occ
-
-    return dist, logLike, occ
+    return dist
 
 def trainCGandEM(distInit, accumulate, ps = d.defaultParamSpec, createAccEM = d.defaultCreateAcc, estimate = d.defaultEstimate, iterations = 5, length = -50, afterEst = None, verbosity = 0):
     assert iterations >= 1
@@ -91,22 +94,23 @@ def trainCGandEM(distInit, accumulate, ps = d.defaultParamSpec, createAccEM = d.
         if verbosity >= 1:
             print 'trainCGandEM: starting it =', it, 'of CG and EM'
 
-        dist, trainLogLike, trainOcc = (timed(trainCG) if verbosity >= 2 else trainCG)(dist, accumulate, ps = ps, length = length, verbosity = verbosity)
+        dist = (timed(trainCG) if verbosity >= 2 else trainCG)(dist, accumulate, ps = ps, length = length, verbosity = verbosity)
 
         acc = createAccEM(dist)
         (timed(accumulate) if verbosity >= 2 else accumulate)(acc)
-        dist, trainLogLike, trainOcc = estimate(acc)
+        count = acc.count()
+        dist = estimate(acc)
 
         if afterEst is not None:
-            afterEst(dist = dist, logLike = trainLogLike, occ = trainOcc, it = it)
+            afterEst(dist = dist, it = it)
 
         if verbosity >= 1:
             print 'trainCGandEM: finished it =', it, 'of CG and EM'
             print 'trainCGandEM:'
 
-    return dist, trainLogLike, trainOcc
+    return dist
 
 def mixupLinearGaussianEstimatePartial(acc, estimateChild):
     if isinstance(acc, d.LinearGaussianAcc):
         return acc.estimateInitialMixtureOfTwoExperts()
-mixupLinearGaussianEstimate = d.getEstimate([mixupLinearGaussianEstimatePartial, d.defaultEstimatePartial])
+mixupLinearGaussianEstimate = nodetree.getDagMap([mixupLinearGaussianEstimatePartial, d.defaultEstimatePartial])

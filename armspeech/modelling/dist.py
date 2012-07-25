@@ -30,12 +30,6 @@ from collections import deque
 
 # (FIXME : add more checks to validate Dists and Accs on creation (including checking for NaNs))
 
-# FIXME : inconsistency with some estimate methods returning new aux function value (after updating parameters), and some old aux function value (=log likelihood).
-
-# FIXME : occ doesn't cope with sharing
-
-# FIXME : make estimate return just the dist (seems philosophically better)
-
 def eval_local(reprString):
     # (FIXME : the contents of test_dist affects what needs to be included here)
     from questions import IdLabelValuer, SubsetQuestion
@@ -53,6 +47,31 @@ class SynthMethod(object):
     Meanish = 0
     Sample = 1
 
+class Rat(object):
+    Exact = 0
+    Approx = 1
+    LowerBound = 2
+ratToStringDict = {
+    Rat.Exact: 'Exact',
+    Rat.Approx: 'Approx',
+    Rat.LowerBound: 'LowerBound',
+}
+def ratToString(rat):
+    return ratToStringDict[rat]
+
+def sumRats(rats):
+    if any([ rat == Rat.Approx for rat in rats ]):
+        return Rat.Approx
+    elif any([ rat == Rat.LowerBound for rat in rats ]):
+        return Rat.LowerBound
+    else:
+        assert all([ rat == Rat.Exact for rat in rats ])
+        return Rat.Exact
+
+def sumValuedRats(valuedRats):
+    values, rats = zip(*valuedRats)
+    return sum(values), sumRats(rats)
+
 def accNodeList(parentNode):
     return nodetree.nodeList(
         parentNode,
@@ -64,22 +83,34 @@ def distNodeList(parentNode):
         includeNode = lambda node: isinstance(node, Dist)
     )
 
-def getEstimate(partialMaps):
-    return nodetree.getDagMap(
-        partialMaps,
-        storeValue = lambda (dist, logLike, occ), args: dist,
-        restoreValue = lambda dist, args: (dist, 0.0, 0.0)
-    )
-def getCreateAcc(partialMaps):
-    return nodetree.getDagMap(partialMaps)
+def getEstimateTotAux(estimateAuxPartials, idValue = id):
+    estimateAuxPartial = nodetree.chainPartialFns(estimateAuxPartials)
+    def estimateTotAux(acc):
+        auxValuedRats = dict()
+        def estimatePartial(acc, estimateChild):
+            ret = estimateAuxPartial(acc, estimateChild)
+            if ret is None:
+                raise RuntimeError('none of the given partial functions was defined at acc '+repr(acc))
+            dist, auxValuedRat = ret
+            auxValuedRats[idValue(dist)] = auxValuedRat
+            return dist
+        dist = nodetree.getDagMap([estimatePartial])(acc)
+        totAux, totAuxRat = sumValuedRats([ auxValuedRats[idValue(distNode)] for distNode in distNodeList(dist) ])
+        return dist, (totAux, totAuxRat)
+    return estimateTotAux
+
+def defaultEstimateAuxPartial(acc, estimateChild):
+    return acc.estimateAux(estimateChild)
+defaultEstimateTotAux = getEstimateTotAux([defaultEstimateAuxPartial])
 
 def defaultEstimatePartial(acc, estimateChild):
-    return acc.estimate(estimateChild)
-defaultEstimate = getEstimate([defaultEstimatePartial])
+    dist, _ = acc.estimateAux(estimateChild)
+    return dist
+defaultEstimate = nodetree.getDagMap([defaultEstimatePartial])
 
 def defaultCreateAccPartial(dist, createAccChild):
     return dist.createAcc(createAccChild)
-defaultCreateAcc = getCreateAcc([defaultCreateAccPartial])
+defaultCreateAcc = nodetree.getDagMap([defaultCreateAccPartial])
 
 def getParams(partialMaps):
     return nodetree.getDagMap(
@@ -302,6 +333,8 @@ class AccCommon(object):
         accChildren = acc.children()
         assert len(selfChildren) == len(accChildren)
         return zip(selfChildren, accChildren)
+    def count(self):
+        return self.occ
     def logLikeSingle(self):
         abstract
     def logLike(self):
@@ -317,7 +350,7 @@ class AccCommon(object):
         return self
 
 class AccEM(AccCommon):
-    def estimate(self, estimateChild):
+    def estimateAux(self, estimateChild):
         abstract
 
 class AccG(AccCommon):
@@ -334,10 +367,10 @@ class TermAcc(Acc):
     """Acc with no children."""
     def children(self):
         return []
-    def estimateSingle(self):
+    def estimateSingleAux(self):
         abstract
-    def estimate(self, estimateChild):
-        return self.estimateSingle()
+    def estimateAux(self, estimateChild):
+        return self.estimateSingleAux()
 
 class DerivTermAccG(AccG):
     def __init__(self, distPrev, tag = None):
@@ -391,8 +424,8 @@ class FixedValueAcc(TermAcc):
     def derivParamsSingle(self):
         return []
 
-    def estimateSingle(self):
-        return FixedValueDist(self.value, tag = self.tag), 0.0, self.occ
+    def estimateSingleAux(self):
+        return FixedValueDist(self.value, tag = self.tag), (0.0, Rat.Exact)
 
 class OracleAcc(TermAcc):
     def __init__(self, tag = None):
@@ -412,8 +445,8 @@ class OracleAcc(TermAcc):
     def derivParamsSingle(self):
         return []
 
-    def estimateSingle(self):
-        return OracleDist(tag = self.tag), 0.0, self.occ
+    def estimateSingleAux(self):
+        return OracleDist(tag = self.tag), (0.0, Rat.Exact)
 
 class LinearGaussianAcc(TermAcc):
     def __init__(self, distPrev = None, inputLength = None, varianceFloor = None, tag = None):
@@ -445,24 +478,24 @@ class LinearGaussianAcc(TermAcc):
         self.sumTarget += acc.sumTarget
         self.sumOuter += acc.sumOuter
 
-    def aux(self, coeff, variance):
+    def auxFn(self, coeff, variance):
         term = self.sumSqr - 2.0 * np.dot(self.sumTarget, coeff) + np.dot(np.dot(self.sumOuter, coeff), coeff)
-        logLike = -0.5 * math.log(2.0 * math.pi) * self.occ - 0.5 * math.log(variance) * self.occ - 0.5 * term / variance
-        return logLike
+        aux = -0.5 * math.log(2.0 * math.pi) * self.occ - 0.5 * math.log(variance) * self.occ - 0.5 * term / variance
+        return aux, Rat.Exact
 
     def logLikeSingle(self):
-        return self.aux(self.distPrev.coeff, self.distPrev.variance)
+        return self.auxFn(self.distPrev.coeff, self.distPrev.variance)[0]
 
     def auxDerivParams(self, coeff, variance):
         term = self.sumSqr - 2.0 * np.dot(self.sumTarget, coeff) + np.dot(np.dot(self.sumOuter, coeff), coeff)
         derivCoeff = (self.sumTarget - np.dot(self.sumOuter, coeff)) / variance
         derivLogPrecision = 0.5 * self.occ - 0.5 * term / variance
-        return np.append(derivCoeff, derivLogPrecision)
+        return np.append(derivCoeff, derivLogPrecision), Rat.Exact
 
     def derivParamsSingle(self):
-        return self.auxDerivParams(self.distPrev.coeff, self.distPrev.variance)
+        return self.auxDerivParams(self.distPrev.coeff, self.distPrev.variance)[0]
 
-    def estimateSingle(self):
+    def estimateSingleAux(self):
         try:
             if self.occ == 0.0:
                 raise EstimationError('require occ > 0')
@@ -480,21 +513,22 @@ class LinearGaussianAcc(TermAcc):
                 raise EstimationError('computed variance is zero or negative: '+str(variance))
             elif variance < 1e-10:
                 raise EstimationError('computed variance too miniscule (variances this small can lead to substantial loss of precision during accumulation): '+str(variance))
-            auxValue = self.logLikeSingle() if self.distPrev is not None else self.aux(coeff, variance)
-            return LinearGaussian(coeff, variance, self.varianceFloor, tag = self.tag), auxValue, self.occ
+            return LinearGaussian(coeff, variance, self.varianceFloor, tag = self.tag), self.auxFn(coeff, variance)
         except EstimationError, detail:
             if self.distPrev is None:
                 raise
             else:
                 logging.warning('reverting to previous dist due to error during LinearGaussian estimation: '+str(detail))
-                return LinearGaussian(self.distPrev.coeff, self.distPrev.variance, self.varianceFloor, tag = self.tag), self.logLikeSingle(), self.occ
+                coeff = self.distPrev.coeff
+                variance = self.distPrev.variance
+                return LinearGaussian(coeff, variance, self.varianceFloor, tag = self.tag), self.auxFn(coeff, variance)
 
     # N.B. assumes last component of input vector is bias (weakly checked)
     # (N.B. is geometric -- not invariant with respect to scaling of individual summarizers (at least for depth > 0))
     def estimateInitialMixtureOfTwoExperts(self):
         if self.occ == 0.0:
             logging.warning('not mixing up LinearGaussian with occ == 0.0')
-            return self.estimateSingle()
+            return self.estimateSingleAux()[0]
         sigmoidAbscissaAtOneStdev = 0.5
         occRecompute = self.sumOuter[-1, -1]
         S = self.sumOuter[:-1, :-1] / occRecompute
@@ -510,18 +544,18 @@ class LinearGaussianAcc(TermAcc):
             coeff = np.array([0.0])
             coeffFloor = np.array([float('inf')])
             blc = BinaryLogisticClassifier(coeff, coeffFloor)
-            dist, logLike, occ = self.estimateSingle()
+            dist = self.estimateSingleAux()[0]
             mean = dist.coeff[0]
             variance = dist.variance
             dist0 = LinearGaussian(np.array([mean - 0.2 * math.sqrt(variance)]), variance, self.varianceFloor)
             dist1 = LinearGaussian(np.array([mean + 0.2 * math.sqrt(variance)]), variance, self.varianceFloor)
-            return MixtureDist(blc, [dist0, dist1]), logLike, occ
+            return MixtureDist(blc, [dist0, dist1])
         else:
             l, U = la.eigh(S - np.outer(mu, mu))
             eigVal, (index, eigVec) = max(zip(l, enumerate(np.transpose(U))))
             if eigVal == 0.0:
                 logging.warning('not mixing up LinearGaussian since eigenvalue 0.0')
-                return self.estimateSingle()
+                return self.estimateSingleAux()[0]
             w = eigVec * sigmoidAbscissaAtOneStdev / math.sqrt(eigVal)
             w0 = -np.dot(w, mu)
             coeff = np.append(w, w0)
@@ -529,9 +563,9 @@ class LinearGaussianAcc(TermAcc):
             coeff = np.minimum(coeff, coeffFloor)
             coeff = np.maximum(coeff, -coeffFloor)
             blc = BinaryLogisticClassifier(coeff, coeffFloor)
-            dist0, logLike, occ = self.estimateSingle()
-            dist1, logLike, occ = self.estimateSingle()
-            return MixtureDist(blc, [dist0, dist1]), logLike, occ
+            dist0 = self.estimateSingleAux()[0]
+            dist1 = self.estimateSingleAux()[0]
+            return MixtureDist(blc, [dist0, dist1])
 
 class ConstantClassifierAcc(TermAcc):
     def __init__(self, distPrev = None, numClasses = None, probFloors = None, tag = None):
@@ -560,19 +594,19 @@ class ConstantClassifierAcc(TermAcc):
         self.occ += acc.occ
         self.occs += acc.occs
 
-    def aux(self, probs):
-        return sum([ occ * logProb for occ, logProb in zip(self.occs, np.log(probs)) if occ > 0.0 ])
+    def auxFn(self, probs):
+        return sum([ occ * logProb for occ, logProb in zip(self.occs, np.log(probs)) if occ > 0.0 ]), Rat.Exact
 
     def logLikeSingle(self):
-        return self.aux(self.distPrev.probs)
+        return self.auxFn(self.distPrev.probs)[0]
 
     def auxDerivParams(self, probs):
-        return self.occs[:-1] - self.occs[-1] - (probs[:-1] - probs[-1]) * self.occ
+        return self.occs[:-1] - self.occs[-1] - (probs[:-1] - probs[-1]) * self.occ, Rat.Exact
 
     def derivParamsSingle(self):
-        return self.auxDerivParams(self.distPrev.probs)
+        return self.auxDerivParams(self.distPrev.probs)[0]
 
-    def estimateSingle(self):
+    def estimateSingleAux(self):
         try:
             if self.occ == 0.0:
                 raise EstimationError('require occ > 0')
@@ -597,14 +631,14 @@ class ConstantClassifierAcc(TermAcc):
             assert_allclose(sum(probs), 1.0)
             assert all(probs >= self.probFloors)
 
-            auxValue = self.logLikeSingle() if self.distPrev is not None else self.aux(probs)
-            return ConstantClassifier(probs, self.probFloors, tag = self.tag), auxValue, self.occ
+            return ConstantClassifier(probs, self.probFloors, tag = self.tag), self.auxFn(probs)
         except EstimationError, detail:
             if self.distPrev is None:
                 raise
             else:
                 logging.warning('reverting to previous dist due to error during ConstantClassifier estimation: '+str(detail))
-                return ConstantClassifier(self.distPrev.probs, self.probFloors, tag = self.tag), self.logLikeSingle(), self.occ
+                probs = self.distPrev.probs
+                return ConstantClassifier(probs, self.probFloors, tag = self.tag), self.auxFn(probs)
 
 class BinaryLogisticClassifierAcc(TermAcc):
     def __init__(self, distPrev, tag = None):
@@ -639,6 +673,13 @@ class BinaryLogisticClassifierAcc(TermAcc):
         self.sumOuter += acc.sumOuter
         self.logLikePrev += acc.logLikePrev
 
+    def auxFn(self, coeff):
+        coeffDelta = coeff - self.distPrev.coeff
+        if np.all(coeffDelta == 0.0):
+            return self.logLikePrev, Rat.Exact
+        else:
+            return self.logLikePrev - np.dot(self.sumTarget, coeffDelta) - 0.5 * np.dot(np.dot(self.sumOuter, coeffDelta), coeffDelta), Rat.Approx
+
     def logLikeSingle(self):
         return self.logLikePrev
 
@@ -654,7 +695,7 @@ class BinaryLogisticClassifierAcc(TermAcc):
     #   or other forms of regularization (though conceptually this is solving
     #   a different problem -- shouldn't have to use any regularization to get
     #   the nice non-linearly-separable case to work!).)
-    def estimateSingle(self):
+    def estimateSingleAux(self):
         try:
             if self.occ == 0.0:
                 raise EstimationError('require occ > 0')
@@ -669,10 +710,11 @@ class BinaryLogisticClassifierAcc(TermAcc):
             coeff = np.maximum(coeff, -self.distPrev.coeffFloor)
             assert all(np.abs(coeff) <= self.distPrev.coeffFloor)
 
-            return BinaryLogisticClassifier(coeff, self.distPrev.coeffFloor, tag = self.tag), self.logLikeSingle(), self.occ
+            return BinaryLogisticClassifier(coeff, self.distPrev.coeffFloor, tag = self.tag), self.auxFn(coeff)
         except EstimationError, detail:
             logging.warning('reverting to previous dist due to error during BinaryLogisticClassifier estimation: '+str(detail))
-            return BinaryLogisticClassifier(self.distPrev.coeff, self.distPrev.coeffFloor, tag = self.tag), self.logLikeSingle(), self.occ
+            coeff = self.distPrev.coeff
+            return BinaryLogisticClassifier(coeff, self.distPrev.coeffFloor, tag = self.tag), self.auxFn(coeff)
 
 class MixtureAcc(Acc):
     def __init__(self, distPrev, classAcc, regAccs, tag = None):
@@ -682,18 +724,14 @@ class MixtureAcc(Acc):
         self.regAccs = regAccs
         self.tag = tag
 
+        self.occ = 0.0
         self.entropy = 0.0
 
     def children(self):
         return [self.classAcc] + self.regAccs
 
-    @property
-    def occ(self):
-        occ = self.classAcc.occ
-        assert_allclose(sum([ regAcc.occ for regAcc in self.regAccs ]), occ)
-        return occ
-
     def add(self, input, output, occ = 1.0):
+        self.occ += occ
         logProbs = [ self.distPrev.logProbComp(input, comp, output) for comp in range(self.numComps) ]
         logTot = logSum(logProbs)
         relOccs = np.exp(logProbs - logTot)
@@ -709,6 +747,7 @@ class MixtureAcc(Acc):
     #   Also assumes distPrev is the same for self and acc (not checked).
     def addAccSingle(self, acc):
         assert self.numComps == acc.numComps
+        self.occ += acc.occ
         self.entropy += acc.entropy
 
     def logLikeSingle(self):
@@ -717,15 +756,10 @@ class MixtureAcc(Acc):
     def derivParamsSingle(self):
         return []
 
-    def estimate(self, estimateChild):
-        classDist, logLikeTot, classOcc = estimateChild(self.classAcc)
-        regList = [ estimateChild(regAcc) for regAcc in self.regAccs ]
-        regDists = [ dist for dist, logLike, occ in regList ]
-        logLikeTot += sum([ logLike for dist, logLike, occ in regList ])
-        logLikeTot += self.entropy
-        regsOcc = sum([ occ for dist, logLike, occ in regList ])
-        assert_allclose(regsOcc, classOcc)
-        return MixtureDist(classDist, regDists, tag = self.tag), logLikeTot, classOcc
+    def estimateAux(self, estimateChild):
+        classDist = estimateChild(self.classAcc)
+        regDists = [ estimateChild(regAcc) for regAcc in self.regAccs ]
+        return MixtureDist(classDist, regDists, tag = self.tag), (self.entropy, Rat.LowerBound)
 
 class IdentifiableMixtureAcc(Acc):
     def __init__(self, classAcc, regAccs, tag = None):
@@ -733,22 +767,20 @@ class IdentifiableMixtureAcc(Acc):
         self.regAccs = regAccs
         self.tag = tag
 
+        self.occ = 0.0
+
     def children(self):
         return [self.classAcc] + self.regAccs
 
-    @property
-    def occ(self):
-        occ = self.classAcc.occ
-        assert_allclose(sum([ regAcc.occ for regAcc in self.regAccs ]), occ)
-        return occ
-
     def add(self, input, output, occ = 1.0):
         comp, acOutput = output
+        self.occ += occ
         self.classAcc.add(input, comp, occ)
         self.regAccs[comp].add(input, acOutput, occ)
 
     def addAccSingle(self, acc):
         assert len(self.regAccs) == len(acc.regAccs)
+        self.occ += acc.occ
 
     def logLikeSingle(self):
         return 0.0
@@ -756,14 +788,10 @@ class IdentifiableMixtureAcc(Acc):
     def derivParamsSingle(self):
         return []
 
-    def estimate(self, estimateChild):
-        classDist, logLikeTot, classOcc = estimateChild(self.classAcc)
-        regList = [ estimateChild(regAcc) for regAcc in self.regAccs ]
-        regDists = [ dist for dist, logLike, occ in regList ]
-        logLikeTot += sum([ logLike for dist, logLike, occ in regList ])
-        regsOcc = sum([ occ for dist, logLike, occ in regList ])
-        assert_allclose(regsOcc, classOcc)
-        return IdentifiableMixtureDist(classDist, regDists, tag = self.tag), logLikeTot, classOcc
+    def estimateAux(self, estimateChild):
+        classDist = estimateChild(self.classAcc)
+        regDists = [ estimateChild(regAcc) for regAcc in self.regAccs ]
+        return IdentifiableMixtureDist(classDist, regDists, tag = self.tag), (0.0, Rat.Exact)
 
 def createVectorAcc(order, outIndices, vectorSummarizer, createAccForIndex):
     accComps = dict()
@@ -804,14 +832,11 @@ class VectorAcc(Acc):
     def derivParamsSingle(self):
         return []
 
-    def estimate(self, estimateChild):
+    def estimateAux(self, estimateChild):
         distComps = dict()
-        logLikeTot = 0.0
         for outIndex in self.accComps:
-            distComps[outIndex], logLike, occ = estimateChild(self.accComps[outIndex])
-            assert_allclose(occ, self.occ)
-            logLikeTot += logLike
-        return VectorDist(self.order, self.vectorSummarizer, self.keys, distComps, tag = self.tag), logLikeTot, self.occ
+            distComps[outIndex] = estimateChild(self.accComps[outIndex])
+        return VectorDist(self.order, self.vectorSummarizer, self.keys, distComps, tag = self.tag), (0.0, Rat.Exact)
 
 def createDiscreteAcc(keys, createAccFor):
     accDict = dict()
@@ -828,19 +853,19 @@ class DiscreteAcc(Acc):
         self.accDict = accDict
         self.tag = tag
 
+        self.occ = 0.0
+
     def children(self):
         return [ self.accDict[key] for key in self.keys ]
 
-    @property
-    def occ(self):
-        return sum([ acc.occ for acc in self.accDict.values() ])
-
     def add(self, input, output, occ = 1.0):
         label, acInput = input
+        self.occ += occ
         self.accDict[label].add(acInput, output, occ)
 
     def addAccSingle(self, acc):
         assert self.keys == acc.keys
+        self.occ += acc.occ
 
     def logLikeSingle(self):
         return 0.0
@@ -848,15 +873,11 @@ class DiscreteAcc(Acc):
     def derivParamsSingle(self):
         return []
 
-    def estimate(self, estimateChild):
+    def estimateAux(self, estimateChild):
         distDict = dict()
-        logLikeTot = 0.0
-        occTot = 0.0
         for label in self.accDict:
-            distDict[label], logLike, occ = estimateChild(self.accDict[label])
-            logLikeTot += logLike
-            occTot += occ
-        return DiscreteDist(self.keys, distDict, tag = self.tag), logLikeTot, occTot
+            distDict[label] = estimateChild(self.accDict[label])
+        return DiscreteDist(self.keys, distDict, tag = self.tag), (0.0, Rat.Exact)
 
 class AutoGrowingDiscreteAcc(Acc):
     """Discrete acc that creates sub-accs as necessary when a new phonetic context is seen.
@@ -870,6 +891,8 @@ class AutoGrowingDiscreteAcc(Acc):
         self.createAcc = createAcc
         self.tag = tag
 
+        self.occ = 0.0
+
     def children(self):
         # (FIXME : the order of the result here depends on hash map details, so
         #   could get different secHashes for resulting pickled files. Probably
@@ -878,12 +901,13 @@ class AutoGrowingDiscreteAcc(Acc):
 
     def add(self, input, output, occ = 1.0):
         label, acInput = input
+        self.occ += occ
         if not label in self.accDict:
             self.accDict[label] = self.createAcc()
         self.accDict[label].add(acInput, output, occ)
 
     def addAccSingle(self, acc):
-        pass
+        self.occ += acc.occ
 
     def addAccChildPairs(self, acc):
         ret = []
@@ -903,15 +927,14 @@ class DecisionTreeAccNode(DecisionTreeAcc):
         self.accNo = accNo
         self.tag = tag
 
+        self.occ = 0.0
+
     def children(self):
         return [self.accYes, self.accNo]
 
-    @property
-    def occ(self):
-        return self.accYes.occ + self.accNo.occ
-
     def add(self, input, output, occ = 1.0):
         label, acInput = input
+        self.occ += occ
         labelValuer, question = self.fullQuestion
         if question(labelValuer(label)):
             self.accYes.add(input, output, occ)
@@ -920,6 +943,7 @@ class DecisionTreeAccNode(DecisionTreeAcc):
 
     def addAccSingle(self, acc):
         assert self.fullQuestion == acc.fullQuestion
+        self.occ += acc.occ
 
     def logLikeSingle(self):
         return 0.0
@@ -927,31 +951,28 @@ class DecisionTreeAccNode(DecisionTreeAcc):
     def derivParamsSingle(self):
         return []
 
-    def estimate(self, estimateChild):
-        distYes, logLikeYes, occYes = estimateChild(self.accYes)
-        distNo, logLikeNo, occNo = estimateChild(self.accNo)
-        logLike = logLikeYes + logLikeNo
-        occ = occYes + occNo
-        return DecisionTreeNode(self.fullQuestion, distYes, distNo, tag = self.tag), logLike, occ
+    def estimateAux(self, estimateChild):
+        distYes = estimateChild(self.accYes)
+        distNo = estimateChild(self.accNo)
+        return DecisionTreeNode(self.fullQuestion, distYes, distNo, tag = self.tag), (0.0, Rat.Exact)
 
 class DecisionTreeAccLeaf(DecisionTreeAcc):
     def __init__(self, acc, tag = None):
         self.acc = acc
         self.tag = tag
 
+        self.occ = 0.0
+
     def children(self):
         return [self.acc]
 
-    @property
-    def occ(self):
-        return self.acc.occ
-
     def add(self, input, output, occ = 1.0):
         label, acInput = input
+        self.occ += occ
         self.acc.add(acInput, output, occ)
 
     def addAccSingle(self, acc):
-        pass
+        self.occ += acc.occ
 
     def logLikeSingle(self):
         return 0.0
@@ -959,9 +980,9 @@ class DecisionTreeAccLeaf(DecisionTreeAcc):
     def derivParamsSingle(self):
         return []
 
-    def estimate(self, estimateChild):
-        dist, logLike, occ = estimateChild(self.acc)
-        return DecisionTreeLeaf(dist, tag = self.tag), logLike, occ
+    def estimateAux(self, estimateChild):
+        dist = estimateChild(self.acc)
+        return DecisionTreeLeaf(dist, tag = self.tag), (0.0, Rat.Exact)
 
 class MappedInputAcc(Acc):
     """Acc where input is mapped using a fixed transform."""
@@ -970,18 +991,21 @@ class MappedInputAcc(Acc):
         self.acc = acc
         self.tag = tag
 
+        self.occ = 0.0
+
     def children(self):
         return [self.acc]
 
-    @property
-    def occ(self):
-        return self.acc.occ
-
     def add(self, input, output, occ = 1.0):
+        self.occ += occ
         self.acc.add(self.inputTransform(input), output, occ)
 
     def addAccSingle(self, acc):
-        pass
+        self.occ += acc.occ
+
+    # FIXME : remove below once seqForInput added to AutoregressiveSequenceDist
+    def count(self):
+        return self.acc.count()
 
     def logLikeSingle(self):
         return 0.0
@@ -989,9 +1013,9 @@ class MappedInputAcc(Acc):
     def derivParamsSingle(self):
         return []
 
-    def estimate(self, estimateChild):
-        dist, logLike, occ = estimateChild(self.acc)
-        return MappedInputDist(self.inputTransform, dist, tag = self.tag), logLike, occ
+    def estimateAux(self, estimateChild):
+        dist = estimateChild(self.acc)
+        return MappedInputDist(self.inputTransform, dist, tag = self.tag), (0.0, Rat.Exact)
 
 class MappedOutputAcc(Acc):
     """Acc where output is mapped using a fixed transform."""
@@ -1000,20 +1024,19 @@ class MappedOutputAcc(Acc):
         self.acc = acc
         self.tag = tag
 
+        self.occ = 0.0
         self.logJac = 0.0
 
     def children(self):
         return [self.acc]
 
-    @property
-    def occ(self):
-        return self.acc.occ
-
     def add(self, input, output, occ = 1.0):
+        self.occ += occ
         self.acc.add(input, self.outputTransform(input, output), occ)
         self.logJac += self.outputTransform.logJac(input, output) * occ
 
     def addAccSingle(self, acc):
+        self.occ += acc.occ
         self.logJac += acc.logJac
 
     def logLikeSingle(self):
@@ -1022,10 +1045,9 @@ class MappedOutputAcc(Acc):
     def derivParamsSingle(self):
         return []
 
-    def estimate(self, estimateChild):
-        dist, logLike, occ = estimateChild(self.acc)
-        logLike += self.logJac
-        return MappedOutputDist(self.outputTransform, dist, tag = self.tag), logLike, occ
+    def estimateAux(self, estimateChild):
+        dist = estimateChild(self.acc)
+        return MappedOutputDist(self.outputTransform, dist, tag = self.tag), (self.logJac, Rat.Exact)
 
 class TransformedInputLearnDistAccEM(AccEM):
     """Acc for transformed input, where we learn the sub-dist parameters using EM."""
@@ -1034,25 +1056,24 @@ class TransformedInputLearnDistAccEM(AccEM):
         self.acc = acc
         self.tag = tag
 
+        self.occ = 0.0
+
     def children(self):
         return [self.acc]
 
-    @property
-    def occ(self):
-        return self.acc.occ
-
     def add(self, input, output, occ = 1.0):
+        self.occ += occ
         self.acc.add(self.inputTransform(input), output, occ)
 
     def addAccSingle(self, acc):
-        pass
+        self.occ += acc.occ
 
     def logLikeSingle(self):
         return 0.0
 
-    def estimate(self, estimateChild):
-        dist, logLike, occ = estimateChild(self.acc)
-        return TransformedInputDist(self.inputTransform, dist, tag = self.tag), logLike, occ
+    def estimateAux(self, estimateChild):
+        dist = estimateChild(self.acc)
+        return TransformedInputDist(self.inputTransform, dist, tag = self.tag), (0.0, Rat.Exact)
 
 class TransformedInputLearnTransformAccEM(AccEM):
     """Acc for transformed input, where we learn the transform parameters using EM."""
@@ -1061,25 +1082,24 @@ class TransformedInputLearnTransformAccEM(AccEM):
         self.dist = dist
         self.tag = tag
 
+        self.occ = 0.0
+
     def children(self):
         return [self.inputTransformAcc]
 
-    @property
-    def occ(self):
-        return self.inputTransformAcc.occ
-
     def add(self, input, output, occ = 1.0):
+        self.occ += occ
         self.inputTransformAcc.add((self.dist, input), output, occ)
 
     def addAccSingle(self, acc):
-        pass
+        self.occ += acc.occ
 
     def logLikeSingle(self):
         return 0.0
 
-    def estimate(self, estimateChild):
-        inputTransform, logLike, occ = estimateChild(self.inputTransformAcc)
-        return TransformedInputDist(inputTransform, self.dist, tag = self.tag), logLike, occ
+    def estimateAux(self, estimateChild):
+        inputTransform = estimateChild(self.inputTransformAcc)
+        return TransformedInputDist(inputTransform, self.dist, tag = self.tag), (0.0, Rat.Exact)
 
 class TransformedInputAccG(AccG):
     """Acc for transformed input, where we compute the gradient with respect to both the transform and sub-dist parameters."""
@@ -1090,19 +1110,18 @@ class TransformedInputAccG(AccG):
         self.dist = dist
         self.tag = tag
 
+        self.occ = 0.0
+
     def children(self):
         return [self.inputTransformAcc, self.acc]
 
-    @property
-    def occ(self):
-        return self.acc.occ
-
     def add(self, input, output, occ = 1.0):
+        self.occ += occ
         self.inputTransformAcc.add((self.dist, input), output, occ)
         self.acc.add(self.inputTransform(input), output, occ)
 
     def addAccSingle(self, acc):
-        pass
+        self.occ += acc.occ
 
     def logLikeSingle(self):
         return 0.0
@@ -1117,29 +1136,27 @@ class TransformedOutputLearnDistAccEM(AccEM):
         self.acc = acc
         self.tag = tag
 
+        self.occ = 0.0
         self.logJac = 0.0
 
     def children(self):
         return [self.acc]
 
-    @property
-    def occ(self):
-        return self.acc.occ
-
     def add(self, input, output, occ = 1.0):
+        self.occ += occ
         self.acc.add(input, self.outputTransform(input, output), occ)
         self.logJac += self.outputTransform.logJac(input, output) * occ
 
     def addAccSingle(self, acc):
+        self.occ += acc.occ
         self.logJac += acc.logJac
 
     def logLikeSingle(self):
         return self.logJac
 
-    def estimate(self, estimateChild):
-        dist, logLike, occ = estimateChild(self.acc)
-        logLike += self.logJac
-        return TransformedOutputDist(self.outputTransform, dist, tag = self.tag), logLike, occ
+    def estimateAux(self, estimateChild):
+        dist = estimateChild(self.acc)
+        return TransformedOutputDist(self.outputTransform, dist, tag = self.tag), (self.logJac, Rat.Exact)
 
 class TransformedOutputLearnTransformAccEM(AccEM):
     """Acc for transformed output, where we learn the transform parameters using EM."""
@@ -1148,25 +1165,24 @@ class TransformedOutputLearnTransformAccEM(AccEM):
         self.dist = dist
         self.tag = tag
 
+        self.occ = 0.0
+
     def children(self):
         return [self.outputTransformAcc]
 
-    @property
-    def occ(self):
-        return self.inputTransformAcc.occ
-
     def add(self, input, output, occ = 1.0):
+        self.occ += occ
         self.outputTransformAcc.add((self.dist, input), output, occ)
 
     def addAccSingle(self, acc):
-        pass
+        self.occ += acc.occ
 
     def logLikeSingle(self):
         return 0.0
 
-    def estimate(self, estimateChild):
-        outputTransform, logLike, occ = estimateChild(self.outputTransformAcc)
-        return TransformedOutputDist(outputTransform, self.dist, tag = self.tag), logLike, occ
+    def estimateAux(self, estimateChild):
+        outputTransform = estimateChild(self.outputTransformAcc)
+        return TransformedOutputDist(outputTransform, self.dist, tag = self.tag), (0.0, Rat.Exact)
 
 class TransformedOutputAccG(AccG):
     """Acc for transformed output, where we compute the gradient with respect to both the transform and sub-dist parameters."""
@@ -1177,22 +1193,21 @@ class TransformedOutputAccG(AccG):
         self.dist = dist
         self.tag = tag
 
+        self.occ = 0.0
         # (FIXME : should logJac tracking go into the outputTransformAcc instead?)
         self.logJac = 0.0
 
     def children(self):
         return [self.outputTransformAcc, self.acc]
 
-    @property
-    def occ(self):
-        return self.acc.occ
-
     def add(self, input, output, occ = 1.0):
+        self.occ += occ
         self.outputTransformAcc.add((self.dist, input), output, occ)
         self.acc.add(input, self.outputTransform(input, output), occ)
         self.logJac += self.outputTransform.logJac(input, output) * occ
 
     def addAccSingle(self, acc):
+        self.occ += acc.occ
         self.logJac += acc.logJac
 
     def logLikeSingle(self):
@@ -1206,18 +1221,17 @@ class PassThruAcc(Acc):
         self.acc = acc
         self.tag = tag
 
+        self.occ = 0.0
+
     def children(self):
         return [self.acc]
 
-    @property
-    def occ(self):
-        return self.acc.occ
-
     def add(self, input, output, occ = 1.0):
+        self.occ += occ
         self.acc.add(input, output, occ)
 
     def addAccSingle(self, acc):
-        pass
+        self.occ += acc.occ
 
     def logLikeSingle(self):
         return 0.0
@@ -1225,9 +1239,9 @@ class PassThruAcc(Acc):
     def derivParamsSingle(self):
         return []
 
-    def estimate(self, estimateChild):
-        dist, logLike, occ = estimateChild(self.acc)
-        return PassThruDist(dist, tag = self.tag), logLike, occ
+    def estimateAux(self, estimateChild):
+        dist = estimateChild(self.acc)
+        return PassThruDist(dist, tag = self.tag), (0.0, Rat.Exact)
 
 class DebugAcc(Acc):
     def __init__(self, maxOcc, acc, tag = None):
@@ -1241,7 +1255,7 @@ class DebugAcc(Acc):
 
     @property
     def occ(self):
-        return self.acc.occ
+        return self.memo.occ
 
     def add(self, input, output, occ = 1.0):
         self.memo.add(input, output, occ)
@@ -1256,9 +1270,9 @@ class DebugAcc(Acc):
     def derivParamsSingle(self):
         return []
 
-    def estimate(self, estimateChild):
-        dist, logLike, occ = estimateChild(self.acc)
-        return DebugDist(self.memo.maxOcc, dist, tag = self.tag), logLike, occ
+    def estimateAux(self, estimateChild):
+        dist = estimateChild(self.acc)
+        return DebugDist(self.memo.maxOcc, dist, tag = self.tag), (0.0, Rat.Exact)
 
 class AutoregressiveSequenceAcc(Acc):
     def __init__(self, depth, acc, tag = None):
@@ -1266,21 +1280,26 @@ class AutoregressiveSequenceAcc(Acc):
         self.acc = acc
         self.tag = tag
 
+        self.occ = 0.0
+        self.frames = 0.0
+
     def children(self):
         return [self.acc]
 
-    @property
-    def occ(self):
-        return self.acc.occ
-
     def add(self, inSeq, outSeq, occ = 1.0):
         assert len(inSeq) == len(outSeq)
+        self.occ += occ
         for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq)):
             if len(outContext) == self.depth:
+                self.frames += occ
                 self.acc.add((inFrame, outContext), outFrame, occ)
 
     def addAccSingle(self, acc):
-        pass
+        self.occ += acc.occ
+        self.frames += acc.frames
+
+    def count(self):
+        return self.frames
 
     def logLikeSingle(self):
         return 0.0
@@ -1288,9 +1307,9 @@ class AutoregressiveSequenceAcc(Acc):
     def derivParamsSingle(self):
         return []
 
-    def estimate(self, estimateChild):
-        dist, logLike, occ = estimateChild(self.acc)
-        return AutoregressiveSequenceDist(self.depth, dist, tag = self.tag), logLike, occ
+    def estimateAux(self, estimateChild):
+        dist = estimateChild(self.acc)
+        return AutoregressiveSequenceDist(self.depth, dist, tag = self.tag), (0.0, Rat.Exact)
 
 class AutoregressiveNetAcc(Acc):
     def __init__(self, distPrev, durAcc, acAcc, verbosity, tag = None):
@@ -1301,19 +1320,17 @@ class AutoregressiveNetAcc(Acc):
         self.tag = tag
 
         self.occ = 0.0
+        self.frames = 0.0
         self.entropy = 0.0
 
     def children(self):
         return [self.durAcc, self.acAcc]
 
-    @property
-    def occFrames(self):
-        return self.acAcc.occ
-
     def add(self, input, outSeq, occ = 1.0):
         if self.verbosity >= 2:
             print 'fb: seq (%s frames)' % len(outSeq)
         self.occ += occ
+        self.frames += len(outSeq) * occ
         timedNet, labelToWeight = self.distPrev.getTimedNet(input, outSeq)
         totalLogProb, edgeGen = wnet.forwardBackwardAlt(timedNet, labelToWeight = labelToWeight, divisionRing = self.distPrev.ring, getAgenda = self.distPrev.getAgenda)
         entropy = totalLogProb * occ
@@ -1347,7 +1364,11 @@ class AutoregressiveNetAcc(Acc):
     # N.B. assumes distPrev is the same for self and acc (not checked).
     def addAccSingle(self, acc):
         self.occ += acc.occ
+        self.frames += acc.frames
         self.entropy += acc.entropy
+
+    def count(self):
+        return self.frames
 
     def logLikeSingle(self):
         return self.entropy
@@ -1355,19 +1376,14 @@ class AutoregressiveNetAcc(Acc):
     def derivParamsSingle(self):
         return []
 
-    def estimate(self, estimateChild):
-        durDist, logLikeDur, occDur = estimateChild(self.durAcc)
-        acDist, logLikeAc, occAc = estimateChild(self.acAcc)
-        logLike = logLikeDur + logLikeAc + self.entropy
+    def estimateAux(self, estimateChild):
+        durDist = estimateChild(self.durAcc)
+        acDist = estimateChild(self.acAcc)
         if self.verbosity >= 1:
-            print 'fb:    overall log like %s == %s (dur) + %s (ac) + %s (net path entropy) (%s frames, %s seqs)' % (
-                (0.0, 0.0, 0.0, 0.0, 0, 0) if self.occFrames == 0 else (
-                    logLike / self.occFrames,
-                    logLikeDur / self.occFrames, logLikeAc / self.occFrames, self.entropy / self.occFrames,
-                    self.occFrames, self.occ
-                )
+            print 'fb:    overall net path entropy = %s (%s frames)' % (
+                (0.0, 0) if self.frames == 0 else (self.entropy / self.frames, self.frames)
             )
-        return AutoregressiveNetDist(self.distPrev.depth, self.distPrev.netFor, durDist, acDist, self.distPrev.pruneSpec, tag = self.tag), logLike, self.occ
+        return AutoregressiveNetDist(self.distPrev.depth, self.distPrev.netFor, durDist, acDist, self.distPrev.pruneSpec, tag = self.tag), (self.entropy, Rat.LowerBound)
 
 
 class Dist(object):

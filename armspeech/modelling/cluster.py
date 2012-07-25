@@ -14,32 +14,26 @@ import logging
 import math
 from collections import defaultdict
 
-# FIXME : decision tree clustering needs to work with auxValues not logLikes,
-#   and currently there is an inconsistency with which of these gets returned
-#   by estimate methods. Need to fix this for decision tree clustering to work
-#   consistently for various different dists (and not fail silently where it's
-#   incorrectly using logLikes).
-
-def decisionTreeCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minOcc, maxOcc = None, mdlFactor = 1.0, verbosity = 2):
+def decisionTreeCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minCount, maxCount = None, mdlFactor = 1.0, verbosity = 2):
     root = createAcc()
     for label in labelList:
         d.addAcc(root, accForLabel(label))
-    distRoot, logLikeRoot, occRoot = d.defaultEstimate(root)
+    countRoot = root.count()
+    distRoot, (auxRoot, auxRootRat) = d.defaultEstimateTotAux(root)
     if thresh is None:
         numParamsPerLeaf = len(d.defaultParamSpec.params(distRoot))
-        totalOcc = root.occ
-        thresh = 0.5 * mdlFactor * numParamsPerLeaf * math.log(totalOcc + 1.0)
+        thresh = 0.5 * mdlFactor * numParamsPerLeaf * math.log(countRoot + 1.0)
         if verbosity >= 1:
-            print 'cluster: setting thresh using MDL: mdlFactor =', mdlFactor, 'and numParamsPerLeaf =', numParamsPerLeaf, 'and occ =', totalOcc
+            print 'cluster: setting thresh using MDL: mdlFactor =', mdlFactor, 'and numParamsPerLeaf =', numParamsPerLeaf, 'and count =', countRoot
     if verbosity >= 1:
-        print 'cluster: decision tree clustering with thresh =', thresh, 'and minOcc =', minOcc, 'and maxOcc =', maxOcc
-    dist, logLike, occ = decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minOcc, maxOcc, [], distRoot, logLikeRoot, occRoot, verbosity)
-    assert_allclose(occ, occRoot)
+        print 'cluster: decision tree clustering with thresh =', thresh, 'and minCount =', minCount, 'and maxCount =', maxCount
+    dist, aux = decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minCount, maxCount, [], distRoot, auxRoot, countRoot, verbosity)
     if verbosity >= 1:
-        print 'cluster: log likelihood after =', logLike / occ, '('+str(occ)+' frames)', '('+str(dist.countLeaves())+' leaves)'
-    return dist, logLike, occ
+        print 'cluster: %s leaves' % dist.countLeaves()
+        print 'cluster: aux root = %s (%s) -> aux tree = %s (%s count)' % (auxRoot / countRoot, d.ratToString(auxRootRat), aux / countRoot, countRoot)
+    return dist
 
-def decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minOcc, maxOcc, isYesList, distLeaf, logLikeLeaf, occNode, verbosity):
+def decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minCount, maxCount, isYesList, distLeaf, auxLeaf, countNode, verbosity):
     if verbosity >= 2:
         indent = '    '+''.join([ ('|  ' if isYes else '   ') for isYes in isYesList[:-1] ])
         if not isYesList:
@@ -51,16 +45,16 @@ def decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups, th
         else:
             extra1 = '\->'
             extra2 = '   '
-        print 'cluster:'+indent+extra1+'node ( occ =', occNode, ', remaining labels =', len(labelList), ')'
+        print 'cluster:'+indent+extra1+'node ( count =', countNode, ', remaining labels =', len(labelList), ')'
         indent += extra2
 
     getBestSplit = timed(decisionTreeGetBestSplit, msg = 'cluster:'+indent+'choose split took') if verbosity >= 3 else decisionTreeGetBestSplit
-    bestFullQuestion, bestLogLike, bestEstimatedYes, bestEstimatedNo = getBestSplit(labelList, accForLabel, createAcc, questionGroups, minOcc, logLikeLeaf, occNode)
+    bestFullQuestion, bestAux, bestEstimatedYes, bestEstimatedNo = getBestSplit(labelList, accForLabel, createAcc, questionGroups, minCount, auxLeaf)
 
-    if bestFullQuestion is not None and (bestLogLike - logLikeLeaf > thresh or maxOcc is not None and occNode > maxOcc):
+    if bestFullQuestion is not None and (bestAux - auxLeaf > thresh or maxCount is not None and countNode > maxCount):
         bestLabelValuer, bestQuestion = bestFullQuestion
         if verbosity >= 2:
-            print 'cluster:'+indent+'question (', bestLabelValuer.shortRepr()+' '+bestQuestion.shortRepr(), ')', '( delta =', bestLogLike - logLikeLeaf, ')'
+            print 'cluster:'+indent+'question (', bestLabelValuer.shortRepr()+' '+bestQuestion.shortRepr(), ')', '( delta =', bestAux - auxLeaf, ')'
         labelListYes = []
         labelListNo = []
         for label in labelList:
@@ -68,24 +62,22 @@ def decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups, th
                 labelListYes.append(label)
             else:
                 labelListNo.append(label)
-        distYesLeaf, logLikeYesLeaf, occYes = bestEstimatedYes
-        distNoLeaf, logLikeNoLeaf, occNo = bestEstimatedNo
-        assert_allclose(occYes + occNo, occNode)
-        distYes, logLikeYes, occYes = decisionTreeSubCluster(labelListYes, accForLabel, createAcc, questionGroups, thresh, minOcc, maxOcc, isYesList + [True], distYesLeaf, logLikeYesLeaf, occYes, verbosity)
-        distNo, logLikeNo, occNo = decisionTreeSubCluster(labelListNo, accForLabel, createAcc, questionGroups, thresh, minOcc, maxOcc, isYesList + [False], distNoLeaf, logLikeNoLeaf, occNo, verbosity)
-        logLike = logLikeYes + logLikeNo
-        occ = occYes + occNo
-        assert_allclose(occ, occNode)
-        return d.DecisionTreeNode(bestFullQuestion, distYes, distNo), logLike, occ
+        distYesLeaf, auxYesLeaf, countYes = bestEstimatedYes
+        distNoLeaf, auxNoLeaf, countNo = bestEstimatedNo
+        assert_allclose(countYes + countNo, countNode)
+        distYes, auxYes = decisionTreeSubCluster(labelListYes, accForLabel, createAcc, questionGroups, thresh, minCount, maxCount, isYesList + [True], distYesLeaf, auxYesLeaf, countYes, verbosity)
+        distNo, auxNo = decisionTreeSubCluster(labelListNo, accForLabel, createAcc, questionGroups, thresh, minCount, maxCount, isYesList + [False], distNoLeaf, auxNoLeaf, countNo, verbosity)
+        aux = auxYes + auxNo
+        return d.DecisionTreeNode(bestFullQuestion, distYes, distNo), aux
     else:
         if maxCount is not None and countNode > maxCount:
             assert bestFullQuestion is None
             logging.warning('decision tree leaf has count = %s > maxCount = %s, but no further splitting possible' % (countNode, maxCount))
         if verbosity >= 2:
             print 'cluster:'+indent+'leaf'
-        return d.DecisionTreeLeaf(distLeaf), logLikeLeaf, occNode
+        return d.DecisionTreeLeaf(distLeaf), auxLeaf
 
-def decisionTreeGetBestSplit(labelList, accForLabel, createAcc, questionGroups, minOcc, logLikeLeaf, occNode):
+def decisionTreeGetBestSplit(labelList, accForLabel, createAcc, questionGroups, minCount, auxLeaf):
     # (N.B. Could probably get a further speed-up (over and above that
     #   obtained by using question groups) for EqualityQuestion and
     #   ThreshQuestion by doing clever stuff with subtracting accs (i.e.
@@ -94,7 +86,7 @@ def decisionTreeGetBestSplit(labelList, accForLabel, createAcc, questionGroups, 
     #   achieved vs implementation complexity / fragility.
     # )
     bestFullQuestion = None
-    bestLogLike = logLikeLeaf
+    bestAux = auxLeaf
     bestEstimatedYes = None
     bestEstimatedNo = None
     labelValueToAccs = [ defaultdict(createAcc) for questionGroup in questionGroups ]
@@ -111,19 +103,17 @@ def decisionTreeGetBestSplit(labelList, accForLabel, createAcc, questionGroups, 
                     d.addAcc(yes, acc)
                 else:
                     d.addAcc(no, acc)
-            assert_allclose(yes.occ + no.occ, occNode)
-            if yes.occ > minOcc and no.occ > minOcc:
+            if yes.count() > minCount and no.count() > minCount:
                 try:
-                    distYesLeaf, logLikeYesLeaf, occYes = d.defaultEstimate(yes)
-                    distNoLeaf, logLikeNoLeaf, occNo = d.defaultEstimate(no)
+                    distYesLeaf, (auxYesLeaf, auxYesLeafRat) = d.defaultEstimateTotAux(yes)
+                    distNoLeaf, (auxNoLeaf, auxNoLeafRat) = d.defaultEstimateTotAux(no)
                 except d.EstimationError:
                     pass
                 else:
-                    assert_allclose(occYes + occNo, occNode)
-                    logLike = logLikeYesLeaf + logLikeNoLeaf
-                    if bestFullQuestion is None or logLike > bestLogLike:
+                    aux = auxYesLeaf + auxNoLeaf
+                    if bestFullQuestion is None or aux > bestAux:
                         bestFullQuestion = labelValuer, question
-                        bestLogLike = logLike
-                        bestEstimatedYes = distYesLeaf, logLikeYesLeaf, occYes
-                        bestEstimatedNo = distNoLeaf, logLikeNoLeaf, occNo
-    return bestFullQuestion, bestLogLike, bestEstimatedYes, bestEstimatedNo
+                        bestAux = aux
+                        bestEstimatedYes = distYesLeaf, auxYesLeaf, yes.count()
+                        bestEstimatedNo = distNoLeaf, auxNoLeaf, no.count()
+    return bestFullQuestion, bestAux, bestEstimatedYes, bestEstimatedNo

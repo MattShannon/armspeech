@@ -16,6 +16,16 @@ from __future__ import division
 
 # (N.B. lookup code (for sharing) is not concurrent-safe, and doesn't detect loops)
 
+def chainPartialFns(partialFns):
+    def chainedPartialFn(*args):
+        ret = None
+        for partialFn in partialFns:
+            ret = partialFn(*args)
+            if ret is not None:
+                break
+        return ret
+    return chainedPartialFn
+
 def nodeList(
     parentNode,
     idValue = lambda node: id(node),
