@@ -308,6 +308,13 @@ class EstimationError(Exception):
     def __str__(self):
         return str(self.msg)
 
+class InvalidParamsError(Exception):
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __str__(self):
+        return str(self.msg)
+
 class SynthSeqTooLongError(Exception):
     def __init__(self, msg):
         self.msg = msg
@@ -1554,6 +1561,8 @@ class LinearGaussian(TermDist):
         n = len(self.coeff)
         coeff = params[:n]
         variance = math.exp(-params[n])
+        if variance < self.varianceFloor:
+            raise InvalidParamsError('variance = %s < varianceFloor = %s during LinearGaussian parsing' % (variance, self.varianceFloor))
         return LinearGaussian(coeff, variance, self.varianceFloor, tag = self.tag), params[n + 1:]
 
     def flooredSingle(self):
@@ -1676,11 +1685,13 @@ class ConstantClassifier(TermDist):
         n = len(self.probs) - 1
         p = params[:n]
         if not np.all(np.isfinite(p)):
-            raise RuntimeError('invalid parameters for ConstantClassifier: '+repr(p))
+            raise InvalidParamsError('params %s not all finite during ConstantClassifier parsing' % p)
         sumZeroLogProbs = np.append(p, -sum(p))
         assert_allclose(sum(sumZeroLogProbs), 0.0)
         probs = np.exp(sumZeroLogProbs)
         probs = probs / sum(probs)
+        if not all(probs >= self.probFloors):
+            raise InvalidParamsError('probs = %s not all >= probFloors = %s during ConstantClassifier parsing' % (probs, self.probFloors))
         return ConstantClassifier(probs, self.probFloors, tag = self.tag), params[n:]
 
     def flooredSingle(self):
@@ -1745,6 +1756,8 @@ class BinaryLogisticClassifier(TermDist):
     def parseSingle(self, params):
         n = len(self.coeff)
         coeff = params[:n]
+        if not all(np.abs(coeff) <= self.coeffFloor):
+            raise InvalidParamsError('abs(coeff = %s) not all <= coeffFloor = %s during BinaryLogisticClassifier parsing' % (coeff, self.coeffFloor))
         return BinaryLogisticClassifier(coeff, self.coeffFloor, tag = self.tag), params[n:]
 
     def flooredSingle(self):
