@@ -545,7 +545,7 @@ class LinearGaussianAcc(TermAcc):
             coeffFloor = np.array([float('inf')])
             blc = BinaryLogisticClassifier(coeff, coeffFloor)
             dist = self.estimateSingleAux()[0]
-            mean = dist.coeff[0]
+            mean, = dist.coeff
             variance = dist.variance
             dist0 = LinearGaussian(np.array([mean - 0.2 * math.sqrt(variance)]), variance, self.varianceFloor)
             dist1 = LinearGaussian(np.array([mean + 0.2 * math.sqrt(variance)]), variance, self.varianceFloor)
