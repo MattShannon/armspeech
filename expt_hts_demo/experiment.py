@@ -842,7 +842,6 @@ def main(rawArgs):
         timed(drawVarious)(dist, id = 'xf.res_init', debugResiduals = True)
         dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = residualParamSpec, length = -50, verbosity = 2)
         dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = subtractMeanParamSpec, length = -50, verbosity = 2)
-        evaluateTrainLogLike(dist, corpus)
         writeDistFile(os.path.join(distOutDir, 'xf.res.dist'), dist)
         timed(drawVarious)(dist, id = 'xf.res', debugResiduals = True)
         evaluateLogProb(dist, corpus)
@@ -853,7 +852,6 @@ def main(rawArgs):
         print
         print 'ESTIMATING ALL PARAMETERS'
         dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = d.defaultParamSpec, length = -200, verbosity = 2)
-        evaluateTrainLogLike(dist, corpus)
         writeDistFile(os.path.join(distOutDir, 'xf.res.xf.dist'), dist)
         timed(drawVarious)(dist, id = 'xf.res.xf', debugResiduals = True)
         evaluateLogProb(dist, corpus)
