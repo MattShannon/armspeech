@@ -2495,7 +2495,7 @@ class AutoregressiveSequenceDist(Dist):
         return list(self.synthIterator(inSeq, method, actualOutSeq))
 
     def synthIterator(self, inSeq, method = SynthMethod.Sample, actualOutSeq = None):
-        outContext = deque()
+        outContext = deque(self.fillFrames)
         assert len(inSeq) == len(actualOutSeq)
         for inFrame, actualOutFrame in izip(inSeq, actualOutSeq):
             if len(outContext) != self.depth:
