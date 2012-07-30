@@ -1298,7 +1298,7 @@ class AutoregressiveSequenceAcc(Acc):
     def children(self):
         return [self.acc]
 
-    def add(self, inSeq, outSeq, occ = 1.0):
+    def add(self, (uttId, inSeq), outSeq, occ = 1.0):
         assert len(inSeq) == len(outSeq)
         self.occ += occ
         for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq, fillFrames = self.fillFrames)):
@@ -1338,9 +1338,9 @@ class AutoregressiveNetAcc(Acc):
     def children(self):
         return [self.durAcc, self.acAcc]
 
-    def add(self, input, outSeq, occ = 1.0):
+    def add(self, (uttId, input), outSeq, occ = 1.0):
         if self.verbosity >= 2:
-            print 'fb: seq (%s frames)' % len(outSeq)
+            print 'fb: uttId %s' % uttId
         self.occ += occ
         self.frames += len(outSeq) * occ
         timedNet, labelToWeight = self.distPrev.getTimedNet(input, outSeq)
@@ -2456,11 +2456,11 @@ class AutoregressiveSequenceDist(Dist):
     def mapChildren(self, mapChild):
         return AutoregressiveSequenceDist(self.depth, self.fillFrames, mapChild(self.dist), tag = self.tag)
 
-    def logProb(self, inSeq, outSeq):
-        lp, frames = self.logProb_frames(inSeq, outSeq)
+    def logProb(self, (uttId, inSeq), outSeq):
+        lp, frames = self.logProb_frames((uttId, inSeq), outSeq)
         return lp
 
-    def logProb_frames(self, inSeq, outSeq):
+    def logProb_frames(self, (uttId, inSeq), outSeq):
         lp = 0.0
         frames = 0
         assert len(inSeq) == len(outSeq)
@@ -2470,15 +2470,15 @@ class AutoregressiveSequenceDist(Dist):
                 frames += 1
         return lp, frames
 
-    def logProbDerivInput(self, inSeq, outSeq):
+    def logProbDerivInput(self, (uttId, inSeq), outSeq):
         # FIXME : complete
         notyetimplemented
 
-    def logProbDerivOutput(self, inSeq, outSeq):
+    def logProbDerivOutput(self, (uttId, inSeq), outSeq):
         # FIXME : complete
         notyetimplemented
 
-    def arError_frames(self, inSeq, outSeq, distError):
+    def arError_frames(self, (uttId, inSeq), outSeq, distError):
         error = 0.0
         frames = 0
         assert len(inSeq) == len(outSeq)
@@ -2491,10 +2491,10 @@ class AutoregressiveSequenceDist(Dist):
     def createAcc(self, createAccChild):
         return AutoregressiveSequenceAcc(self.depth, self.fillFrames, createAccChild(self.dist), tag = self.tag)
 
-    def synth(self, inSeq, method = SynthMethod.Sample, actualOutSeq = None):
-        return list(self.synthIterator(inSeq, method, actualOutSeq))
+    def synth(self, (uttId, inSeq), method = SynthMethod.Sample, actualOutSeq = None):
+        return list(self.synthIterator((uttId, inSeq), method, actualOutSeq))
 
-    def synthIterator(self, inSeq, method = SynthMethod.Sample, actualOutSeq = None):
+    def synthIterator(self, (uttId, inSeq), method = SynthMethod.Sample, actualOutSeq = None):
         outContext = deque(self.fillFrames)
         assert len(inSeq) == len(actualOutSeq)
         for inFrame, actualOutFrame in izip(inSeq, actualOutSeq):
@@ -2654,26 +2654,26 @@ class AutoregressiveNetDist(Dist):
         agenda = wnet.PriorityQueueSumAgenda(self.ring, forwards, negMap = negMap, pruneThresh = pruneThresh, pruneTrigger = pruneTrigger)
         return agenda
 
-    def logProb(self, input, outSeq):
+    def logProb(self, (uttId, input), outSeq):
         timedNet, labelToWeight = self.getTimedNet(input, outSeq)
         totalLogProb = wnet.sum(timedNet, labelToWeight = labelToWeight, ring = self.ring, getAgenda = self.getAgenda)
         return totalLogProb
 
-    def logProb_frames(self, input, outSeq):
-        return self.logProb(input, outSeq), len(outSeq)
+    def logProb_frames(self, (uttId, input), outSeq):
+        return self.logProb((uttId, input), outSeq), len(outSeq)
 
-    def logProbDerivOutput(self, input, outSeq):
+    def logProbDerivOutput(self, (uttId, input), outSeq):
         # FIXME : complete
         notyetimplemented
 
-    def arError_frames(self, input, outSeq, distError):
+    def arError_frames(self, (uttId, input), outSeq, distError):
         # FIXME : complete (compute using expectation semiring?)
         notyetimplemented
 
     def createAcc(self, createAccChild, verbosity = 0):
         return AutoregressiveNetAcc(distPrev = self, durAcc = createAccChild(self.durDist), acAcc = createAccChild(self.acDist), verbosity = verbosity, tag = self.tag)
 
-    def synth(self, input, method = SynthMethod.Sample, actualOutSeq = None, maxLength = None):
+    def synth(self, (uttId, input), method = SynthMethod.Sample, actualOutSeq = None, maxLength = None):
         # (FIXME : align actualOutSeq and pass down to frames below?  (What exactly do I mean?))
         # (FIXME : can we do anything simple and reasonable with durations for meanish case?)
         forwards = True

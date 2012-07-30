@@ -42,6 +42,9 @@ def randBool():
 def randTag():
     return 'tag'+str(randint(0, 1000000))
 
+def randUttId():
+    return 'utt'+str(randint(0, 1000000))
+
 def simpleInputGen(dimIn, bias = False):
     while True:
         ret = randn(dimIn)
@@ -370,7 +373,7 @@ def gen_constant_AutoregressiveNetDist(depth = 2):
 
     def getInputGen():
         while True:
-            yield ''
+            yield randUttId(), ''
     return dist, getInputGen()
 
 def gen_inSeq_AutoregressiveNetDist(depth = 2):
@@ -397,7 +400,7 @@ def gen_inSeq_AutoregressiveNetDist(depth = 2):
     def getInputGen():
         while True:
             labelSeq = [ random.choice(labels) for i in range(randint(0, 4)) ]
-            yield labelSeq
+            yield randUttId(), labelSeq
     return dist, getInputGen()
 
 def restrictTypicalOutputLength(genDist, maxLength = 20, numPoints = 100):
@@ -940,7 +943,7 @@ class TestDist(unittest.TestCase):
 
     # (FIXME : check this is not unnecessarily slow for any reason)
     def test_AutoregressiveNetDist(self, eps = 1e-8, numDists = 5, numPoints = 100):
-        def checkAdditional(dist, input, outSeq, eps):
+        def checkAdditional(dist, (uttId, input), outSeq, eps):
             # check result of getTimedNet is topologically sorted
             timedNet, labelToWeight = dist.getTimedNet(input, outSeq, preComputeLabelToWeight = randBool())
             assert wnet.netIsTopSorted(timedNet, wnet.nodeSetCompute(timedNet, accessibleOnly = False), deltaTime = lambda label: 0)

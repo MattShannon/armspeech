@@ -72,7 +72,7 @@ class ArcticCorpus(cps.Corpus):
         assert labEndTime <= len(acousticSeq)
         acousticSeq = acousticSeq[:labEndTime]
         assert labEndTime == len(acousticSeq)
-        return alignment, acousticSeq
+        return (uttId, alignment), acousticSeq
 
     def synthComplete(self, dist, uttIds, method, synthOutDir, exptTag, afterSynth = None, verbosity = 1):
         if verbosity >= 1:

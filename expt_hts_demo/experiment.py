@@ -164,7 +164,7 @@ def main(rawArgs):
         bapFirstFrameAverage = np.zeros((bapStream.order,))
         numUtts = 0
         for uttId in corpus.trainUttIds:
-            alignment, acousticSeq = corpus.data(uttId)
+            (uttId, alignment), acousticSeq = corpus.data(uttId)
             mgcFrame, lf0Frame, bapFrame = acousticSeq[0]
             mgcFirstFrameAverage += mgcFrame
             lf0FirstFrameProportionUnvoiced += (1.0 if lf0Frame == (0, None) else 0.0)
@@ -280,7 +280,7 @@ def main(rawArgs):
     def getDrawMgc(ylims = None, includeGivenLabels = True, extraLabelSeqs = []):
         streamIndex = 0
         def drawMgc(synthOutput, uttId, exptTag):
-            alignment, trueOutput = corpus.data(uttId)
+            (uttId, alignment), trueOutput = corpus.data(uttId)
 
             alignmentToDraw = [ (start * corpus.framePeriod, end * corpus.framePeriod, label.phone) for start, end, label, subAlignment in alignment ]
             partitionedLabelSeqs = (draw.partitionSeq(alignmentToDraw, 2) if includeGivenLabels else []) + [ labelSeqSub for labelSeq in extraLabelSeqs for labelSeqSub in draw.partitionSeq(labelSeq, 2) ]
@@ -324,7 +324,7 @@ def main(rawArgs):
         # FIXME : only works if no cross-stream stuff happening. Make more robust somehow.
         shiftToPrevTransform = xf.ShiftOutputTransform(lambda x: -x[1][-1])
 
-        dist = d.MappedInputDist(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
+        dist = d.MappedInputDist(lambda (uttId, alignment): (uttId, list(alignmentToPhoneticSeq(alignment))),
             d.AutoregressiveSequenceDist(maxDepth, [ firstFrameAverage for i in range(maxDepth) ],
                 frameSummarizer.createDist(True, lambda streamIndex:
                     {
@@ -399,7 +399,7 @@ def main(rawArgs):
                     for time in range(startTime, endTime):
                         yield phone, subLabel
 
-        acc = d.MappedInputAcc(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
+        acc = d.MappedInputAcc(lambda (uttId, alignment): (uttId, list(alignmentToPhoneticSeq(alignment))),
             d.AutoregressiveSequenceAcc(maxDepth, [ firstFrameAverage for i in range(maxDepth) ],
                 frameSummarizer.createAcc(True, lambda streamIndex:
                     {
@@ -516,7 +516,7 @@ def main(rawArgs):
             assert len(extra) == extraLength
             return subLabel, (phone, (extra, acousticContext))
 
-        acc = d.MappedInputAcc(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
+        acc = d.MappedInputAcc(lambda (uttId, alignment): (uttId, list(alignmentToPhoneticSeq(alignment))),
             d.AutoregressiveSequenceAcc(maxDepth, [ firstFrameAverage for i in range(maxDepth) ],
                 frameSummarizer.createAcc(True, lambda streamIndex:
                     {
@@ -577,7 +577,7 @@ def main(rawArgs):
 
         questionGroups = questions_hts_demo.getFullContextQuestionGroups()
 
-        acc = d.MappedInputAcc(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
+        acc = d.MappedInputAcc(lambda (uttId, alignment): (uttId, list(alignmentToPhoneticSeq(alignment))),
             d.AutoregressiveSequenceAcc(maxDepth, [ firstFrameAverage for i in range(maxDepth) ],
                 frameSummarizer.createAcc(True, lambda streamIndex:
                     {
@@ -710,7 +710,7 @@ def main(rawArgs):
             inputWarp = xf.SumTransform1D([xf.IdentityTransform()] + tanhInputTransforms).withTag(('mgcInputWarp', outIndex))
             mgcInputTransform[outIndex] = xf.VectorizeTransform(inputWarp).withTag(('mgcInputTransform', outIndex))
 
-        dist = d.MappedInputDist(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
+        dist = d.MappedInputDist(lambda (uttId, alignment): (uttId, list(alignmentToPhoneticSeq(alignment))),
             d.AutoregressiveSequenceDist(maxDepth, [ firstFrameAverage for i in range(maxDepth) ],
                 frameSummarizer.createDist(True, lambda streamIndex:
                     {
