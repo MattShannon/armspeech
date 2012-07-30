@@ -2470,11 +2470,11 @@ class AutoregressiveSequenceDist(Dist):
                 frames += 1
         return lp, frames
 
-    def logProbDerivInput(self, input, output):
+    def logProbDerivInput(self, inSeq, outSeq):
         # FIXME : complete
         notyetimplemented
 
-    def logProbDerivOutput(self, input, output):
+    def logProbDerivOutput(self, inSeq, outSeq):
         # FIXME : complete
         notyetimplemented
 
@@ -2662,11 +2662,11 @@ class AutoregressiveNetDist(Dist):
     def logProb_frames(self, input, outSeq):
         return self.logProb(input, outSeq), len(outSeq)
 
-    def logProbDerivOutput(self, input, output):
+    def logProbDerivOutput(self, input, outSeq):
         # FIXME : complete
         notyetimplemented
 
-    def arError_frames(self, input, output, distError):
+    def arError_frames(self, input, outSeq, distError):
         # FIXME : complete (compute using expectation semiring?)
         notyetimplemented
 
