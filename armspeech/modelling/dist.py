@@ -2457,11 +2457,7 @@ class AutoregressiveSequenceDist(Dist):
         return AutoregressiveSequenceDist(self.depth, self.fillFrames, mapChild(self.dist), tag = self.tag)
 
     def logProb(self, inSeq, outSeq):
-        lp = 0.0
-        assert len(inSeq) == len(outSeq)
-        for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq, fillFrames = self.fillFrames)):
-            if len(outContext) == self.depth:
-                lp += self.dist.logProb((inFrame, outContext), outFrame)
+        lp, frames = self.logProb_frames(inSeq, outSeq)
         return lp
 
     def logProb_frames(self, inSeq, outSeq):
