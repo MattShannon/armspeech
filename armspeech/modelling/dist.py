@@ -1284,10 +1284,13 @@ class DebugAcc(Acc):
         return DebugDist(self.memo.maxOcc, dist, tag = self.tag), (0.0, Rat.Exact)
 
 class AutoregressiveSequenceAcc(Acc):
-    def __init__(self, depth, acc, tag = None):
+    def __init__(self, depth, fillFrames, acc, tag = None):
         self.depth = depth
+        self.fillFrames = fillFrames
         self.acc = acc
         self.tag = tag
+
+        assert len(self.fillFrames) <= self.depth
 
         self.occ = 0.0
         self.frames = 0.0
@@ -1298,7 +1301,7 @@ class AutoregressiveSequenceAcc(Acc):
     def add(self, inSeq, outSeq, occ = 1.0):
         assert len(inSeq) == len(outSeq)
         self.occ += occ
-        for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq)):
+        for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq, fillFrames = self.fillFrames)):
             if len(outContext) == self.depth:
                 self.frames += occ
                 self.acc.add((inFrame, outContext), outFrame, occ)
@@ -1318,7 +1321,7 @@ class AutoregressiveSequenceAcc(Acc):
 
     def estimateAux(self, estimateChild):
         dist = estimateChild(self.acc)
-        return AutoregressiveSequenceDist(self.depth, dist, tag = self.tag), (0.0, Rat.Exact)
+        return AutoregressiveSequenceDist(self.depth, self.fillFrames, dist, tag = self.tag), (0.0, Rat.Exact)
 
 class AutoregressiveNetAcc(Acc):
     def __init__(self, distPrev, durAcc, acAcc, verbosity, tag = None):
@@ -2436,24 +2439,27 @@ class DebugDist(Dist):
         return DebugDist(self.maxOcc, dist, tag = self.tag), paramsLeft
 
 class AutoregressiveSequenceDist(Dist):
-    def __init__(self, depth, dist, tag = None):
+    def __init__(self, depth, fillFrames, dist, tag = None):
         self.depth = depth
+        self.fillFrames = fillFrames
         self.dist = dist
         self.tag = tag
 
+        assert len(self.fillFrames) <= self.depth
+
     def __repr__(self):
-        return 'AutoregressiveSequenceDist('+repr(self.depth)+', '+repr(self.dist)+', tag = '+repr(self.tag)+')'
+        return 'AutoregressiveSequenceDist('+repr(self.depth)+', '+repr(self.fillFrames)+', '+repr(self.dist)+', tag = '+repr(self.tag)+')'
 
     def children(self):
         return [self.dist]
 
     def mapChildren(self, mapChild):
-        return AutoregressiveSequenceDist(self.depth, mapChild(self.dist), tag = self.tag)
+        return AutoregressiveSequenceDist(self.depth, self.fillFrames, mapChild(self.dist), tag = self.tag)
 
     def logProb(self, inSeq, outSeq):
         lp = 0.0
         assert len(inSeq) == len(outSeq)
-        for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq)):
+        for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq, fillFrames = self.fillFrames)):
             if len(outContext) == self.depth:
                 lp += self.dist.logProb((inFrame, outContext), outFrame)
         return lp
@@ -2462,7 +2468,7 @@ class AutoregressiveSequenceDist(Dist):
         lp = 0.0
         frames = 0
         assert len(inSeq) == len(outSeq)
-        for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq)):
+        for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq, fillFrames = self.fillFrames)):
             if len(outContext) == self.depth:
                 lp += self.dist.logProb((inFrame, outContext), outFrame)
                 frames += 1
@@ -2480,14 +2486,14 @@ class AutoregressiveSequenceDist(Dist):
         error = 0.0
         frames = 0
         assert len(inSeq) == len(outSeq)
-        for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq)):
+        for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq, fillFrames = self.fillFrames)):
             if len(outContext) == self.depth:
                 error += distError(self.dist, (inFrame, outContext), outFrame)
                 frames += 1
         return error, frames
 
     def createAcc(self, createAccChild):
-        return AutoregressiveSequenceAcc(self.depth, createAccChild(self.dist), tag = self.tag)
+        return AutoregressiveSequenceAcc(self.depth, self.fillFrames, createAccChild(self.dist), tag = self.tag)
 
     def synth(self, inSeq, method = SynthMethod.Sample, actualOutSeq = None):
         return list(self.synthIterator(inSeq, method, actualOutSeq))
@@ -2515,7 +2521,7 @@ class AutoregressiveSequenceDist(Dist):
 
     def parseChildren(self, params, parseChild):
         dist, paramsLeft = parseChild(self.dist, params)
-        return AutoregressiveSequenceDist(self.depth, dist, tag = self.tag), paramsLeft
+        return AutoregressiveSequenceDist(self.depth, self.fillFrames, dist, tag = self.tag), paramsLeft
 
 class SimpleLeftToRightNetFor(object):
     def __init__(self, subLabels):

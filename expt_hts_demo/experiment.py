@@ -150,11 +150,35 @@ def main(rawArgs):
 
     mgcStream, lf0Stream, bapStream = corpus.streams
     mgcStreamDepth, lf0StreamDepth, bapStreamDepth = 3, 2, 3
+    maxDepth = max(mgcStreamDepth, lf0StreamDepth, bapStreamDepth)
     streamDepths = {0: mgcStreamDepth, 1: lf0StreamDepth, 2: bapStreamDepth }
     frameSummarizer = summarizer.VectorSeqSummarizer(order = len(corpus.streams), depths = streamDepths)
 
     mgcSummarizer = summarizer.IndexSpecSummarizer([0], fromOffset = 0, toOffset = 0, order = mgcStream.order, depth = mgcStreamDepth)
     bapSummarizer = summarizer.IndexSpecSummarizer([], fromOffset = 0, toOffset = 0, order = bapStream.order, depth = bapStreamDepth)
+
+    def computeFirstFrameAverages():
+        mgcFirstFrameAverage = np.zeros((mgcStream.order,))
+        lf0FirstFrameProportionUnvoiced = 0.0
+        bapFirstFrameAverage = np.zeros((bapStream.order,))
+        numUtts = 0
+        for uttId in corpus.trainUttIds:
+            alignment, acousticSeq = corpus.data(uttId)
+            mgcFrame, lf0Frame, bapFrame = acousticSeq[0]
+            mgcFirstFrameAverage += mgcFrame
+            lf0FirstFrameProportionUnvoiced += (1.0 if lf0Frame == (0, None) else 0.0)
+            bapFirstFrameAverage += bapFrame
+            numUtts += 1
+        mgcFirstFrameAverage /= numUtts
+        lf0FirstFrameProportionUnvoiced /= numUtts
+        bapFirstFrameAverage /= numUtts
+        return mgcFirstFrameAverage, lf0FirstFrameProportionUnvoiced, bapFirstFrameAverage
+    mgcFirstFrameAverage, lf0FirstFrameProportionUnvoiced, bapFirstFrameAverage = computeFirstFrameAverages()
+    # not crucial that this is true
+    # (FIXME : perhaps shouldn't be an assert)
+    assert lf0FirstFrameProportionUnvoiced >= 0.5
+    firstFrameAverage = mgcFirstFrameAverage, None, bapFirstFrameAverage
+    firstFrameZeros = np.zeros((mgcStream.order,)), None, np.zeros((bapStream.order,))
 
 
     def reportTrainAux((trainAux, trainAuxRat), trainFrames):
@@ -301,7 +325,7 @@ def main(rawArgs):
         shiftToPrevTransform = xf.ShiftOutputTransform(lambda x: -x[1][-1])
 
         dist = d.MappedInputDist(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
-            d.AutoregressiveSequenceDist(10,
+            d.AutoregressiveSequenceDist(10, [],
                 frameSummarizer.createDist(True, lambda streamIndex:
                     {
                         0:
@@ -376,7 +400,7 @@ def main(rawArgs):
                         yield phone, subLabel
 
         acc = d.MappedInputAcc(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
-            d.AutoregressiveSequenceAcc(10,
+            d.AutoregressiveSequenceAcc(10, [],
                 frameSummarizer.createAcc(True, lambda streamIndex:
                     {
                         0:
@@ -493,7 +517,7 @@ def main(rawArgs):
             return subLabel, (phone, (extra, acousticContext))
 
         acc = d.MappedInputAcc(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
-            d.AutoregressiveSequenceAcc(10,
+            d.AutoregressiveSequenceAcc(10, [],
                 frameSummarizer.createAcc(True, lambda streamIndex:
                     {
                         0:
@@ -554,7 +578,7 @@ def main(rawArgs):
         questionGroups = questions_hts_demo.getFullContextQuestionGroups()
 
         acc = d.MappedInputAcc(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
-            d.AutoregressiveSequenceAcc(10,
+            d.AutoregressiveSequenceAcc(10, [],
                 frameSummarizer.createAcc(True, lambda streamIndex:
                     {
                         0:
@@ -687,7 +711,7 @@ def main(rawArgs):
             mgcInputTransform[outIndex] = xf.VectorizeTransform(inputWarp).withTag(('mgcInputTransform', outIndex))
 
         dist = d.MappedInputDist(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
-            d.AutoregressiveSequenceDist(10,
+            d.AutoregressiveSequenceDist(10, [],
                 frameSummarizer.createDist(True, lambda streamIndex:
                     {
                         0:

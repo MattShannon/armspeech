@@ -10,8 +10,9 @@ from __future__ import division
 
 from collections import deque
 
-def contextualizeIter(contextLength, iter):
-    context = deque()
+def contextualizeIter(contextLength, iter, fillFrames = []):
+    assert len(fillFrames) <= contextLength
+    context = deque(fillFrames)
     for curr in iter:
         yield list(context), curr
         context.append(curr)
