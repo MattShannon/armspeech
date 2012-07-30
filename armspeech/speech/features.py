@@ -77,9 +77,7 @@ class Msd01Encoder(object):
         self.specialValue = specialValue
 
     def decode(self, xs):
-        if len(xs) != 1:
-            raise RuntimeError('encoded vector should be 1-dimensional')
-        x = xs[0]
+        x, = xs
         if x == self.specialValue:
             return 0, None
         else:
