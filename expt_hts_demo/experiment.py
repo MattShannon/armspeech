@@ -325,7 +325,7 @@ def main(rawArgs):
         shiftToPrevTransform = xf.ShiftOutputTransform(lambda x: -x[1][-1])
 
         dist = d.MappedInputDist(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
-            d.AutoregressiveSequenceDist(10, [],
+            d.AutoregressiveSequenceDist(maxDepth, [ firstFrameAverage for i in range(maxDepth) ],
                 frameSummarizer.createDist(True, lambda streamIndex:
                     {
                         0:
@@ -400,7 +400,7 @@ def main(rawArgs):
                         yield phone, subLabel
 
         acc = d.MappedInputAcc(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
-            d.AutoregressiveSequenceAcc(10, [],
+            d.AutoregressiveSequenceAcc(maxDepth, [ firstFrameAverage for i in range(maxDepth) ],
                 frameSummarizer.createAcc(True, lambda streamIndex:
                     {
                         0:
@@ -517,7 +517,7 @@ def main(rawArgs):
             return subLabel, (phone, (extra, acousticContext))
 
         acc = d.MappedInputAcc(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
-            d.AutoregressiveSequenceAcc(10, [],
+            d.AutoregressiveSequenceAcc(maxDepth, [ firstFrameAverage for i in range(maxDepth) ],
                 frameSummarizer.createAcc(True, lambda streamIndex:
                     {
                         0:
@@ -578,7 +578,7 @@ def main(rawArgs):
         questionGroups = questions_hts_demo.getFullContextQuestionGroups()
 
         acc = d.MappedInputAcc(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
-            d.AutoregressiveSequenceAcc(10, [],
+            d.AutoregressiveSequenceAcc(maxDepth, [ firstFrameAverage for i in range(maxDepth) ],
                 frameSummarizer.createAcc(True, lambda streamIndex:
                     {
                         0:
@@ -711,7 +711,7 @@ def main(rawArgs):
             mgcInputTransform[outIndex] = xf.VectorizeTransform(inputWarp).withTag(('mgcInputTransform', outIndex))
 
         dist = d.MappedInputDist(lambda alignment: list(alignmentToPhoneticSeq(alignment)),
-            d.AutoregressiveSequenceDist(10, [],
+            d.AutoregressiveSequenceDist(maxDepth, [ firstFrameAverage for i in range(maxDepth) ],
                 frameSummarizer.createDist(True, lambda streamIndex:
                     {
                         0:
