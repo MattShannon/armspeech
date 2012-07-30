@@ -460,7 +460,7 @@ class LinearGaussianAcc(TermAcc):
         self.distPrev = distPrev
         if distPrev is not None:
             inputLength = len(distPrev.coeff)
-        assert inputLength >= 0
+        assert inputLength is not None and inputLength >= 0
         self.varianceFloor = varianceFloor if varianceFloor is not None else (distPrev.varianceFloor if distPrev is not None else 0.0)
         self.tag = tag
 
