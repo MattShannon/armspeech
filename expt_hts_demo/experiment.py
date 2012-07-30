@@ -157,6 +157,7 @@ def main(rawArgs):
     mgcSummarizer = summarizer.IndexSpecSummarizer([0], fromOffset = 0, toOffset = 0, order = mgcStream.order, depth = mgcStreamDepth)
     bapSummarizer = summarizer.IndexSpecSummarizer([], fromOffset = 0, toOffset = 0, order = bapStream.order, depth = bapStreamDepth)
 
+    zeroFrame = np.zeros((mgcStream.order,)), None, np.zeros((bapStream.order,))
     def computeFirstFrameAverages():
         mgcFirstFrameAverage = np.zeros((mgcStream.order,))
         lf0FirstFrameProportionUnvoiced = 0.0
@@ -178,7 +179,6 @@ def main(rawArgs):
     # (FIXME : perhaps shouldn't be an assert)
     assert lf0FirstFrameProportionUnvoiced >= 0.5
     firstFrameAverage = mgcFirstFrameAverage, None, bapFirstFrameAverage
-    firstFrameZeros = np.zeros((mgcStream.order,)), None, np.zeros((bapStream.order,))
 
 
     def reportTrainAux((trainAux, trainAuxRat), trainFrames):
