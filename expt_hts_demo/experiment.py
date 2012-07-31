@@ -324,24 +324,25 @@ def main(rawArgs):
         # FIXME : only works if no cross-stream stuff happening. Make more robust somehow.
         shiftToPrevTransform = xf.ShiftOutputTransform(lambda x: -x[1][-1])
 
-        dist = d.MappedInputDist(lambda (uttId, alignment): (uttId, list(alignmentToPhoneticSeq(alignment))),
-            d.AutoregressiveSequenceDist(maxDepth, [ firstFrameAverage for i in range(maxDepth) ],
-                frameSummarizer.createDist(True, lambda streamIndex:
-                    {
-                        0:
-                            mgcSummarizer.createDist(True, lambda outIndex:
-                                d.MappedOutputDist(shiftToPrevTransform,
-                                    d.DebugDist(None,
-                                        d.OracleDist()
-                                    ).withTag(('debug-mgc', outIndex))
-                                )
+        dist = d.AutoregressiveSequenceDist(
+            maxDepth,
+            lambda alignment: list(alignmentToPhoneticSeq(alignment)),
+            [ firstFrameAverage for i in range(maxDepth) ],
+            frameSummarizer.createDist(True, lambda streamIndex:
+                {
+                    0:
+                        mgcSummarizer.createDist(True, lambda outIndex:
+                            d.MappedOutputDist(shiftToPrevTransform,
+                                d.DebugDist(None,
+                                    d.OracleDist()
+                                ).withTag(('debug-mgc', outIndex))
                             )
-                    ,   1:
-                            d.OracleDist()
-                    ,   2:
-                            d.OracleDist()
-                    }[streamIndex]
-                )
+                        )
+                ,   1:
+                        d.OracleDist()
+                ,   2:
+                        d.OracleDist()
+                }[streamIndex]
             )
         )
 
@@ -399,39 +400,40 @@ def main(rawArgs):
                     for time in range(startTime, endTime):
                         yield phone, subLabel
 
-        acc = d.MappedInputAcc(lambda (uttId, alignment): (uttId, list(alignmentToPhoneticSeq(alignment))),
-            d.AutoregressiveSequenceAcc(maxDepth, [ firstFrameAverage for i in range(maxDepth) ],
-                frameSummarizer.createAcc(True, lambda streamIndex:
-                    {
-                        0:
-                            d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
-                                mgcSummarizer.createAcc(False, lambda outIndex:
-                                    d.MappedInputAcc(xf.AddBias(),
-                                        d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1).withTag('setFloor')
-                                    )
+        acc = d.AutoregressiveSequenceAcc(
+            maxDepth,
+            lambda alignment: list(alignmentToPhoneticSeq(alignment)),
+            [ firstFrameAverage for i in range(maxDepth) ],
+            frameSummarizer.createAcc(True, lambda streamIndex:
+                {
+                    0:
+                        d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
+                            mgcSummarizer.createAcc(False, lambda outIndex:
+                                d.MappedInputAcc(xf.AddBias(),
+                                    d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1).withTag('setFloor')
                                 )
-                            ).withTag(('stream', corpus.streams[streamIndex].name))
-                    ,   1:
-                            d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
-                                #d.MappedInputAcc(xf.Msd01ToVector(),
-                                #    d.MappedInputAcc(xf.AddBias(),
-                                #        d.IdentifiableMixtureAcc(
-                                #            d.BinaryLogisticClassifierAcc(d.BinaryLogisticClassifier(coeff = np.zeros((2 * lf0StreamDepth + 1,)), coeffFloor = np.ones((2 * lf0StreamDepth + 1,)) * 5.0)),
-                                #            [
-                                #                d.FixedValueAcc(None),
-                                #                d.LinearGaussianAcc(inputLength = 2 * lf0StreamDepth + 1).withTag('setFloor')
-                                #            ]
-                                #        )
-                                #    )
-                                #)
-                                d.OracleAcc()
-                            ).withTag(('stream', corpus.streams[streamIndex].name))
-                    ,   2:
-                            d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
-                                d.OracleAcc()
-                            ).withTag(('stream', corpus.streams[streamIndex].name))
-                    }[streamIndex]
-                )
+                            )
+                        ).withTag(('stream', corpus.streams[streamIndex].name))
+                ,   1:
+                        d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
+                            #d.MappedInputAcc(xf.Msd01ToVector(),
+                            #    d.MappedInputAcc(xf.AddBias(),
+                            #        d.IdentifiableMixtureAcc(
+                            #            d.BinaryLogisticClassifierAcc(d.BinaryLogisticClassifier(coeff = np.zeros((2 * lf0StreamDepth + 1,)), coeffFloor = np.ones((2 * lf0StreamDepth + 1,)) * 5.0)),
+                            #            [
+                            #                d.FixedValueAcc(None),
+                            #                d.LinearGaussianAcc(inputLength = 2 * lf0StreamDepth + 1).withTag('setFloor')
+                            #            ]
+                            #        )
+                            #    )
+                            #)
+                            d.OracleAcc()
+                        ).withTag(('stream', corpus.streams[streamIndex].name))
+                ,   2:
+                        d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
+                            d.OracleAcc()
+                        ).withTag(('stream', corpus.streams[streamIndex].name))
+                }[streamIndex]
             )
         )
 
@@ -516,30 +518,31 @@ def main(rawArgs):
             assert len(extra) == extraLength
             return subLabel, (phone, (extra, acousticContext))
 
-        acc = d.MappedInputAcc(lambda (uttId, alignment): (uttId, list(alignmentToPhoneticSeq(alignment))),
-            d.AutoregressiveSequenceAcc(maxDepth, [ firstFrameAverage for i in range(maxDepth) ],
-                frameSummarizer.createAcc(True, lambda streamIndex:
-                    {
-                        0:
-                            d.MappedInputAcc(convertTimingInfo,
-                                d.createDiscreteAcc(subLabels, lambda subLabel:
-                                    d.createDiscreteAcc(phoneset.phoneList, lambda phone:
-                                        mgcSummarizer.createAcc(True, lambda outIndex:
-                                            d.MappedInputAcc(np.concatenate,
-                                                d.MappedInputAcc(xf.AddBias(),
-                                                    d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + extraLength + 1, varianceFloor = 0.0)
-                                                )
+        acc = d.AutoregressiveSequenceAcc(
+            maxDepth,
+            lambda alignment: list(alignmentToPhoneticSeq(alignment)),
+            [ firstFrameAverage for i in range(maxDepth) ],
+            frameSummarizer.createAcc(True, lambda streamIndex:
+                {
+                    0:
+                        d.MappedInputAcc(convertTimingInfo,
+                            d.createDiscreteAcc(subLabels, lambda subLabel:
+                                d.createDiscreteAcc(phoneset.phoneList, lambda phone:
+                                    mgcSummarizer.createAcc(True, lambda outIndex:
+                                        d.MappedInputAcc(np.concatenate,
+                                            d.MappedInputAcc(xf.AddBias(),
+                                                d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + extraLength + 1, varianceFloor = 0.0)
                                             )
                                         )
                                     )
                                 )
                             )
-                    ,   1:
-                            d.OracleAcc()
-                    ,   2:
-                            d.OracleAcc()
-                    }[streamIndex]
-                )
+                        )
+                ,   1:
+                        d.OracleAcc()
+                ,   2:
+                        d.OracleAcc()
+                }[streamIndex]
             )
         )
 
@@ -577,28 +580,29 @@ def main(rawArgs):
 
         questionGroups = questions_hts_demo.getFullContextQuestionGroups()
 
-        acc = d.MappedInputAcc(lambda (uttId, alignment): (uttId, list(alignmentToPhoneticSeq(alignment))),
-            d.AutoregressiveSequenceAcc(maxDepth, [ firstFrameAverage for i in range(maxDepth) ],
-                frameSummarizer.createAcc(True, lambda streamIndex:
-                    {
-                        0:
-                            d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
-                                mgcSummarizer.createAcc(False, lambda outIndex:
-                                    d.MappedInputAcc(xf.AddBias(),
-                                        d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1).withTag('setFloor')
-                                    )
+        acc = d.AutoregressiveSequenceAcc(
+            maxDepth,
+            lambda alignment: list(alignmentToPhoneticSeq(alignment)),
+            [ firstFrameAverage for i in range(maxDepth) ],
+            frameSummarizer.createAcc(True, lambda streamIndex:
+                {
+                    0:
+                        d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
+                            mgcSummarizer.createAcc(False, lambda outIndex:
+                                d.MappedInputAcc(xf.AddBias(),
+                                    d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1).withTag('setFloor')
                                 )
-                            ).withTag(('stream', corpus.streams[streamIndex].name))
-                    ,   1:
-                            d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
-                                d.OracleAcc()
-                            ).withTag(('stream', corpus.streams[streamIndex].name))
-                    ,   2:
-                            d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
-                                d.OracleAcc()
-                            ).withTag(('stream', corpus.streams[streamIndex].name))
-                    }[streamIndex]
-                )
+                            )
+                        ).withTag(('stream', corpus.streams[streamIndex].name))
+                ,   1:
+                        d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
+                            d.OracleAcc()
+                        ).withTag(('stream', corpus.streams[streamIndex].name))
+                ,   2:
+                        d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
+                            d.OracleAcc()
+                        ).withTag(('stream', corpus.streams[streamIndex].name))
+                }[streamIndex]
             )
         )
 
@@ -710,39 +714,40 @@ def main(rawArgs):
             inputWarp = xf.SumTransform1D([xf.IdentityTransform()] + tanhInputTransforms).withTag(('mgcInputWarp', outIndex))
             mgcInputTransform[outIndex] = xf.VectorizeTransform(inputWarp).withTag(('mgcInputTransform', outIndex))
 
-        dist = d.MappedInputDist(lambda (uttId, alignment): (uttId, list(alignmentToPhoneticSeq(alignment))),
-            d.AutoregressiveSequenceDist(maxDepth, [ firstFrameAverage for i in range(maxDepth) ],
-                frameSummarizer.createDist(True, lambda streamIndex:
-                    {
-                        0:
-                            d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
-                                d.createDiscreteDist(subLabels, lambda subLabel:
-                                    d.createDiscreteDist(phoneList, lambda phone:
-                                        mgcSummarizer.createDist(False, lambda outIndex:
-                                            d.DebugDist(None,
-                                                d.TransformedOutputDist(mgcOutputTransform[outIndex],
-                                                    d.TransformedInputDist(mgcInputTransform[outIndex],
-                                                        #d.MappedOutputDist(shiftToPrevTransform,
-                                                            d.DebugDist(None,
-                                                                d.MappedInputDist(xf.AddBias(),
-                                                                    # arbitrary dist to get things rolling
-                                                                    d.LinearGaussian(np.zeros((mgcSummarizer.vectorLength(outIndex) + 1,)), 1.0, varianceFloor = 0.0)
-                                                                )
-                                                            ).withTag('debug-xfed')
-                                                        #)
-                                                    )
+        dist = d.AutoregressiveSequenceDist(
+            maxDepth,
+            lambda alignment: list(alignmentToPhoneticSeq(alignment)),
+            [ firstFrameAverage for i in range(maxDepth) ],
+            frameSummarizer.createDist(True, lambda streamIndex:
+                {
+                    0:
+                        d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
+                            d.createDiscreteDist(subLabels, lambda subLabel:
+                                d.createDiscreteDist(phoneList, lambda phone:
+                                    mgcSummarizer.createDist(False, lambda outIndex:
+                                        d.DebugDist(None,
+                                            d.TransformedOutputDist(mgcOutputTransform[outIndex],
+                                                d.TransformedInputDist(mgcInputTransform[outIndex],
+                                                    #d.MappedOutputDist(shiftToPrevTransform,
+                                                        d.DebugDist(None,
+                                                            d.MappedInputDist(xf.AddBias(),
+                                                                # arbitrary dist to get things rolling
+                                                                d.LinearGaussian(np.zeros((mgcSummarizer.vectorLength(outIndex) + 1,)), 1.0, varianceFloor = 0.0)
+                                                            )
+                                                        ).withTag('debug-xfed')
+                                                    #)
                                                 )
-                                            ).withTag(('debug-orig', phone, subLabel, streamIndex, outIndex))
-                                        )
+                                            )
+                                        ).withTag(('debug-orig', phone, subLabel, streamIndex, outIndex))
                                     )
                                 )
                             )
-                    ,   1:
-                            d.OracleDist()
-                    ,   2:
-                            d.OracleDist()
-                    }[streamIndex]
-                )
+                        )
+                ,   1:
+                        d.OracleDist()
+                ,   2:
+                        d.OracleDist()
+                }[streamIndex]
             )
         )
 
