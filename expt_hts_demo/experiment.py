@@ -17,6 +17,7 @@ import armspeech.modelling.train as trn
 from armspeech.modelling import summarizer
 import armspeech.modelling.transform as xf
 from armspeech.modelling import cluster
+from armspeech.modelling import wnet
 from armspeech.speech.features import stdCepDist, stdCepDistIncZero
 from armspeech.speech import draw
 from armspeech.util.timing import timed, printTime
@@ -877,6 +878,64 @@ def main(rawArgs):
 
         printTime('finished xf')
 
+    def doFlatStartSystem(numSubLabels = 5):
+        print
+        print 'TRAINING FLAT-START SYSTEM'
+        printTime('started flatStart')
+
+        print 'numSubLabels =', numSubLabels
+        subLabels = list(range(numSubLabels))
+
+        lgVarianceFloorMult = 1e-3
+        ccProbFloor = 3e-5
+        print 'lgVarianceFloorMult =', lgVarianceFloorMult
+        print 'ccProbFloor =', ccProbFloor
+
+        globalDist = trainGlobalSystem(getStandardizeAlignment(subLabels), lgVarianceFloorMult)
+
+        print 'DEBUG: converting global dist to monophone net dist'
+        def netFor(alignment):
+            labelSeq = [ label for startTime, endTime, label, subAlignment in alignment ]
+            net = wnet.FlatMappedNet(
+                lambda label: wnet.probLeftToRightZeroNet(
+                    [ (label, subLabel) for subLabel in subLabels ],
+                    [ [ ((label, subLabel), adv) for adv in [0, 1] ] for subLabel in subLabels ]
+                ),
+                wnet.SequenceNet(labelSeq, None)
+            )
+            return net
+        def globalToMonophoneMapPartial(dist, mapChild):
+            if isinstance(dist, d.MappedInputDist) and getFirst(dist.tag) == 'stream':
+                subDist = dist.dist
+                return d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label.phone, acInput)),
+                    d.createDiscreteDist(subLabels, lambda subLabel:
+                        d.createDiscreteDist(phoneset.phoneList, lambda phone:
+                            d.isolateDist(subDist)
+                        )
+                    )
+                ).withTag(dist.tag)
+        acDist = nodetree.getDagMap([globalToMonophoneMapPartial, nodetree.defaultMapPartial])(globalDist.dist)
+        durDist = d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label.phone, acInput)),
+            d.createDiscreteDist(subLabels, lambda subLabel:
+                d.createDiscreteDist(phoneset.phoneList, lambda phone:
+                    d.ConstantClassifier(probs = np.array([0.5, 0.5]), probFloors = np.array([ccProbFloor, ccProbFloor]))
+                )
+            )
+        ).withTag(('stream', 'dur'))
+        pruneSpec = d.SimplePruneSpec(betaThresh = 500.0, logOccThresh = 20.0)
+        dist = d.AutoregressiveNetDist(maxDepth, netFor, [ firstFrameAverage for i in range(maxDepth) ], durDist, acDist, pruneSpec)
+
+        print 'DEBUG: estimating monophone net dist'
+        dist = trn.trainEM(dist, timed(corpus.accumulate), deltaThresh = 1e-4, minIterations = 4, maxIterations = 10, verbosity = 2)
+        reportFlooredPerStream(dist)
+        writeDistFile(os.path.join(distOutDir, 'flatStart.mono.dist'), dist)
+        evaluateLogProb(dist, corpus)
+        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
+        evaluateSynthesize(dist, corpus, 'flatStart.mono', afterSynth = getDrawMgc())
+
+        printTime('finished flatStart')
+
     try:
         doDumpCorpus()
 
@@ -889,6 +948,8 @@ def main(rawArgs):
         doDecisionTreeClusteredSystem()
 
         doTransformSystem()
+
+        doFlatStartSystem()
     except:
         traceback.print_exc()
         print
