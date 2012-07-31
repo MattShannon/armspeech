@@ -19,7 +19,6 @@ from armspeech.util.mathhelp import logSum
 from armspeech.util.iterhelp import chunkList
 from armspeech.util.mathhelp import assert_allclose
 from armspeech.util.mathhelp import AsArray
-from armspeech.util.util import ConstantFunction
 
 import test_dist_questions
 import test_transform
@@ -378,7 +377,7 @@ def gen_constant_AutoregressiveNetDist(depth = 2):
         gen_stable_autoregressive_dist(depth)[0]
     )
     pruneSpec = None if randBool() else d.SimplePruneSpec(betaThresh = (None if randBool() else 1000.0), logOccThresh = (None if randBool() else 1000.0))
-    dist = d.AutoregressiveNetDist(depth, ConstantFunction(net), [ 0.0 for i in range(depth) ], durDist, acDist, pruneSpec).withTag(randTag())
+    dist = d.AutoregressiveNetDist(depth, xf.ConstantTransform(net), [ 0.0 for i in range(depth) ], durDist, acDist, pruneSpec).withTag(randTag())
 
     def getInputGen():
         while True:
