@@ -695,8 +695,9 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
         if len(training) >= numPoints - 1:
             getTrainEM(dist, maxIterations = 1)(training)
     if True:
-        # check CG estimation runs at all
-        getTrainCG(dist, length = -2)(training)
+        # check CG estimation runs at all (if there is a decent amount of data)
+        if len(training) >= numPoints - 1:
+            getTrainCG(dist, length = -2)(training)
 
 class TestDist(unittest.TestCase):
     def setUp(self):

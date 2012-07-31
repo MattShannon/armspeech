@@ -68,6 +68,7 @@ def trainCG(distInit, accumulate, ps = d.defaultParamSpec, length = -50, verbosi
         accumulate(acc)
         count = acc.count()
         # FIXME : is it better to return logLike or logLike-per-count (e.g. logLike-per-frame)? (i.e. for which of these is minimize typically faster?)
+        assert count > 0.0
         return -acc.logLike() / count, -ps.derivParams(acc) / count
 
     params = ps.params(distInit)
