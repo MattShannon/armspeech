@@ -15,6 +15,7 @@ import summarizer
 import transform as xf
 import cluster
 import wnet
+from armspeech.util import persist
 from armspeech.util.mathhelp import logSum
 from armspeech.util.iterhelp import chunkList
 from armspeech.util.mathhelp import assert_allclose
@@ -33,6 +34,7 @@ import armspeech.numpy_settings
 from numpy.random import randn, randint
 import numpy.linalg as la
 from scipy import stats
+import cPickle as pickle
 import string
 
 def randBool():
@@ -630,7 +632,6 @@ def getTrainingSet(dist, inputGen, typicalSize, iid, unitOcc):
     return trainingSet
 
 def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = False, hasEM = True, canEval = True, ps = d.defaultParamSpec, logProbDerivInputCheck = False, logProbDerivInput_hasDiscrete_check = False, logProbDerivOutputCheck = False, logProbDerivOutput_hasDiscrete_checkFor = lambda output: False, checkAdditional = None, checkAccAdditional = None):
-    # (FIXME : add pickle test)
     assert dist.tag is not None
     if hasEM:
         assert d.defaultCreateAcc(dist).tag == dist.tag
@@ -651,6 +652,16 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
     distMapped = d.isolateDist(dist)
     assert id(distMapped) != id(dist)
     assert distMapped.tag == dist.tag
+    if True:
+        distFromPickle = persist.roundTrip(dist)
+        assert id(distFromPickle) != id(dist)
+        assert distFromPickle.tag == dist.tag
+        # checks that the operation of roundTripping from pickle to pickle is
+        #   idempotent (this seems to usually be true, so we might as well
+        #   verify it). (As it happens this property is required by secHash).
+        assert pickle.dumps(persist.roundTrip(distFromPickle), protocol = 2) == pickle.dumps(distFromPickle, protocol = 2)
+        if hasParams:
+            assert_allclose(ps.params(distFromPickle), ps.params(dist))
     if canEval:
         distEvaled = d.eval_local(repr(dist))
         assert distEvaled.tag == dist.tag
@@ -665,6 +676,8 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
                 checkAdditional(dist, input, output, eps)
             lp = dist.logProb(input, output)
             assert_allclose(distMapped.logProb(input, output), lp)
+            if True:
+                assert_allclose(distFromPickle.logProb(input, output), lp)
             if canEval:
                 assert_allclose(distEvaled.logProb(input, output), lp)
             if hasParams:
