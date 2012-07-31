@@ -615,7 +615,7 @@ def getTrainingSet(dist, inputGen, typicalSize, iid, unitOcc):
     assert len(trainingSet) == trainingSetSize
     return trainingSet
 
-def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = False, hasEM = True, canEval = True, ps = d.defaultParamSpec, logProbDerivInputCheck = False, logProbDerivInput_hasDiscrete_check = False, logProbDerivOutputCheck = False, logProbDerivOutput_hasDiscrete_checkFor = lambda output: False, checkAdditional = None):
+def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = False, hasEM = True, canEval = True, ps = d.defaultParamSpec, logProbDerivInputCheck = False, logProbDerivInput_hasDiscrete_check = False, logProbDerivOutputCheck = False, logProbDerivOutput_hasDiscrete_checkFor = lambda output: False, checkAdditional = None, checkAccAdditional = None):
     # (FIXME : add pickle test)
     assert dist.tag is not None
     if hasEM:
@@ -673,6 +673,10 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
         check_occ_and_logLike(dist, training, iid = iid, hasEM = hasEM)
     if hasParams:
         check_derivParams(dist, training, ps, eps = eps)
+    if checkAccAdditional is not None:
+        if hasEM:
+            checkAccAdditional(trainedAcc(dist, training), training)
+        checkAccAdditional(trainedAccG(dist, training), training)
 
     logProbsAfter = [ dist.logProb(input, output) for input, output in points ]
     assert_allclose(logProbsAfter, logProbsBefore, atol = 1e-10, msg = 'looks like parsing affected the original distribution, which should never happen')
@@ -938,6 +942,8 @@ class TestDist(unittest.TestCase):
             # check result of getTimedNet is topologically sorted
             timedNet, labelToWeight = dist.getTimedNet(input, outSeq, preComputeLabelToWeight = randBool())
             assert wnet.netIsTopSorted(timedNet, wnet.nodeSetCompute(timedNet, accessibleOnly = False), deltaTime = lambda label: 0)
+        def checkAccAdditional(acc, training):
+            assert_allclose(acc.frames, sum([ len(output) * occ for input, output, occ in training ]))
         for distIndex in range(numDists):
             depth = randint(0, 5)
             # below restriction to dists with a moderate typical output length is to prevent tests taking too long
@@ -946,7 +952,7 @@ class TestDist(unittest.TestCase):
             else:
                 dist, inputGen = restrictTypicalOutputLength(genDist = lambda: gen_inSeq_AutoregressiveNetDist(depth = depth), numPoints = numPoints)
             # (FIXME : add logProbDerivOutputCheck once implemented)
-            checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, checkAdditional = checkAdditional)
+            checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, checkAdditional = checkAdditional, checkAccAdditional = checkAccAdditional)
             if self.deepTest:
                 check_est(dist, getTrainEM(dist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(dist), inputGen, hasParams = True)
