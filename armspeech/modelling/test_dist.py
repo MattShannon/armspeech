@@ -423,6 +423,10 @@ def restrictTypicalOutputLength(genDist, maxLength = 20, numPoints = 100):
                 break
     return dist, inputGen
 
+def dagInfoExtract(parentNode):
+    """Extracts basic structure information about the DAG for a parentNode."""
+    return [ type(node) for node in nodetree.nodeList(parentNode) ]
+
 def iidLogProb(dist, training):
     logProb = 0.0
     for input, output, occ in training:
@@ -451,6 +455,7 @@ def reparse(dist, ps):
     paramsParsed = ps.params(distParsed)
     assert_allclose(paramsParsed, params)
     assert dist.tag == distParsed.tag
+    assert dagInfoExtract(distParsed) == dagInfoExtract(dist)
     return distParsed
 
 def check_logProbDerivInput(dist, input, output, eps):
@@ -533,6 +538,7 @@ def getTrainEM(initEstDist, maxIterations = None, verbosity = 0):
         dist = trn.trainEM(initEstDist, accumulate, deltaThresh = 1e-9, maxIterations = maxIterations, verbosity = verbosity)
         assert initEstDist.tag is not None
         assert dist.tag == initEstDist.tag
+        assert dagInfoExtract(dist) == dagInfoExtract(initEstDist)
         return dist
     return doTrainEM
 
@@ -544,6 +550,7 @@ def getTrainCG(initEstDist, ps = d.defaultParamSpec, length = -500, verbosity = 
         dist = trn.trainCG(initEstDist, accumulate, ps = ps, length = length, verbosity = verbosity)
         assert initEstDist.tag is not None
         assert dist.tag == initEstDist.tag
+        assert dagInfoExtract(dist) == dagInfoExtract(initEstDist)
         return dist
     return doTrainCG
 
@@ -653,12 +660,14 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
         distMapped = d.isolateDist(dist)
         assert id(distMapped) != id(dist)
         assert distMapped.tag == dist.tag
+        assert dagInfoExtract(distMapped) == dagInfoExtract(dist)
         if hasParams:
             assert_allclose(ps.params(distMapped), ps.params(dist))
     if True:
         distFromPickle = persist.roundTrip(dist)
         assert id(distFromPickle) != id(dist)
         assert distFromPickle.tag == dist.tag
+        assert dagInfoExtract(distFromPickle) == dagInfoExtract(dist)
         # checks that the operation of roundTripping from pickle to pickle is
         #   idempotent (this seems to usually be true, so we might as well
         #   verify it). (As it happens this property is required by secHash).
@@ -670,6 +679,7 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
         assert distEvaled.tag == dist.tag
         assert repr(dist) == repr(distEvaled)
         if evalShouldWork:
+            assert dagInfoExtract(distEvaled) == dagInfoExtract(dist)
             if hasParams:
                 assert_allclose(ps.params(distEvaled), ps.params(dist))
     if hasParams:
