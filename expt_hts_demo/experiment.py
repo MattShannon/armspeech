@@ -386,35 +386,23 @@ def main(rawArgs):
 
         printTime('finished dumpCorpus')
 
-    def doMonophoneSystem(numSubLabels = 1):
-        print
-        print 'TRAINING MONOPHONE SYSTEM'
-        printTime('started mono')
-
-        print 'numSubLabels =', numSubLabels
-        subLabels = list(range(numSubLabels))
-
-        lgVarianceFloorMult = 1e-3
-        print 'lgVarianceFloorMult =', lgVarianceFloorMult
-
-        standardizeAlignment = getStandardizeAlignment(subLabels)
-
-        def alignmentToPhoneticSeq(alignment):
+    def trainGlobalSystem(standardizeAlignment, lgVarianceFloorMult):
+        def alignmentToPhoneticIter(alignment):
             for phoneStartTime, phoneEndTime, label, subAlignment in standardizeAlignment(alignment):
-                phone = label.phone
                 for startTime, endTime, subLabel, subSubAlignment in subAlignment:
                     assert subSubAlignment is None
                     for time in range(startTime, endTime):
-                        yield phone, subLabel
+                        yield label, subLabel
+        alignmentToPhoneticSeq = lambda alignment: list(alignmentToPhoneticIter(alignment))
 
         acc = d.AutoregressiveSequenceAcc(
             maxDepth,
-            lambda alignment: list(alignmentToPhoneticSeq(alignment)),
+            alignmentToPhoneticSeq,
             [ firstFrameAverage for i in range(maxDepth) ],
             frameSummarizer.createAcc(True, lambda streamIndex:
                 {
                     0:
-                        d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
+                        d.MappedInputAcc(lambda (phInput, acInput): acInput,
                             mgcSummarizer.createAcc(False, lambda outIndex:
                                 d.MappedInputAcc(xf.AddBias(),
                                     d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1).withTag('setFloor')
@@ -422,7 +410,7 @@ def main(rawArgs):
                             )
                         ).withTag(('stream', corpus.streams[streamIndex].name))
                 ,   1:
-                        d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
+                        d.MappedInputAcc(lambda (phInput, acInput): acInput,
                             #d.MappedInputAcc(xf.Msd01ToVector(),
                             #    d.MappedInputAcc(xf.AddBias(),
                             #        d.IdentifiableMixtureAcc(
@@ -437,21 +425,84 @@ def main(rawArgs):
                             d.OracleAcc()
                         ).withTag(('stream', corpus.streams[streamIndex].name))
                 ,   2:
-                        d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
+                        d.MappedInputAcc(lambda (phInput, acInput): acInput,
                             d.OracleAcc()
                         ).withTag(('stream', corpus.streams[streamIndex].name))
                 }[streamIndex]
             )
         )
 
+        print 'DEBUG: estimating global dist'
+        timed(corpus.accumulate)(acc)
+        dist, (trainAux, trainAuxRat) = d.defaultEstimateTotAux(acc)
+        reportTrainAux((trainAux, trainAuxRat), acc.count())
+
+        print 'lgVarianceFloorMult =', lgVarianceFloorMult
+
         def setFloorMapPartial(dist, mapChild):
             if isinstance(dist, d.LinearGaussian) and dist.tag == 'setFloor':
                 return d.LinearGaussian(dist.coeff, dist.variance, dist.variance * lgVarianceFloorMult)
 
+        print 'DEBUG: setting floors'
+        dist = nodetree.getDagMap([setFloorMapPartial, nodetree.defaultMapPartial])(dist)
+
+        return dist
+
+    def doGlobalSystem(numSubLabels = 1):
+        print
+        print 'TRAINING GLOBAL SYSTEM'
+        printTime('started global')
+
+        print 'numSubLabels =', numSubLabels
+        subLabels = list(range(numSubLabels))
+
+        lgVarianceFloorMult = 1e-3
+        print 'lgVarianceFloorMult =', lgVarianceFloorMult
+
+        dist = trainGlobalSystem(getStandardizeAlignment(subLabels), lgVarianceFloorMult)
+        reportFlooredPerStream(dist)
+        writeDistFile(os.path.join(distOutDir, 'global.dist'), dist)
+        evaluateLogProb(dist, corpus)
+        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
+        evaluateSynthesize(dist, corpus, 'global', afterSynth = getDrawMgc())
+
+        print
+        print 'MIXING UP (to 2 components)'
+        dist = mixup(dist, corpus.accumulate)
+        reportFlooredPerStream(dist)
+        writeDistFile(os.path.join(distOutDir, 'global.2mix.dist'), dist)
+        evaluateLogProb(dist, corpus)
+        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
+        evaluateSynthesize(dist, corpus, 'global.2mix', afterSynth = getDrawMgc())
+        print
+        print 'MIXING UP (to 4 components)'
+        dist = mixup(dist, corpus.accumulate)
+        reportFlooredPerStream(dist)
+        writeDistFile(os.path.join(distOutDir, 'global.4mix.dist'), dist)
+        evaluateLogProb(dist, corpus)
+        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
+        evaluateSynthesize(dist, corpus, 'global.4mix', afterSynth = getDrawMgc())
+
+        printTime('finished global')
+
+    def doMonophoneSystem(numSubLabels = 1):
+        print
+        print 'TRAINING MONOPHONE SYSTEM'
+        printTime('started mono')
+
+        print 'numSubLabels =', numSubLabels
+        subLabels = list(range(numSubLabels))
+
+        lgVarianceFloorMult = 1e-3
+        print 'lgVarianceFloorMult =', lgVarianceFloorMult
+
         def globalToMonophoneMapPartial(dist, mapChild):
             if isinstance(dist, d.MappedInputDist) and getFirst(dist.tag) == 'stream':
                 subDist = dist.dist
-                return d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
+                return d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label.phone, acInput)),
                     d.createDiscreteDist(subLabels, lambda subLabel:
                         d.createDiscreteDist(phoneset.phoneList, lambda phone:
                             d.isolateDist(subDist)
@@ -459,13 +510,9 @@ def main(rawArgs):
                     )
                 ).withTag(dist.tag)
 
-        print 'DEBUG: estimating global dist'
-        timed(corpus.accumulate)(acc)
-        dist, (trainAux, trainAuxRat) = d.defaultEstimateTotAux(acc)
-        reportTrainAux((trainAux, trainAuxRat), acc.count())
+        globalDist = trainGlobalSystem(getStandardizeAlignment(subLabels), lgVarianceFloorMult)
+        dist = globalDist
 
-        print 'DEBUG: setting floors'
-        dist = nodetree.getDagMap([setFloorMapPartial, nodetree.defaultMapPartial])(dist)
         print 'DEBUG: converting global dist to monophone dist'
         dist = nodetree.getDagMap([globalToMonophoneMapPartial, nodetree.defaultMapPartial])(dist)
 
@@ -576,46 +623,7 @@ def main(rawArgs):
         lgVarianceFloorMult = 1e-3
         print 'lgVarianceFloorMult =', lgVarianceFloorMult
 
-        standardizeAlignment = getStandardizeAlignment(subLabels)
-
-        def alignmentToPhoneticSeq(alignment):
-            for phoneStartTime, phoneEndTime, label, subAlignment in standardizeAlignment(alignment):
-                for startTime, endTime, subLabel, subSubAlignment in subAlignment:
-                    assert subSubAlignment is None
-                    for time in range(startTime, endTime):
-                        yield label, subLabel
-
         questionGroups = questions_hts_demo.getFullContextQuestionGroups()
-
-        acc = d.AutoregressiveSequenceAcc(
-            maxDepth,
-            lambda alignment: list(alignmentToPhoneticSeq(alignment)),
-            [ firstFrameAverage for i in range(maxDepth) ],
-            frameSummarizer.createAcc(True, lambda streamIndex:
-                {
-                    0:
-                        d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
-                            mgcSummarizer.createAcc(False, lambda outIndex:
-                                d.MappedInputAcc(xf.AddBias(),
-                                    d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1).withTag('setFloor')
-                                )
-                            )
-                        ).withTag(('stream', corpus.streams[streamIndex].name))
-                ,   1:
-                        d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
-                            d.OracleAcc()
-                        ).withTag(('stream', corpus.streams[streamIndex].name))
-                ,   2:
-                        d.MappedInputAcc(lambda ((label, subLabel), acInput): acInput,
-                            d.OracleAcc()
-                        ).withTag(('stream', corpus.streams[streamIndex].name))
-                }[streamIndex]
-            )
-        )
-
-        def setFloorMapPartial(dist, mapChild):
-            if isinstance(dist, d.LinearGaussian) and dist.tag == 'setFloor':
-                return d.LinearGaussian(dist.coeff, dist.variance, dist.variance * lgVarianceFloorMult)
 
         def globalToFullCtxCreateAccPartial(dist, createAccChild):
             if isinstance(dist, d.MappedInputDist) and getFirst(dist.tag) == 'stream':
@@ -629,13 +637,9 @@ def main(rawArgs):
                     )
                 ).withTag(dist.tag)
 
-        print 'DEBUG: estimating global dist'
-        timed(corpus.accumulate)(acc)
-        dist, (trainAux, trainAuxRat) = d.defaultEstimateTotAux(acc)
-        reportTrainAux((trainAux, trainAuxRat), acc.count())
+        globalDist = trainGlobalSystem(getStandardizeAlignment(subLabels), lgVarianceFloorMult)
+        dist = globalDist
 
-        print 'DEBUG: setting floors'
-        dist = nodetree.getDagMap([setFloorMapPartial, nodetree.defaultMapPartial])(dist)
         print 'DEBUG: converting global dist to full ctx acc'
         acc = nodetree.getDagMap([globalToFullCtxCreateAccPartial, d.defaultCreateAccPartial])(dist)
 
@@ -875,6 +879,8 @@ def main(rawArgs):
 
     try:
         doDumpCorpus()
+
+        doGlobalSystem()
 
         doMonophoneSystem()
 
