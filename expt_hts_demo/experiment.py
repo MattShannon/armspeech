@@ -549,7 +549,7 @@ def main(rawArgs):
     def doTimingInfoSystem(numSubLabels = 1):
         print
         print 'TRAINING MONOPHONE SYSTEM WITH TIMING INFO'
-        printTime('started timinginfo')
+        printTime('started timingInfo')
 
         print 'numSubLabels =', numSubLabels
         subLabels = list(range(numSubLabels))
@@ -604,13 +604,13 @@ def main(rawArgs):
         dist, (trainAux, trainAuxRat) = d.defaultEstimateTotAux(acc)
         reportTrainAux((trainAux, trainAuxRat), acc.count())
 
-        writeDistFile(os.path.join(distOutDir, 'timinginfo.dist'), dist)
+        writeDistFile(os.path.join(distOutDir, 'timingInfo.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, 'timinginfo', afterSynth = getDrawMgc())
+        evaluateSynthesize(dist, corpus, 'timingInfo', afterSynth = getDrawMgc())
 
-        printTime('finished timinginfo')
+        printTime('finished timingInfo')
 
     def doDecisionTreeClusteredSystem(numSubLabels = 1, mdlFactor = 0.3):
         print
