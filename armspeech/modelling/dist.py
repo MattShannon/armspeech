@@ -1286,9 +1286,8 @@ class AutoregressiveSequenceAcc(Acc):
         assert len(inSeq) == len(outSeq)
         self.occ += occ
         for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq, fillFrames = self.fillFrames)):
-            if len(outContext) == self.depth:
-                self.frames += occ
-                self.acc.add((inFrame, outContext), outFrame, occ)
+            self.frames += occ
+            self.acc.add((inFrame, outContext), outFrame, occ)
 
     def addAccSingle(self, acc):
         self.occ += acc.occ
@@ -2447,9 +2446,8 @@ class AutoregressiveSequenceDist(Dist):
         frames = 0
         assert len(inSeq) == len(outSeq)
         for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq, fillFrames = self.fillFrames)):
-            if len(outContext) == self.depth:
-                lp += self.dist.logProb((inFrame, outContext), outFrame)
-                frames += 1
+            lp += self.dist.logProb((inFrame, outContext), outFrame)
+            frames += 1
         return lp, frames
 
     def logProbDerivInput(self, (uttId, input), outSeq):
@@ -2466,9 +2464,8 @@ class AutoregressiveSequenceDist(Dist):
         frames = 0
         assert len(inSeq) == len(outSeq)
         for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq, fillFrames = self.fillFrames)):
-            if len(outContext) == self.depth:
-                error += distError(self.dist, (inFrame, outContext), outFrame)
-                frames += 1
+            error += distError(self.dist, (inFrame, outContext), outFrame)
+            frames += 1
         return error, frames
 
     def createAcc(self, createAccChild):
@@ -2484,10 +2481,7 @@ class AutoregressiveSequenceDist(Dist):
         if actualOutSeq is not None:
             assert len(actualOutSeq) == len(inSeq)
         for frameIndex, inFrame in enumerate(inSeq):
-            if len(outContext) != self.depth:
-                outFrame = actualOutSeq[frameIndex]
-            else:
-                outFrame = self.dist.synth((inFrame, list(outContext)), method, None if actualOutSeq is None else actualOutSeq[frameIndex])
+            outFrame = self.dist.synth((inFrame, list(outContext)), method, None if actualOutSeq is None else actualOutSeq[frameIndex])
 
             yield outFrame
 
