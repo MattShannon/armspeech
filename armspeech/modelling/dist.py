@@ -2491,12 +2491,13 @@ class AutoregressiveSequenceDist(Dist):
         inSeq = self.seqFor(input)
         actualOutSeq = actualOutput
         outContext = deque(self.fillFrames)
-        assert len(inSeq) == len(actualOutSeq)
-        for inFrame, actualOutFrame in izip(inSeq, actualOutSeq):
+        if actualOutSeq is not None:
+            assert len(actualOutSeq) == len(inSeq)
+        for frameIndex, inFrame in enumerate(inSeq):
             if len(outContext) != self.depth:
-                outFrame = actualOutFrame
+                outFrame = actualOutSeq[frameIndex]
             else:
-                outFrame = self.dist.synth((inFrame, list(outContext)), method, actualOutFrame)
+                outFrame = self.dist.synth((inFrame, list(outContext)), method, None if actualOutSeq is None else actualOutSeq[frameIndex])
 
             yield outFrame
 
