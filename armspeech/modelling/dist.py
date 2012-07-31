@@ -251,20 +251,6 @@ class SimplePruneSpec(PruneSpec):
     def __repr__(self):
         return 'SimplePruneSpec('+repr(self.betaThresh)+', '+repr(self.logOccThresh)+')'
 
-class FillZerosToDepth(object):
-    def __init__(self, depth):
-        self.depth = depth
-        assert self.depth >= 0
-    def __repr__(self):
-        return 'FillZerosToDepth('+repr(self.depth)+')'
-    def __call__(self, acInput):
-        acInput = np.asarray(acInput)
-        assert len(np.shape(acInput)) == 1
-        assert len(acInput) <= self.depth
-        if len(acInput) < self.depth:
-            acInput = np.concatenate((np.zeros((self.depth - len(acInput),)), acInput))
-        return acInput
-
 class Memo(object):
     def __init__(self, maxOcc):
         self.maxOcc = maxOcc
@@ -1341,8 +1327,12 @@ class AutoregressiveNetAcc(Acc):
             print 'fb: uttId %s' % uttId
         self.occ += occ
         self.frames += len(outSeq) * occ
+
         timedNet, labelToWeight = self.distPrev.getTimedNet(input, outSeq)
         totalLogProb, edgeGen = wnet.forwardBackwardAlt(timedNet, labelToWeight = labelToWeight, divisionRing = self.distPrev.ring, getAgenda = self.distPrev.getAgenda)
+
+        numFilled = len(self.distPrev.fillFrames)
+        outSeqFilled = self.distPrev.fillFrames + outSeq
         entropy = totalLogProb * occ
         accedEdges = 0
         for (label, labelStartTime, labelEndTime), logOcc in edgeGen:
@@ -1350,7 +1340,7 @@ class AutoregressiveNetAcc(Acc):
                 labelOcc = math.exp(logOcc) * occ
                 entropy -= labelToWeight((label, labelStartTime, labelEndTime)) * labelOcc
 
-                acInput = outSeq[max(labelStartTime - self.distPrev.depth, 0):labelStartTime]
+                acInput = outSeqFilled[max(labelStartTime - self.distPrev.depth + numFilled, 0):(labelStartTime + numFilled)]
                 if not label[0]:
                     _, phInput, phOutput = label
                     self.durAcc.add((phInput, acInput), phOutput, labelOcc)
@@ -1393,7 +1383,7 @@ class AutoregressiveNetAcc(Acc):
             print 'fb:    overall net path entropy = %s (%s frames)' % (
                 (0.0, 0) if self.frames == 0 else (self.entropy / self.frames, self.frames)
             )
-        return AutoregressiveNetDist(self.distPrev.depth, self.distPrev.netFor, durDist, acDist, self.distPrev.pruneSpec, tag = self.tag), (self.entropy, Rat.LowerBound)
+        return AutoregressiveNetDist(self.distPrev.depth, self.distPrev.netFor, self.distPrev.fillFrames, durDist, acDist, self.distPrev.pruneSpec, tag = self.tag), (self.entropy, Rat.LowerBound)
 
 
 class Dist(object):
@@ -2574,9 +2564,10 @@ class AutoregressiveNetDist(Dist):
     phonetic output 0 and one with phonetic output 1, and both with the given
     phonetic context.
     """
-    def __init__(self, depth, netFor, durDist, acDist, pruneSpec, tag = None):
+    def __init__(self, depth, netFor, fillFrames, durDist, acDist, pruneSpec, tag = None):
         self.depth = depth
         self.netFor = netFor
+        self.fillFrames = fillFrames
         self.durDist = durDist
         self.acDist = acDist
         # (FIXME : could argue pruneSpec should be specified as part of
@@ -2586,16 +2577,18 @@ class AutoregressiveNetDist(Dist):
         self.pruneSpec = pruneSpec
         self.tag = tag
 
+        assert len(self.fillFrames) <= self.depth
+
         self.ring = semiring.logRealsField
 
     def __repr__(self):
-        return 'AutoregressiveNetDist('+repr(self.depth)+', '+repr(self.netFor)+', '+repr(self.durDist)+', '+repr(self.acDist)+', '+repr(self.pruneSpec)+', tag = '+repr(self.tag)+')'
+        return 'AutoregressiveNetDist('+repr(self.depth)+', '+repr(self.netFor)+', '+repr(self.fillFrames)+', '+repr(self.durDist)+', '+repr(self.acDist)+', '+repr(self.pruneSpec)+', tag = '+repr(self.tag)+')'
 
     def children(self):
         return [self.durDist, self.acDist]
 
     def mapChildren(self, mapChild):
-        return AutoregressiveNetDist(self.depth, self.netFor, mapChild(self.durDist), mapChild(self.acDist), self.pruneSpec, tag = self.tag)
+        return AutoregressiveNetDist(self.depth, self.netFor, self.fillFrames, mapChild(self.durDist), mapChild(self.acDist), self.pruneSpec, tag = self.tag)
 
     def getNet(self, input):
         net0 = self.netFor(input)
@@ -2625,11 +2618,13 @@ class AutoregressiveNetDist(Dist):
         return timedNet, labelToWeight
 
     def getLabelToWeight(self, outSeq):
+        numFilled = len(self.fillFrames)
+        outSeqFilled = self.fillFrames + outSeq
         def timedLabelToLogProb((label, labelStartTime, labelEndTime)):
             if label is None:
                 return 0.0
             else:
-                acInput = outSeq[max(labelStartTime - self.depth, 0):labelStartTime]
+                acInput = outSeqFilled[max(labelStartTime - self.depth + numFilled, 0):(labelStartTime + numFilled)]
                 if not label[0]:
                     _, phInput, phOutput = label
                     return self.durDist.logProb((phInput, acInput), phOutput)
@@ -2681,7 +2676,7 @@ class AutoregressiveNetDist(Dist):
         assert net.elem(endNode) is None
 
         outSeq = []
-        acInput = []
+        acInput = deque(self.fillFrames)
         node = startNode
         while node != endNode:
             nodedProbs = []
@@ -2690,16 +2685,17 @@ class AutoregressiveNetDist(Dist):
                     nodedProbs.append((nextNode, 1.0))
                 else:
                     phInput, phOutput = label
-                    logProb = self.durDist.logProb((phInput, acInput), phOutput)
+                    logProb = self.durDist.logProb((phInput, list(acInput)), phOutput)
                     nodedProbs.append((nextNode, math.exp(logProb)))
             node = sampleDiscrete(nodedProbs)
             elem = net.elem(node)
             if elem is not None:
                 phInput = elem
-                acOutput = self.acDist.synth((phInput, acInput), method)
+                acOutput = self.acDist.synth((phInput, list(acInput)), method)
                 outSeq.append(acOutput)
-                time = len(outSeq)
-                acInput = outSeq[max(time - self.depth, 0):time]
+                acInput.append(acOutput)
+                if len(acInput) > self.depth:
+                    acInput.popleft()
             if maxLength is not None and len(outSeq) > maxLength:
                 raise SynthSeqTooLongError('maximum length '+str(maxLength)+' exceeded during synth from AutoregressiveNetDist')
 
@@ -2715,4 +2711,4 @@ class AutoregressiveNetDist(Dist):
         paramsLeft = params
         durDist, paramsLeft = parseChild(self.durDist, paramsLeft)
         acDist, paramsLeft = parseChild(self.acDist, paramsLeft)
-        return AutoregressiveNetDist(self.depth, self.netFor, durDist, acDist, self.pruneSpec, tag = self.tag), paramsLeft
+        return AutoregressiveNetDist(self.depth, self.netFor, self.fillFrames, durDist, acDist, self.pruneSpec, tag = self.tag), paramsLeft

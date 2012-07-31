@@ -244,10 +244,8 @@ def gen_DebugDist(maxOcc = None, dimIn = 3):
     return d.DebugDist(maxOcc, subDist).withTag(randTag()), inputGen
 
 def gen_autoregressive_dist(depth = 2):
-    dist = d.MappedInputDist(AsArray(),
-        d.MappedInputDist(xf.AddBias(),
-            gen_LinearGaussian(dimIn = depth + 1)[0]
-        )
+    dist = d.MappedInputDist(xf.AddBias(),
+        gen_LinearGaussian(dimIn = depth + 1)[0]
     )
     return dist, None
 def autoregressive_1D_is_stable(dist, depth, starts = 5, stepsIntoFuture = 100, bigThresh = 1e6):
@@ -357,19 +355,15 @@ def gen_constant_AutoregressiveNetDist(depth = 2):
         if numEmitting >= 2 or numEmitting == 1 and randint(0, 4) == 0 or numEmitting == 0 and randint(0, 10) == 0:
             break
     durDist = d.createDiscreteDist(phInputToNumClassesDur.keys(), lambda phInput:
-        d.MappedInputDist(d.FillZerosToDepth(depth),
-            d.MappedInputDist(xf.AddBias(),
-                gen_classifier(numClasses = phInputToNumClassesDur[phInput], dimIn = depth + 1)[0]
-            )
+        d.MappedInputDist(xf.AddBias(),
+            gen_classifier(numClasses = phInputToNumClassesDur[phInput], dimIn = depth + 1)[0]
         )
     )
     acDist = d.createDiscreteDist(list(phInputsAc), lambda phInput:
-        d.MappedInputDist(d.FillZerosToDepth(depth),
-            gen_stable_autoregressive_dist(depth)[0]
-        )
+        gen_stable_autoregressive_dist(depth)[0]
     )
     pruneSpec = None if randBool() else d.SimplePruneSpec(betaThresh = (None if randBool() else 1000.0), logOccThresh = (None if randBool() else 1000.0))
-    dist = d.AutoregressiveNetDist(depth, ConstantFunction(net), durDist, acDist, pruneSpec).withTag(randTag())
+    dist = d.AutoregressiveNetDist(depth, ConstantFunction(net), [ 0.0 for i in range(depth) ], durDist, acDist, pruneSpec).withTag(randTag())
 
     def getInputGen():
         while True:
@@ -383,19 +377,15 @@ def gen_inSeq_AutoregressiveNetDist(depth = 2):
     subLabels = list(range(numSubLabels))
     labelledSubLabels = [ (label, subLabel) for label in labels for subLabel in subLabels ]
     durDist = d.createDiscreteDist(labelledSubLabels, lambda (label, subLabel):
-        d.MappedInputDist(d.FillZerosToDepth(depth),
-            d.MappedInputDist(xf.AddBias(),
-                gen_classifier(numClasses = 2, dimIn = depth + 1)[0]
-            )
+        d.MappedInputDist(xf.AddBias(),
+            gen_classifier(numClasses = 2, dimIn = depth + 1)[0]
         )
     )
     acDist = d.createDiscreteDist(labelledSubLabels, lambda (label, subLabel):
-        d.MappedInputDist(d.FillZerosToDepth(depth),
-            gen_stable_autoregressive_dist(depth)[0]
-        )
+        gen_stable_autoregressive_dist(depth)[0]
     )
     pruneSpec = None if randBool() else d.SimplePruneSpec(betaThresh = (None if randBool() else 1000.0), logOccThresh = (None if randBool() else 1000.0))
-    dist = d.AutoregressiveNetDist(depth, d.SimpleLeftToRightNetFor(subLabels), durDist, acDist, pruneSpec).withTag(randTag())
+    dist = d.AutoregressiveNetDist(depth, d.SimpleLeftToRightNetFor(subLabels), [ 0.0 for i in range(depth) ], durDist, acDist, pruneSpec).withTag(randTag())
 
     def getInputGen():
         while True:
