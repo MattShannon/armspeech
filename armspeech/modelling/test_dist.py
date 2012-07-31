@@ -649,9 +649,12 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
     if hasParams:
         paramsBefore = ps.params(dist)
 
-    distMapped = d.isolateDist(dist)
-    assert id(distMapped) != id(dist)
-    assert distMapped.tag == dist.tag
+    if True:
+        distMapped = d.isolateDist(dist)
+        assert id(distMapped) != id(dist)
+        assert distMapped.tag == dist.tag
+        if hasParams:
+            assert_allclose(ps.params(distMapped), ps.params(dist))
     if True:
         distFromPickle = persist.roundTrip(dist)
         assert id(distFromPickle) != id(dist)
@@ -675,7 +678,8 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
             if checkAdditional is not None:
                 checkAdditional(dist, input, output, eps)
             lp = dist.logProb(input, output)
-            assert_allclose(distMapped.logProb(input, output), lp)
+            if True:
+                assert_allclose(distMapped.logProb(input, output), lp)
             if True:
                 assert_allclose(distFromPickle.logProb(input, output), lp)
             if canEval:
