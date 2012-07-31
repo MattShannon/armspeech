@@ -2527,9 +2527,14 @@ class AutoregressiveNetDist(Dist):
     and phonetic output are arbitrary user-specified data. durDist should have a
     (phonetic context, acoustic context) pair as input and a phonetic output as
     output. acDist should have a (phonetic context, acoustic context) pair as
-    input and an acoustic output as output. Here the acoustic context at time t
-    is defined as outSeq[max(t - depth, 0):t]. The net returned by netFor should
-    contain no non-emitting cycles.
+    input and an acoustic output as output. The acoustic context at time t is
+    given by conceptually prepending fillFrames to outSeq, then taking as many
+    of the previous depth frames from this sequence as possible. fillFrames thus
+    affects only the initial frames with t < depth. If fillFrames is set to [],
+    the acoustic context for all the initial frames will be shorter than depth.
+    If fillFrames has length depth, the context for all the initial frames will
+    have length depth. The net returned by netFor should contain no non-emitting
+    cycles.
 
     This class internally expands the net specified by netFor, adding acoustic
     context as appropriate, to form a new "unrolled" net. Each transition in the
