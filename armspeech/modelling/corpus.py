@@ -38,7 +38,7 @@ class Corpus(object):
 
     def arOutError_frames(self, dist, uttIds, vecError, frameToVec = lambda frame: frame):
         def distError(dist, input, actualFrame):
-            synthFrame = dist.synth(input, method = d.SynthMethod.Meanish, actualOutput = actualFrame)
+            synthFrame = dist.synth(input, d.SynthMethod.Meanish, actualFrame)
             return vecError(frameToVec(synthFrame), frameToVec(actualFrame))
         return self.arError_frames(dist, uttIds, distError)
 
@@ -47,7 +47,7 @@ class Corpus(object):
         frames = 0
         for uttId in uttIds:
             input, actualOutput = self.data(uttId)
-            synthOutput = dist.synth(input, method = d.SynthMethod.Meanish, actualOutput = actualOutput)
+            synthOutput = dist.synth(input, d.SynthMethod.Meanish, actualOutput)
             synthFrameSeq = outputToFrameSeq(synthOutput)
             actualFrameSeq = outputToFrameSeq(actualOutput)
             if len(actualFrameSeq) != len(synthFrameSeq):
