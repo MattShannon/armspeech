@@ -16,47 +16,24 @@ class Corpus(object):
             input, output = self.data(uttId)
             acc.add(input, output)
 
-    def logProb_frames(self, dist, uttIds):
-        lp = 0.0
-        frames = 0
-        for uttId in uttIds:
-            input, output = self.data(uttId)
-            lpD, framesD = dist.logProb_frames(input, output)
-            lp += lpD
-            frames += framesD
-        return lp, frames
+    def sum(self, uttIds, computeValue):
+        return sum([ computeValue(*self.data(uttId)) for uttId in uttIds ])
 
-    def arError_frames(self, dist, uttIds, distError):
-        error = 0.0
-        frames = 0
-        for uttId in uttIds:
-            input, output = self.data(uttId)
-            errorD, framesD = dist.arError_frames(input, output, distError)
-            error += errorD
-            frames += framesD
-        return error, frames
+    def logProb(self, dist, uttIds):
+        def computeValue(input, output):
+            return dist.logProb(input, output)
+        return self.sum(uttIds, computeValue)
 
-    def arOutError_frames(self, dist, uttIds, vecError, frameToVec = lambda frame: frame):
-        def distError(dist, input, actualFrame):
-            synthFrame = dist.synth(input, d.SynthMethod.Meanish, actualFrame)
-            return vecError(frameToVec(synthFrame), frameToVec(actualFrame))
-        return self.arError_frames(dist, uttIds, distError)
-
-    def outError_frames(self, dist, uttIds, vecError, frameToVec = lambda frame: frame, outputToFrameSeq = lambda output: output):
-        error = 0.0
-        frames = 0
-        for uttId in uttIds:
-            input, actualOutput = self.data(uttId)
+    def outError(self, dist, uttIds, vecError, frameToVec = lambda frame: frame, outputToFrameSeq = lambda output: output):
+        def computeValue(input, actualOutput):
             synthOutput = dist.synth(input, d.SynthMethod.Meanish, actualOutput)
             synthFrameSeq = outputToFrameSeq(synthOutput)
             actualFrameSeq = outputToFrameSeq(actualOutput)
             if len(actualFrameSeq) != len(synthFrameSeq):
                 raise RuntimeError('actual and synthesized sequences must have the same length to compute error')
-            errorD = sum([ vecError(frameToVec(synthFrame), frameToVec(actualFrame)) for synthFrame, actualFrame in zip(synthFrameSeq, actualFrameSeq) ])
-            framesD = len(actualFrameSeq)
-            error += errorD
-            frames += framesD
-        return error, frames
+            error = sum([ vecError(frameToVec(synthFrame), frameToVec(actualFrame)) for synthFrame, actualFrame in zip(synthFrameSeq, actualFrameSeq) ])
+            return error
+        return self.sum(uttIds, computeValue)
 
     def synth(self, dist, uttId, method = d.SynthMethod.Sample):
         input, actualOutput = self.data(uttId)

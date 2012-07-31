@@ -74,6 +74,13 @@ class ArcticCorpus(cps.Corpus):
         assert labEndTime == len(acousticSeq)
         return (uttId, alignment), acousticSeq
 
+    def frames(self, uttIds):
+        frames = 0
+        for uttId in uttIds:
+            (uttId, alignment), acousticSeq = self.data(uttId)
+            frames += len(acousticSeq)
+        return frames
+
     def synthComplete(self, dist, uttIds, method, synthOutDir, exptTag, afterSynth = None, verbosity = 1):
         if verbosity >= 1:
             print 'synth: synthesizing to', synthOutDir, 'with tag', exptTag

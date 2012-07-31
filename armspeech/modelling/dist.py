@@ -2437,18 +2437,12 @@ class AutoregressiveSequenceDist(Dist):
         return AutoregressiveSequenceDist(self.depth, self.seqFor, self.fillFrames, mapChild(self.dist), tag = self.tag)
 
     def logProb(self, (uttId, input), outSeq):
-        lp, frames = self.logProb_frames((uttId, input), outSeq)
-        return lp
-
-    def logProb_frames(self, (uttId, input), outSeq):
         inSeq = self.seqFor(input)
         lp = 0.0
-        frames = 0
         assert len(inSeq) == len(outSeq)
         for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq, fillFrames = self.fillFrames)):
             lp += self.dist.logProb((inFrame, outContext), outFrame)
-            frames += 1
-        return lp, frames
+        return lp
 
     def logProbDerivInput(self, (uttId, input), outSeq):
         # FIXME : complete
@@ -2458,15 +2452,13 @@ class AutoregressiveSequenceDist(Dist):
         # FIXME : complete
         notyetimplemented
 
-    def arError_frames(self, (uttId, input), outSeq, distError):
+    def sum(self, (uttId, input), outSeq, computeValue):
         inSeq = self.seqFor(input)
-        error = 0.0
-        frames = 0
         assert len(inSeq) == len(outSeq)
-        for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq, fillFrames = self.fillFrames)):
-            error += distError(self.dist, (inFrame, outContext), outFrame)
-            frames += 1
-        return error, frames
+        return sum([
+            computeValue(self.dist, (inFrame, outContext), outFrame)
+            for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq, fillFrames = self.fillFrames))
+        ])
 
     def createAcc(self, createAccChild):
         return AutoregressiveSequenceAcc(self.depth, self.seqFor, self.fillFrames, createAccChild(self.dist), tag = self.tag)
@@ -2644,14 +2636,11 @@ class AutoregressiveNetDist(Dist):
         totalLogProb = wnet.sum(timedNet, labelToWeight = labelToWeight, ring = self.ring, getAgenda = self.getAgenda)
         return totalLogProb
 
-    def logProb_frames(self, (uttId, input), outSeq):
-        return self.logProb((uttId, input), outSeq), len(outSeq)
-
     def logProbDerivOutput(self, (uttId, input), outSeq):
         # FIXME : complete
         notyetimplemented
 
-    def arError_frames(self, (uttId, input), outSeq, distError):
+    def arError(self, (uttId, input), outSeq, distError):
         # FIXME : complete (compute using expectation semiring?)
         notyetimplemented
 

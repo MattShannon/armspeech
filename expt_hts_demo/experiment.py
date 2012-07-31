@@ -184,35 +184,42 @@ def main(rawArgs):
     def reportTrainAux((trainAux, trainAuxRat), trainFrames):
         print 'training aux = %s (%s) (%s frames)' % (trainAux / trainFrames, d.ratToString(trainAuxRat), trainFrames)
 
-    def evaluateTrainLogLike(dist, corpus):
-        logLike, count = corpus.logProb_frames(dist, corpus.trainUttIds)
-        print 'train set log like = %s (%s count)' % (logLike / count, count)
-
     def evaluateLogProb(dist, corpus):
-        trainLogProb, trainOcc = corpus.logProb_frames(dist, corpus.trainUttIds)
-        print 'train set log prob =', trainLogProb / trainOcc, '('+str(trainOcc)+' frames)'
-        testLogProb, testOcc = corpus.logProb_frames(dist, corpus.testUttIds)
-        print 'test set log prob =', testLogProb / testOcc, '('+str(testOcc)+' frames)'
+        trainLogProb = corpus.logProb(dist, corpus.trainUttIds)
+        trainFrames = corpus.frames(corpus.trainUttIds)
+        print 'train set log prob = %s (%s frames)' % (trainLogProb / trainFrames, trainFrames)
+        testLogProb = corpus.logProb(dist, corpus.testUttIds)
+        testFrames = corpus.frames(corpus.testUttIds)
+        print 'test set log prob = %s (%s frames)' % (testLogProb / testFrames, testFrames)
         print
 
     def evaluateMgcArOutError(dist, corpus, vecError = stdCepDist, desc = 'MARCD'):
         def frameToVec(frame):
             mgcFrame, lf0Frame, bapFrame = frame
             return mgcFrame
-        trainError, trainOcc = corpus.arOutError_frames(dist, corpus.trainUttIds, vecError, frameToVec)
-        print 'train set %s = %s (%s frames)' % (desc, trainError / trainOcc, trainOcc)
-        testError, testOcc = corpus.arOutError_frames(dist, corpus.testUttIds, vecError, frameToVec)
-        print 'test set %s = %s (%s frames)' % (desc, testError / testOcc, testOcc)
+        def distError(dist, input, actualFrame):
+            synthFrame = dist.synth(input, d.SynthMethod.Meanish, actualFrame)
+            return vecError(frameToVec(synthFrame), frameToVec(actualFrame))
+        def computeValue(inputUtt, outputUtt):
+            return dist.sum(inputUtt, outputUtt, distError)
+        trainError = corpus.sum(corpus.trainUttIds, computeValue)
+        trainFrames = corpus.frames(corpus.trainUttIds)
+        print 'train set %s = %s (%s frames)' % (desc, trainError / trainFrames, trainFrames)
+        testError = corpus.sum(corpus.testUttIds, computeValue)
+        testFrames = corpus.frames(corpus.testUttIds)
+        print 'test set %s = %s (%s frames)' % (desc, testError / testFrames, testFrames)
         print
 
     def evaluateMgcOutError(dist, corpus, vecError = stdCepDist, desc = 'MCD'):
         def frameToVec(frame):
             mgcFrame, lf0Frame, bapFrame = frame
             return mgcFrame
-        trainError, trainOcc = corpus.outError_frames(dist, corpus.trainUttIds, vecError, frameToVec)
-        print 'train set %s = %s (%s frames)' % (desc, trainError / trainOcc, trainOcc)
-        testError, testOcc = corpus.outError_frames(dist, corpus.testUttIds, vecError, frameToVec)
-        print 'test set %s = %s (%s frames)' % (desc, testError / testOcc, testOcc)
+        trainError = corpus.outError(dist, corpus.trainUttIds, vecError, frameToVec)
+        trainFrames = corpus.frames(corpus.trainUttIds)
+        print 'train set %s = %s (%s frames)' % (desc, trainError / trainFrames, trainFrames)
+        testError = corpus.outError(dist, corpus.testUttIds, vecError, frameToVec)
+        testFrames = corpus.frames(corpus.testUttIds)
+        print 'test set %s = %s (%s frames)' % (desc, testError / testFrames, testFrames)
         print
 
     def evaluateSynthesize(dist, corpus, exptTag, afterSynth = None):
