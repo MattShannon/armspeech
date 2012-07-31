@@ -266,6 +266,21 @@ def gen_stable_autoregressive_dist(depth = 2):
             break
     return dist, None
 
+def gen_AutoregressiveSequenceDist(depth = 2):
+    labels = string.lowercase[:randint(1, 10)]
+    acDist = d.createDiscreteDist(labels, lambda label:
+        gen_stable_autoregressive_dist(depth)[0]
+    )
+    dist = d.AutoregressiveSequenceDist(depth, xf.IdentityTransform(), [ 0.0 for i in range(depth) ], acDist).withTag(randTag())
+
+    def getInputGen():
+        while True:
+            labelSeq = [ random.choice(labels) for i in range(randint(0, 4)) ]
+            inSeq = [ label for label in labelSeq for i in range(randint(1, 4)) ]
+            yield randUttId(), inSeq
+    inputGen = getInputGen()
+    return dist, getInputGen()
+
 def add_autoregressive_style_labels(concreteNet, genLabels):
     net = concreteNet
     numNodes = net.numNodes
@@ -934,7 +949,17 @@ class TestDist(unittest.TestCase):
 
     # FIXME : add more tests for shared dists
 
-    # FIXME : add AutoregressiveSequenceDist test
+    def test_AutoregressiveSequenceDist(self, eps = 1e-8, numDists = 10, numPoints = 100):
+        def checkAccAdditional(acc, training):
+            assert_allclose(acc.frames, sum([ len(output) * occ for input, output, occ in training ]))
+        for distIndex in range(numDists):
+            depth = randint(0, 5)
+            dist, inputGen = gen_AutoregressiveSequenceDist(depth)
+            checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, checkAccAdditional = checkAccAdditional)
+            if self.deepTest:
+                initEstDist = randomizeParams(dist)
+                check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
+                check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
 
     # (FIXME : check this is not unnecessarily slow for any reason)
     def test_AutoregressiveNetDist(self, eps = 1e-8, numDists = 5, numPoints = 100):

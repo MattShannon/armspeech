@@ -34,7 +34,7 @@ def eval_local(reprString):
     # (FIXME : the contents of test_dist affects what needs to be included here)
     from questions import IdLabelValuer, SubsetQuestion
     from summarizer import VectorSeqSummarizer
-    from transform import AddBias, LinearTransform, ShiftOutputTransform, VectorizeTransform, DotProductTransform, PolynomialTransform1D
+    from transform import AddBias, IdentityTransform, LinearTransform, ShiftOutputTransform, VectorizeTransform, DotProductTransform, PolynomialTransform1D
     from wnet import ConcreteNet
     from armspeech.util.mathhelp import AsArray
     from armspeech.util.util import ConstantFunction
