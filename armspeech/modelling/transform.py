@@ -276,9 +276,11 @@ class AddBias(Transform):
     def __repr__(self):
         return 'AddBias(tag = '+repr(self.tag)+')'
     def __call__(self, x):
+        x = np.asarray(x)
         assert x.ndim == 1
         return np.append(x, 1.0)
     def deriv(self, x):
+        x = np.asarray(x)
         assert x.ndim == 1
         n = len(x)
         return np.eye(n, n + 1)
