@@ -631,7 +631,7 @@ def getTrainingSet(dist, inputGen, typicalSize, iid, unitOcc):
     assert len(trainingSet) == trainingSetSize
     return trainingSet
 
-def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = False, hasEM = True, canEval = True, ps = d.defaultParamSpec, logProbDerivInputCheck = False, logProbDerivInput_hasDiscrete_check = False, logProbDerivOutputCheck = False, logProbDerivOutput_hasDiscrete_checkFor = lambda output: False, checkAdditional = None, checkAccAdditional = None):
+def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = False, hasEM = True, evalShouldWork = True, ps = d.defaultParamSpec, logProbDerivInputCheck = False, logProbDerivInput_hasDiscrete_check = False, logProbDerivOutputCheck = False, logProbDerivOutput_hasDiscrete_checkFor = lambda output: False, checkAdditional = None, checkAccAdditional = None):
     assert dist.tag is not None
     if hasEM:
         assert d.defaultCreateAcc(dist).tag == dist.tag
@@ -665,12 +665,13 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
         assert pickle.dumps(persist.roundTrip(distFromPickle), protocol = 2) == pickle.dumps(distFromPickle, protocol = 2)
         if hasParams:
             assert_allclose(ps.params(distFromPickle), ps.params(dist))
-    if canEval:
+    if True:
         distEvaled = d.eval_local(repr(dist))
         assert distEvaled.tag == dist.tag
         assert repr(dist) == repr(distEvaled)
-        if hasParams:
-            assert_allclose(ps.params(distEvaled), ps.params(dist))
+        if evalShouldWork:
+            if hasParams:
+                assert_allclose(ps.params(distEvaled), ps.params(dist))
     if hasParams:
         distParsed = reparse(dist, ps)
     for input, output in points:
@@ -682,7 +683,7 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
                 assert_allclose(distMapped.logProb(input, output), lp)
             if True:
                 assert_allclose(distFromPickle.logProb(input, output), lp)
-            if canEval:
+            if True:
                 assert_allclose(distEvaled.logProb(input, output), lp)
             if hasParams:
                 assert_allclose(distParsed.logProb(input, output), lp)
@@ -956,7 +957,7 @@ class TestDist(unittest.TestCase):
             keys = list('abcde')[:randint(1, 5)]
             dimIn = randint(0, 5)
             dist, inputGen = gen_shared_DiscreteDist(keys, dimIn)
-            checkLots(dist, inputGen, canEval = False, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivOutputCheck = True)
+            checkLots(dist, inputGen, evalShouldWork = False, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivOutputCheck = True)
             if self.deepTest:
                 initEstDist = gen_shared_DiscreteDist(keys, dimIn)[0]
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
