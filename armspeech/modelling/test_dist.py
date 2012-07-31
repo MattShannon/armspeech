@@ -946,8 +946,6 @@ class TestDist(unittest.TestCase):
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
 
-    # FIXME : add more tests for shared dists
-
     def test_AutoregressiveSequenceDist(self, eps = 1e-8, numDists = 10, numPoints = 100):
         def checkAccAdditional(acc, training):
             assert_allclose(acc.frames, sum([ len(output) * occ for input, output, occ in training ]))
