@@ -2491,10 +2491,11 @@ class AutoregressiveSequenceDist(Dist):
     def createAcc(self, createAccChild):
         return AutoregressiveSequenceAcc(self.depth, self.fillFrames, createAccChild(self.dist), tag = self.tag)
 
-    def synth(self, (uttId, inSeq), method = SynthMethod.Sample, actualOutSeq = None):
-        return list(self.synthIterator((uttId, inSeq), method, actualOutSeq))
+    def synth(self, (uttId, inSeq), method = SynthMethod.Sample, actualOutput = None):
+        return list(self.synthIterator((uttId, inSeq), method = method, actualOutput = actualOutput))
 
-    def synthIterator(self, (uttId, inSeq), method = SynthMethod.Sample, actualOutSeq = None):
+    def synthIterator(self, (uttId, inSeq), method = SynthMethod.Sample, actualOutput = None):
+        actualOutSeq = actualOutput
         outContext = deque(self.fillFrames)
         assert len(inSeq) == len(actualOutSeq)
         for inFrame, actualOutFrame in izip(inSeq, actualOutSeq):
@@ -2673,11 +2674,12 @@ class AutoregressiveNetDist(Dist):
     def createAcc(self, createAccChild, verbosity = 0):
         return AutoregressiveNetAcc(distPrev = self, durAcc = createAccChild(self.durDist), acAcc = createAccChild(self.acDist), verbosity = verbosity, tag = self.tag)
 
-    def synth(self, (uttId, input), method = SynthMethod.Sample, actualOutSeq = None, maxLength = None):
+    def synth(self, (uttId, input), method = SynthMethod.Sample, actualOutput = None, maxLength = None):
         # (FIXME : align actualOutSeq and pass down to frames below?  (What exactly do I mean?))
         # (FIXME : can we do anything simple and reasonable with durations for meanish case?)
         forwards = True
         net = self.netFor(input)
+        actualOutSeq = actualOutput
         startNode = net.start(forwards)
         endNode = net.end(forwards)
         assert net.elem(startNode) is None
