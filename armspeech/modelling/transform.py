@@ -226,8 +226,8 @@ class FrozenTransform(Transform):
         return self.transform.logJac(x)
     def logJacDeriv(self, x):
         return self.transform.logJacDeriv(x)
-    def inv(self, x):
-        return self.transform.inv(x)
+    def inv(self, y):
+        return self.transform.inv(y)
 
 class InvertedTransform(Transform):
     def __init__(self, transform, tag = None):
