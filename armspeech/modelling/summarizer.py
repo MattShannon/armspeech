@@ -27,6 +27,27 @@ class ContextualVectorSummarizer(object):
         summary = self.vectorSummarizer(vectorInput, partialOutput, outIndex)
         return context, summary
 
+class IdentitySummarizer(object):
+    def __init__(self, order, outIndices = None):
+        if outIndices is None:
+            outIndices = range(order)
+        self.order = order
+        self.outIndices = outIndices
+
+    def __repr__(self):
+        return 'IdentitySummarizer('+repr(self.order)+', '+repr(self.outIndices)+')'
+
+    def __call__(self, input, partialOutput, outIndex):
+        return input
+
+    def createDist(self, contextual, createDistForIndex):
+        vectorSummarizer = ContextualVectorSummarizer(self) if contextual else self
+        return d.createVectorDist(self.order, self.outIndices, vectorSummarizer, createDistForIndex)
+
+    def createAcc(self, contextual, createAccForIndex):
+        vectorSummarizer = ContextualVectorSummarizer(self) if contextual else self
+        return d.createVectorAcc(self.order, self.outIndices, vectorSummarizer, createAccForIndex)
+
 class VectorSeqSummarizer(object):
     def __init__(self, order, depths, strictAboutDepth = True):
         self.order = order
