@@ -270,6 +270,18 @@ class InvertedTransform(Transform):
     def inv(self, x):
         return self.transform(x)
 
+class TransposeTransform(Transform):
+    def __init__(self, tag = None):
+        self.tag = tag
+    def __repr__(self):
+        return 'TransposeTransform(tag = '+repr(self.tag)+')'
+    def __call__(self, x):
+        return zip(*x)
+    def logJac(self, x):
+        return 0.0
+    def inv(self, y):
+        return zip(*y)
+
 class AddBias(Transform):
     def __init__(self, tag = None):
         self.tag = tag

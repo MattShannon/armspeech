@@ -27,9 +27,9 @@ def randBool():
 def randTag():
     return 'tag'+str(randint(0, 1000000))
 
-def shapeRand(ranks = [0, 1]):
+def shapeRand(ranks = [0, 1], allDimsNonZero = False):
     rank = random.choice(ranks)
-    return [ randint(0, 10) for i in range(rank) ]
+    return [ randint(1 if allDimsNonZero else 0, 10) for i in range(rank) ]
 
 def gen_genericTransform(shapeIn, shapeOut):
     # FIXME : below transforms are either linear or decompose across dimensions.
@@ -256,6 +256,11 @@ class TestTransform(unittest.TestCase):
             axfSub = gen_genericInvertibleTransform(shape = shape)
             axf = xf.InvertedTransform(axfSub).withTag(randTag())
             checkTransform(axf, shape, invertible = True, hasDeriv = True, hasParams = True, is1D = False, eps = eps, its = itsPerTransform)
+    def test_TransposeTransform(self, eps = 1e-8, its = 10, itsPerTransform = 10):
+        for it in range(its):
+            axf = xf.TransposeTransform().withTag(randTag())
+            shapeIn = shapeRand([2, 3, 4, 5], allDimsNonZero = True)
+            checkTransform(axf, shapeIn, invertible = True, hasDeriv = False, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
     def test_AddBias(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         for it in range(its):
             axf = xf.AddBias().withTag(randTag())
