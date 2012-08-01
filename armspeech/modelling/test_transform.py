@@ -172,7 +172,7 @@ def check_inv(transform, x, y):
     yAgain = transform(transform.inv(y))
     assert_allclose(yAgain, y, msg = 'inverse not consistent')
 
-def checkTransform(transform, shapeIn, invertible, hasParams, is1D, eps, its, checkAdditional = None):
+def checkTransform(transform, shapeIn, invertible, hasDeriv, hasParams, is1D, eps, its, checkAdditional = None):
     assert transform.tag is not None
     transformEvaled = xf.eval_local(repr(transform))
     assert transformEvaled.tag == transform.tag
@@ -191,19 +191,19 @@ def checkTransform(transform, shapeIn, invertible, hasParams, is1D, eps, its, ch
             assert_allclose(transformEvaled(x), transform(x))
         if hasParams:
             assert_allclose(transformParsed(x), transform(x))
-        if True:
+        if hasDeriv:
             check_deriv(transform, x, eps)
-        if is1D:
+        if is1D and hasDeriv:
             check_derivDeriv(transform, x, eps)
         if hasParams:
             check_derivParams(transform, x, eps)
-        if hasParams and is1D:
+        if hasDeriv and hasParams and is1D:
             check_derivParamsDeriv(transform, x, eps)
-        if invertible:
+        if invertible and hasDeriv:
             check_logJac(transform, x)
-        if invertible:
+        if invertible and hasDeriv:
             check_logJacDeriv(transform, x, eps)
-        if hasParams and invertible:
+        if invertible and hasDeriv and hasParams:
             check_logJacDerivParams(transform, x, eps)
         if invertible:
             check_inv(transform, x, randn(*shapeIn))
@@ -214,28 +214,28 @@ class TestTransform(unittest.TestCase):
             shapeIn = shapeRand()
             shapeOut = shapeRand()
             axf = gen_ConstantTransform(shapeIn = shapeIn, shapeOut = shapeOut)
-            checkTransform(axf, shapeIn, invertible = False, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
+            checkTransform(axf, shapeIn, invertible = False, hasDeriv = True, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
     def test_IdentityTransform(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         def checkAdditional(transform, x, eps):
             assert_allclose(transform(x), x)
         for it in range(its):
             axf = xf.IdentityTransform().withTag(randTag())
             shapeIn = shapeRand()
-            checkTransform(axf, shapeIn, invertible = True, hasParams = True, is1D = False, eps = eps, its = itsPerTransform, checkAdditional = checkAdditional)
+            checkTransform(axf, shapeIn, invertible = True, hasDeriv = True, hasParams = True, is1D = False, eps = eps, its = itsPerTransform, checkAdditional = checkAdditional)
     def test_DotProductTransform(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         for it in range(its):
             shapeIn = shapeRand(ranks = [1])
             axf = gen_DotProductTransform(shapeIn = shapeIn)
-            checkTransform(axf, shapeIn, invertible = False, hasParams = True, is1D = False, eps = eps, its = itsPerTransform)
+            checkTransform(axf, shapeIn, invertible = False, hasDeriv = True, hasParams = True, is1D = False, eps = eps, its = itsPerTransform)
     def test_LinearTransform(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         for it in range(its):
             shapeIn = shapeRand(ranks = [1])
             shapeOut = shapeRand(ranks = [1])
             axf = gen_LinearTransform(shapeIn = shapeIn, shapeOut = shapeOut)
-            checkTransform(axf, shapeIn, invertible = False, hasParams = True, is1D = False, eps = eps, its = itsPerTransform)
+            checkTransform(axf, shapeIn, invertible = False, hasDeriv = True, hasParams = True, is1D = False, eps = eps, its = itsPerTransform)
             shape = shapeRand(ranks = [1])
             axf = gen_InvertibleLinearTransform(shape = shape)
-            checkTransform(axf, shape, invertible = True, hasParams = True, is1D = False, eps = eps, its = itsPerTransform)
+            checkTransform(axf, shape, invertible = True, hasDeriv = True, hasParams = True, is1D = False, eps = eps, its = itsPerTransform)
     def test_FrozenTransform(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         for it in range(its):
             shapeIn = shapeRand()
@@ -245,27 +245,27 @@ class TestTransform(unittest.TestCase):
                 shapeOut = shapeRand()
             axfSub = gen_genericTransform(shapeIn = shapeIn, shapeOut = shapeOut)
             axf = xf.FrozenTransform(axfSub).withTag(randTag())
-            checkTransform(axf, shapeIn, invertible = False, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
+            checkTransform(axf, shapeIn, invertible = False, hasDeriv = True, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
             shape = shapeRand()
             axfSub = gen_genericInvertibleTransform(shape = shape)
             axf = xf.FrozenTransform(axfSub).withTag(randTag())
-            checkTransform(axf, shape, invertible = True, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
+            checkTransform(axf, shape, invertible = True, hasDeriv = True, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
     def test_InvertedTransform(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         for it in range(its):
             shape = shapeRand()
             axfSub = gen_genericInvertibleTransform(shape = shape)
             axf = xf.InvertedTransform(axfSub).withTag(randTag())
-            checkTransform(axf, shape, invertible = True, hasParams = True, is1D = False, eps = eps, its = itsPerTransform)
+            checkTransform(axf, shape, invertible = True, hasDeriv = True, hasParams = True, is1D = False, eps = eps, its = itsPerTransform)
     def test_AddBias(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         for it in range(its):
             axf = xf.AddBias().withTag(randTag())
             shapeIn = [randint(0, 10)]
-            checkTransform(axf, shapeIn, invertible = False, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
+            checkTransform(axf, shapeIn, invertible = False, hasDeriv = True, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
     def test_MinusPrev(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         for it in range(its):
             axf = xf.MinusPrev().withTag(randTag())
             shapeIn = [randint(1, 10)]
-            checkTransform(axf, shapeIn, invertible = False, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
+            checkTransform(axf, shapeIn, invertible = False, hasDeriv = True, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
     # FIXME : add test for Msd01ToVector
     def test_VectorizeTransform(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         def checkAdditional(transform, x, eps):
@@ -273,35 +273,35 @@ class TestTransform(unittest.TestCase):
         for it in range(its):
             F = xf.VectorizeTransform(gen_genericTransform1D()).withTag(randTag())
             shapeIn = shapeRand([1])
-            checkTransform(F, shapeIn, invertible = False, hasParams = True, is1D = False, eps = eps, its = itsPerTransform, checkAdditional = checkAdditional)
+            checkTransform(F, shapeIn, invertible = False, hasDeriv = True, hasParams = True, is1D = False, eps = eps, its = itsPerTransform, checkAdditional = checkAdditional)
             F = xf.VectorizeTransform(gen_genericInvertibleTransform1D()).withTag(randTag())
             shapeIn = shapeRand([1])
-            checkTransform(F, shapeIn, invertible = True, hasParams = True, is1D = False, eps = eps, its = itsPerTransform, checkAdditional = checkAdditional)
+            checkTransform(F, shapeIn, invertible = True, hasDeriv = True, hasParams = True, is1D = False, eps = eps, its = itsPerTransform, checkAdditional = checkAdditional)
     def test_PolynomialTransform1D(self, eps = 1e-8, its = 50, itsPerTransform = 10):
         for it in range(its):
             f = gen_PolynomialTransform1D()
-            checkTransform(f, [], invertible = False, hasParams = True, is1D = True, eps = eps, its = itsPerTransform)
+            checkTransform(f, [], invertible = False, hasDeriv = True, hasParams = True, is1D = True, eps = eps, its = itsPerTransform)
     def test_ScaledSinhTransform1D(self, eps = 1e-8, its = 50, itsPerTransform = 10):
         for it in range(its):
             f = gen_ScaledSinhTransform1D()
-            checkTransform(f, [], invertible = True, hasParams = True, is1D = True, eps = eps, its = itsPerTransform)
+            checkTransform(f, [], invertible = True, hasDeriv = True, hasParams = True, is1D = True, eps = eps, its = itsPerTransform)
     def test_TanhTransformLogParam1D(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         for it in range(its):
             f = gen_TanhTransformLogParam1D()
-            checkTransform(f, [], invertible = False, hasParams = True, is1D = True, eps = eps, its = itsPerTransform)
+            checkTransform(f, [], invertible = False, hasDeriv = True, hasParams = True, is1D = True, eps = eps, its = itsPerTransform)
     def test_TanhTransform1D(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         for it in range(its):
             f = gen_TanhTransform1D()
-            checkTransform(f, [], invertible = False, hasParams = True, is1D = True, eps = eps, its = itsPerTransform)
+            checkTransform(f, [], invertible = False, hasDeriv = True, hasParams = True, is1D = True, eps = eps, its = itsPerTransform)
     def test_SumTransform1D(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         for it in range(its):
             numTanh = randint(0, 5)
             f = gen_InvertibleSumOfTanhLogParam1D(numTanh)
-            checkTransform(f, [], invertible = True, hasParams = True, is1D = True, eps = eps, its = itsPerTransform)
+            checkTransform(f, [], invertible = True, hasDeriv = True, hasParams = True, is1D = True, eps = eps, its = itsPerTransform)
             f = gen_SumOfTanh1D(numTanh)
-            checkTransform(f, [], invertible = False, hasParams = True, is1D = True, eps = eps, its = itsPerTransform)
+            checkTransform(f, [], invertible = False, hasDeriv = True, hasParams = True, is1D = True, eps = eps, its = itsPerTransform)
             f = gen_InvertibleSumOfTanh1D(numTanh, tricky = True)
-            checkTransform(f, [], invertible = True, hasParams = True, is1D = True, eps = eps, its = itsPerTransform)
+            checkTransform(f, [], invertible = True, hasDeriv = True, hasParams = True, is1D = True, eps = eps, its = itsPerTransform)
 
 def gen_genericOutputTransform(shapeInput, shapeOutput):
     # FIXME : something more general?
