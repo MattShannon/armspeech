@@ -10,7 +10,6 @@ Requires Sun Grid Engine `qsub` command to work on the local machine.
 
 
 from __future__ import division
-from __future__ import with_statement
 
 import queuer as qr
 import sge_runner

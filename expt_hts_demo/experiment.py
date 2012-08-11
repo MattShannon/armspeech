@@ -9,7 +9,6 @@
 
 
 from __future__ import division
-from __future__ import with_statement
 
 from armspeech.modelling import nodetree
 import armspeech.modelling.dist as d
