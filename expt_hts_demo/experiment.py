@@ -65,7 +65,7 @@ def getFirst(x, default = None):
 
 def getStandardizeAlignment(subLabels):
     numSubLabels = len(subLabels)
-    haveWarned = False
+    haveWarned = [False]
     def standardizeAlignment(alignment):
         """Returns a standardized, state-level alignment.
 
@@ -83,9 +83,9 @@ def getStandardizeAlignment(subLabels):
                 alignmentOut.append((phoneStartTime, phoneEndTime, label, [(phoneStartTime, phoneEndTime, 0, None)]))
             else:
                 if subAlignment is None:
-                    if not haveWarned:
+                    if not haveWarned[0]:
                         print 'NOTE: only phone-level alignment specified, so will use uniform segmentation to obtain a state-level alignment (not ideal)'
-                        haveWarned = True
+                        haveWarned[0] = True
                     phoneDur = (phoneEndTime - phoneStartTime) * 1.0
                     subAlignmentOut = []
                     for subLabelIndex, subLabel in enumerate(subLabels):
