@@ -125,7 +125,7 @@ def trainCG(distInit, accumulate, ps = d.defaultParamSpec, length = -50, verbosi
 
     return dist
 
-def trainCGandEM(distInit, accumulate, ps = d.defaultParamSpec, createAccEM = d.defaultCreateAcc, estimate = d.defaultEstimate, iterations = 5, length = -50, afterEst = None, verbosity = 0):
+def trainCGandEM(distInit, accumulate, ps = d.defaultParamSpec, createAccEM = d.defaultCreateAcc, estimateTotAux = d.defaultEstimateTotAux, iterations = 5, length = -50, afterEst = None, verbosity = 0):
     """Re-estimates a distribution using conjugate gradients and EM.
 
     See the note in the docstring for this module for information on how the
@@ -141,9 +141,7 @@ def trainCGandEM(distInit, accumulate, ps = d.defaultParamSpec, createAccEM = d.
 
         dist = (timed(trainCG) if verbosity >= 2 else trainCG)(dist, accumulate, ps = ps, length = length, verbosity = verbosity)
 
-        acc = createAccEM(dist)
-        (timed(accumulate) if verbosity >= 2 else accumulate)(acc)
-        dist = estimate(acc)
+        dist, _, _, _ = expectationMaximization(dist, accumulate, createAcc = createAccEM, estimateTotAux = estimateTotAux, verbosity = verbosity)
 
         if afterEst is not None:
             afterEst(dist = dist, it = it)
