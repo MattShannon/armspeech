@@ -44,7 +44,7 @@ def expectationMaximization(distPrev, accumulate, createAcc = d.defaultCreateAcc
     count = max(count, 1.0)
     dist, (aux, auxRat) = estimateTotAux(acc)
     if monotoneAux and aux < logLikePrev:
-        raise RuntimeError('re-estimated auxiliary value (%s) less than previous log likelihood (%s) during expectation-maximization' % (aux / count, logLikePrev / count))
+        raise RuntimeError('re-estimated auxiliary value (%s) less than previous log likelihood (%s) during expectation-maximization (count = %s)' % (aux / count, logLikePrev / count, count))
     if verbosity >= 2:
         print 'trainEM:    logLikePrev = %s -> aux = %s (%s) (%s count)' % (logLikePrev / count, aux / count, d.ratToString(auxRat), count)
     return dist, logLikePrev, (aux, auxRat), count
@@ -90,6 +90,7 @@ def trainEM(distInit, accumulate, createAcc = d.defaultCreateAcc, estimateTotAux
 
     return dist
 
+# FIXME : try alternative minimizers (e.g. LBFGS, minFunc)
 def trainCG(distInit, accumulate, ps = d.defaultParamSpec, length = -50, verbosity = 0):
     """Re-estimates a distribution using a conjugate gradient optimizer.
 
