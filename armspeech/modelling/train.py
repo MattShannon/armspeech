@@ -1,4 +1,19 @@
-"""Helper functions for training models."""
+"""Helper functions for training models.
+
+Several of the functions below implement approximate maximum likelihood
+estimation by optimizing the scaled log likelihood. The scale factor used in
+these cases is the reciprocal of the "count" for the given dist, unless this
+count is less than 1.0, in which case the scale factor used is 1.0. The scale
+factor is included to make the logging output produced during optimization more
+intuitively comprehensible. The inclusion of the scale factor typically has
+little or no impact on the minimization itself.
+
+The special-casing for small counts is necessary since the count may be zero
+even when the training set is non-empty (e.g. for autoregressive sequence
+distributions where the count is the number of frames rather than the
+occupancy). Special-cased values are used only internally and for logging output
+in the functions below, and are not part of their return values.
+"""
 
 # Copyright 2011, 2012 Matt Shannon
 
@@ -14,13 +29,19 @@ from minimize import minimize
 from armspeech.util.timing import timed
 
 def expectationMaximization(distPrev, accumulate, createAcc = d.defaultCreateAcc, estimateTotAux = d.defaultEstimateTotAux, afterAcc = None, monotoneAux = True, verbosity = 0):
-    """Performs one step of expectation-maximization."""
+    """Performs one step of expectation maximization.
+
+    See the note in the docstring for this module for information on how the
+    log likelihood is scaled. This scaling has no effect on the dist returned
+    by this function.
+    """
     acc = createAcc(distPrev)
     accumulate(acc)
     if afterAcc is not None:
         afterAcc(acc)
     logLikePrev = acc.logLike()
     count = acc.count()
+    count = max(count, 1.0)
     dist, (aux, auxRat) = estimateTotAux(acc)
     if monotoneAux and aux < logLikePrev:
         raise RuntimeError('re-estimated auxiliary value (%s) less than previous log likelihood (%s) during expectation-maximization' % (aux / count, logLikePrev / count))
@@ -29,6 +50,14 @@ def expectationMaximization(distPrev, accumulate, createAcc = d.defaultCreateAcc
     return dist, logLikePrev, (aux, auxRat), count
 
 def trainEM(distInit, accumulate, createAcc = d.defaultCreateAcc, estimateTotAux = d.defaultEstimateTotAux, logLikePrevInit = float('-inf'), deltaThresh = 1e-8, minIterations = 1, maxIterations = None, beforeAcc = None, afterAcc = None, afterEst = None, monotone = False, monotoneAux = True, verbosity = 0):
+    """Re-estimates a distribution using expectation maximization.
+
+    See the note in the docstring for this module for information on how the
+    log likelihood is scaled. This scaling only affects the dist returned by
+    this function to the extent that it effectively scales the deltaThresh
+    threshold used to assess convergence, and so may sometimes affect the number
+    of iterations of expectation maximization performed.
+    """
     assert minIterations >= 1
     assert maxIterations is None or maxIterations >= minIterations
 
@@ -62,13 +91,20 @@ def trainEM(distInit, accumulate, createAcc = d.defaultCreateAcc, estimateTotAux
     return dist
 
 def trainCG(distInit, accumulate, ps = d.defaultParamSpec, length = -50, verbosity = 0):
+    """Re-estimates a distribution using a conjugate gradient optimizer.
+
+    See the note in the docstring for this module for information on how the
+    log likelihood is scaled. This scaling is presumed to have only a small
+    impact on the dist returned by this function.
+    """
+    # (FIXME : investigate how large the effect of the scale factor is for
+    #   a few example dists?)
     def negLogLike_derivParams(params):
         dist = ps.parseAll(distInit, params)
         acc = ps.createAccG(dist)
         accumulate(acc)
         count = acc.count()
-        # FIXME : is it better to return logLike or logLike-per-count (e.g. logLike-per-frame)? (i.e. for which of these is minimize typically faster?)
-        assert count > 0.0
+        count = max(count, 1.0)
         return -acc.logLike() / count, -ps.derivParams(acc) / count
 
     params = ps.params(distInit)
@@ -89,6 +125,12 @@ def trainCG(distInit, accumulate, ps = d.defaultParamSpec, length = -50, verbosi
     return dist
 
 def trainCGandEM(distInit, accumulate, ps = d.defaultParamSpec, createAccEM = d.defaultCreateAcc, estimate = d.defaultEstimate, iterations = 5, length = -50, afterEst = None, verbosity = 0):
+    """Re-estimates a distribution using conjugate gradients and EM.
+
+    See the note in the docstring for this module for information on how the
+    log likelihood is scaled. This scaling is presumed to have only a small
+    impact on the dist returned by this function (via its impact on trainCG).
+    """
     assert iterations >= 1
 
     dist = distInit
