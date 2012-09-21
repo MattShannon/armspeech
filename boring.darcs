@@ -7,3 +7,5 @@
 
 ^expt_hts_demo/[^/]*\.log$
 
+\.pyc$
+
