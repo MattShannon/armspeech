@@ -180,6 +180,28 @@ def main(rawArgs):
     assert lf0FirstFrameProportionUnvoiced >= 0.5
     firstFrameAverage = mgcFirstFrameAverage, None, bapFirstFrameAverage
 
+    def computeFrameMeanAndVariance():
+        mgcSum = np.zeros((mgcStream.order,))
+        mgcSumSqr = np.zeros((mgcStream.order,))
+        bapSum = np.zeros((bapStream.order,))
+        bapSumSqr = np.zeros((bapStream.order,))
+        numFrames = 0
+        for uttId in corpus.trainUttIds:
+            (uttId, alignment), acousticSeq = corpus.data(uttId)
+            for mgcFrame, lf0Frame, bapFrame in acousticSeq:
+                mgcFrame = np.asarray(mgcFrame)
+                bapFrame = np.asarray(bapFrame)
+                mgcSum += mgcFrame
+                mgcSumSqr += mgcFrame * mgcFrame
+                bapSum += bapFrame
+                bapSumSqr += bapFrame * bapFrame
+            numFrames += len(acousticSeq)
+        mgcMean = mgcSum / numFrames
+        bapMean = bapSum / numFrames
+        mgcVariance = mgcSumSqr / numFrames - mgcMean * mgcMean
+        bapVariance = bapSumSqr / numFrames - bapMean * bapMean
+        return (mgcMean, bapMean), (mgcVariance, bapVariance)
+
 
     def reportTrainAux((trainAux, trainAuxRat), trainFrames):
         print 'training aux = %s (%s) (%s frames)' % (trainAux / trainFrames, d.ratToString(trainAuxRat), trainFrames)
