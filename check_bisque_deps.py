@@ -1,0 +1,398 @@
+#!/usr/bin/python -u
+
+import os
+import sys
+import inspect
+import _ast
+import ast
+import symtable
+import importlib
+
+def peekIter(it):
+    it = iter(it)
+    elem = it.next()
+    done = False
+    while not done:
+        try:
+            elemNext = it.next()
+        except StopIteration:
+            elemNext = None
+            done = True
+        yield elem, elemNext
+        elem = elemNext
+
+def attachAstAndSymtab(nodes, symtab, depth = 0):
+    """Walks an AST and a symtable at the same time, linking them.
+
+    A scope_depth attribute is added to each symtab giving the number of levels
+    of nested scope above the current symtab.
+    A symtab_current_scope attribute is added to each AST node giving the symtab
+    for the scope that is current at that node.
+    """
+    symtab.scope_depth = depth
+    symtabChildrenLeft = list(reversed(symtab.get_children()))
+    for node in nodes:
+        attachAstAndSymtabSub(node, symtab, symtabChildrenLeft, depth = depth)
+    assert not symtabChildrenLeft
+
+def attachAstAndSymtabSub(node, symtab, symtabChildrenLeft, depth):
+    node.symtab_current_scope = symtab
+    if isinstance(node, (_ast.FunctionDef, _ast.ClassDef, _ast.Lambda)):
+        # new scope introduced, and used in some of the children
+
+        if isinstance(node, _ast.FunctionDef):
+            subNodesOldScope = node.args.defaults + node.decorator_list
+            subNodesNewScope = node.args.args + node.body
+            # node.args itself would otherwise be missed out
+            node.args.symtab_current_scope = symtab
+        elif isinstance(node, _ast.ClassDef):
+            subNodesOldScope = node.bases + node.decorator_list
+            subNodesNewScope = node.body
+        elif isinstance(node, _ast.Lambda):
+            subNodesOldScope = node.args.defaults
+            subNodesNewScope = node.args.args + [node.body]
+            # node.args itself would otherwise be missed out
+            node.args.symtab_current_scope = symtab
+
+        for subNode in subNodesOldScope:
+            attachAstAndSymtabSub(subNode, symtab, symtabChildrenLeft, depth = depth)
+
+        symtabChild = symtabChildrenLeft.pop()
+        if isinstance(node, (_ast.FunctionDef, _ast.ClassDef)):
+            assert symtabChild.get_name() == node.name
+        attachAstAndSymtab(subNodesNewScope, symtabChild, depth = depth + 1)
+    else:
+        for subNode in ast.iter_child_nodes(node):
+            attachAstAndSymtabSub(subNode, symtab, symtabChildrenLeft, depth = depth)
+
+def isGlobal(symtab, symName):
+    """Returns True if symbol referred to by symName in symtab is global.
+
+    This is provided to work around the fact that Symbol.is_global() is False
+    for module-level variables accessed from module-level.
+    """
+    sym = symtab.lookup(symName)
+    return symtab.get_type() == 'module' or sym.is_global()
+
+# (FIXME : is store stuff actually useful?)
+def findGlobalUses(node, onLoadGlobalFound, onStoreGlobalFound, insideAssignTarget = False):
+    curr_symtab = node.symtab_current_scope
+    depth = curr_symtab.scope_depth
+    if isinstance(node, _ast.Call) and isinstance(node.func, _ast.Name) and node.func.id == 'bisqueDeps':
+        # ignore load / store events in arguments to bisqueDeps
+        for subNode in ast.iter_child_nodes(node):
+            findGlobalUses(subNode, lambda name: (), lambda name: (), insideAssignTarget = insideAssignTarget)
+    elif isinstance(node, _ast.Name) and isGlobal(curr_symtab, node.id):
+        if not insideAssignTarget:
+            assert isinstance(node.ctx, (_ast.Load, _ast.AugLoad))
+        if isinstance(node.ctx, (_ast.Load, _ast.AugLoad)):
+            onLoadGlobalFound(node.id)
+        if insideAssignTarget:
+            onStoreGlobalFound(node.id)
+        # no children
+    elif isinstance(node, _ast.Attribute) and isinstance(node.value, _ast.Name) and isGlobal(curr_symtab, node.value.id):
+        assert isinstance(node.value.ctx, (_ast.Load, _ast.AugLoad))
+        if not insideAssignTarget:
+            assert isinstance(node.ctx, (_ast.Load, _ast.AugLoad))
+            onLoadGlobalFound(node.value.id+'.'+node.attr)
+        else:
+            if isinstance(node.ctx, (_ast.Load, _ast.AugLoad)):
+                onLoadGlobalFound(node.value.id+'.'+node.attr)
+            else:
+                onLoadGlobalFound(node.value.id)
+            sys.stderr.write('WARNING: may be assigned to an attribute of a global: %s (context = %s)\n' % (node.value.id+'.'+node.attr, node.ctx))
+        # all children have already been dealt with
+    elif isinstance(node, (_ast.Delete, _ast.Assign, _ast.AugAssign)):
+        assert not insideAssignTarget
+        if isinstance(node, _ast.AugAssign):
+            targets = [node.target]
+        else:
+            targets = node.targets
+        for subNode in targets:
+            findGlobalUses(subNode, onLoadGlobalFound, onStoreGlobalFound, insideAssignTarget = True)
+        if not isinstance(node, _ast.Delete):
+            findGlobalUses(node.value, onLoadGlobalFound, onStoreGlobalFound, insideAssignTarget = False)
+    else:
+        for subNode in ast.iter_child_nodes(node):
+            findGlobalUses(subNode, onLoadGlobalFound, onStoreGlobalFound, insideAssignTarget = insideAssignTarget)
+
+def assignsNames(node):
+    if isinstance(node, (_ast.FunctionDef, _ast.ClassDef)):
+        return [node.name]
+    elif isinstance(node, _ast.Assign):
+        ret = []
+        for subNode in node.targets:
+            if isinstance(subNode, _ast.Name):
+                assert isinstance(subNode.ctx, _ast.Store)
+                ret.append(subNode.id)
+        return ret
+    else:
+        return []
+
+def simpleAssignToName(node):
+    """If a simple assignment to a name, return name, otherwise None."""
+    if isinstance(node, _ast.Assign) and len(node.targets) == 1:
+        targetNode = node.targets[0]
+        if isinstance(targetNode, _ast.Name):
+            return targetNode.id
+        else:
+            return None
+    else:
+        return None
+
+def prettyPrintBisqueDepsStanza(deps, init = '@', maxLineLength = 80):
+    if not deps:
+        return init+'bisqueDeps()'
+    else:
+        ret = init+'bisqueDeps('+(', '.join(deps))+')'
+        if len(ret) <= maxLineLength:
+            return ret
+        else:
+            ret = ''
+            currLine = init+'bisqueDeps('+deps[0]+','
+            for dep in deps[1:]:
+                if len(currLine) + len(dep) + 2 <= maxLineLength:
+                    currLine += (' '+dep+',')
+                else:
+                    ret += (currLine+'\n')
+                    currLine = '    '+dep+','
+            ret += currLine[:-1]+'\n)'
+            return ret
+
+def main(args):
+    srcRootDir = os.path.abspath(os.path.dirname(args[0]))
+    moduleName = args[1]
+
+    sys.stderr.write('(using srcRootDir = %s)\n' % srcRootDir)
+
+    module = importlib.import_module(moduleName)
+
+    moduleFile = os.path.abspath(inspect.getsourcefile(module))
+    moduleFileContents = file(moduleFile).read()
+    moduleFileLines = moduleFileContents.split('\n')
+    assert moduleFileLines[-1] == ''
+    moduleFileLines = moduleFileLines[:-1]
+
+    sys.stderr.write('(module %s from %s)\n' % (moduleName, moduleFile))
+
+    nodeModule = ast.parse(moduleFileContents, moduleFile, 'exec')
+    symtab = symtable.symtable(moduleFileContents, moduleFile, 'exec')
+
+    attachAstAndSymtab(nodeModule.body, symtab)
+
+    sys.stderr.write('\n')
+    sys.stderr.write('FINDING GLOBALS:\n')
+
+    loadGlobalss = []
+    storeGlobalss = []
+    for node in nodeModule.body:
+        loadGlobals = []
+        storeGlobals = []
+        def onLoadGlobalFound(name):
+            if '.' in name:
+                nameLeft, nameRight = name.split('.', 1)
+                nameLeftObj = eval(nameLeft, vars(module))
+                if inspect.ismodule(nameLeftObj):
+                    loadGlobals.append(name)
+                else:
+                    loadGlobals.append(nameLeft)
+            else:
+                loadGlobals.append(name)
+        def onStoreGlobalFound(name):
+            storeGlobals.append(name)
+        findGlobalUses(node, onLoadGlobalFound, onStoreGlobalFound)
+        loadGlobals = sorted(set(loadGlobals))
+        storeGlobals = sorted(set(storeGlobals))
+        loadGlobalss.append(loadGlobals)
+        storeGlobalss.append(storeGlobals)
+
+    sys.stderr.write('\n')
+    sys.stderr.write('REWIRING DEPS FOR PRIVATE VARIABLES:\n')
+
+    privateDeps = dict()
+    for nodeIndex, node in enumerate(nodeModule.body):
+        # expand any private variables which are in loadGlobals for this node
+        loadGlobals = loadGlobalss[nodeIndex]
+        newLoadGlobals = set()
+        for name in loadGlobals:
+            if name.startswith('_'):
+                newLoadGlobals.update(privateDeps[name])
+            else:
+                newLoadGlobals.add(name)
+        loadGlobalss[nodeIndex] = sorted(newLoadGlobals)
+
+        # add current node to privateDeps if appropriate
+        nameAssignedTo = simpleAssignToName(node)
+        if nameAssignedTo is not None and nameAssignedTo.startswith('_'):
+            # statement is simple assignment to a private variable, i.e. of the form '_bla = ...'
+            privateDeps[nameAssignedTo] = loadGlobals
+            sys.stderr.write('will expand %s to %s\n' % (nameAssignedTo, loadGlobals))
+
+    sys.stderr.write('\n')
+    sys.stderr.write('RESOLVING LOCATIONS:\n')
+    namesDefinedInModule = set([ subNode for node in nodeModule.body for subNode in assignsNames(node) ])
+
+    names = set()
+    for node, loadGlobals, storeGlobals in zip(nodeModule.body, loadGlobalss, storeGlobalss):
+        names.update(loadGlobals)
+    namesWithinRoot = set()
+    for name in names:
+        if name in namesDefinedInModule:
+            namesWithinRoot.add(name)
+        elif name in ('True', 'False'):
+            pass
+        else:
+            if '.' in name:
+                nameLeft, nameRight = name.split('.', 1)
+                nameLeftObj = eval(nameLeft, vars(module))
+                assert inspect.ismodule(nameLeftObj)
+                if hasattr(nameLeftObj, '__file__'):
+                    sourceFileRel = inspect.getsourcefile(nameLeftObj)
+                else:
+                    # built-in module (according to code in inspect.py)
+                    sourceFileRel = None
+            else:
+                try:
+                    nameObj = eval(name, vars(module))
+                except NameError:
+                    sys.stderr.write('NOTE: %s refers to nothing (ignoring)\n' % name)
+                    nameObj = None
+                if nameObj is None:
+                    sourceFileRel = None
+                elif inspect.isbuiltin(nameObj) or getattr(nameObj, '__module__', None) == '__builtin__':
+                    sourceFileRel = None
+                elif inspect.ismodule(nameObj) and not hasattr(nameObj, '__file__'):
+                    # built-in module (according to code in inspect.py)
+                    sourceFileRel = None
+                elif inspect.isclass(nameObj) and not hasattr(sys.modules.get(nameObj.__module__), '__file__'):
+                    # built-in class (according to code in inspect.py)
+                    sourceFileRel = None
+                else:
+                    try:
+                        sourceFileRel = inspect.getsourcefile(nameObj)
+                    except TypeError:
+                        sourceFileRel = None
+                        sys.stderr.write('NOTE: %s had no source file\n' % name)
+            if sourceFileRel is not None:
+                sourceFile = os.path.abspath(sourceFileRel)
+                if os.path.commonprefix([srcRootDir, sourceFile]) == srcRootDir:
+                    namesWithinRoot.add(name)
+
+    sys.stderr.write('\n')
+    sys.stderr.write('RESULTS:\n')
+    sys.stderr.write('\n')
+
+    #for node, loadGlobals, storeGlobals in zip(nodeModule.body, loadGlobalss, storeGlobalss):
+    #    sortedDeps = [ name for name in loadGlobals if name in namesWithinRoot ]
+    #    sortedStoreDeps = storeGlobals
+    #    sys.stderr.write('node = %s\n' % (repr(node)+(' ('+node.name+')' if hasattr(node, 'name') else '')))
+    #    sys.stderr.write('\t %s\n' % sortedDeps)
+    #    if sortedStoreDeps:
+    #        sys.stderr.write('\t store: %s\n' % sortedStoreDeps)
+    #    sys.stderr.write('\n')
+    #sys.stderr.write('\n')
+
+    namesNotYetDefined = set(namesDefinedInModule)
+
+    def nameToString(name):
+        if name in namesNotYetDefined:
+            return 'ForwardRef(lambda: '+name+')'
+        else:
+            return name
+
+    # print stuff which occurs before the first node
+    bodyStartLine = (nodeModule.body[0].lineno - 1) if nodeModule.body else len(moduleFileLines)
+    for line in moduleFileLines[:bodyStartLine]:
+        print line
+
+    for (node, nextNode), loadGlobals, storeGlobals in zip(peekIter(nodeModule.body), loadGlobalss, storeGlobalss):
+        # (module docstrings which last more than one line seem to have col_offset -1)
+        assert node.col_offset == 0 or node.col_offset == -1
+        if nextNode is not None:
+            assert nextNode.col_offset == 0
+        startLine = node.lineno - 1
+        endLine = (nextNode.lineno - 1) if nextNode is not None else len(moduleFileLines)
+        assert 0 <= startLine < endLine <= len(moduleFileLines)
+        sourceLines = moduleFileLines[startLine:endLine]
+
+        if isinstance(node, (_ast.FunctionDef, _ast.ClassDef)):
+            sortedDeps = [ nameToString(name) for name in loadGlobals if name in namesWithinRoot and name != node.name ]
+            assert storeGlobals == []
+
+            # work around the fact there is no completely reliable way to get the
+            #   line number of the first non-decorator line from the AST alone
+            defLineOffset = None
+            for lineOffset, line in enumerate(sourceLines):
+                if line.startswith('def ') or line.startswith('class '):
+                    defLineOffset = lineOffset
+                    break
+            assert defLineOffset is not None
+            assert all([ (dec.lineno - 1) < startLine + defLineOffset for dec in node.decorator_list ])
+
+            bisqueDepsPrinted = False
+
+            # print decorator lines
+            for subNode, nextSubNode in peekIter(node.decorator_list):
+                if isinstance(subNode, _ast.Call) and isinstance(subNode.func, _ast.Name) and subNode.func.id == 'bisqueDeps':
+                    # print new bisqueDeps stanza in place of old one
+                    print prettyPrintBisqueDepsStanza(sortedDeps)
+                    bisqueDepsPrinted = True
+                else:
+                    startSubOffset = subNode.lineno - 1 - startLine
+                    endSubOffset = (nextSubNode.lineno - 1 - startLine) if nextSubNode is not None else defLineOffset
+                    assert 0 <= startSubOffset < endSubOffset <= len(sourceLines)
+                    for line in sourceLines[startSubOffset:endSubOffset]:
+                        print line
+            if not bisqueDepsPrinted:
+                # print bisqueDeps stanza just before def
+                print prettyPrintBisqueDepsStanza(sortedDeps)
+                bisqueDepsPrinted = True
+
+            # print rest of function / class
+            for line in sourceLines[defLineOffset:]:
+                print line
+        else:
+            sortedDeps = [ nameToString(name) for name in loadGlobals if name in namesWithinRoot ]
+            if sortedDeps or storeGlobals:
+                nameAssignedTo = simpleAssignToName(node)
+                if nameAssignedTo != None and nameAssignedTo.startswith('_'):
+                    # node is a simple assignment to a private variable, so don't need a bisqueDeps line
+                    for line in sourceLines:
+                        print line
+                else:
+                    if nameAssignedTo != None and node:
+                        nodeValue = node.value
+
+                        hadToRemoveExisting = False
+                        if isinstance(nodeValue, _ast.Call) and isinstance(nodeValue.func, _ast.Call) and isinstance(nodeValue.func.func, _ast.Name) and nodeValue.func.func.id == 'bisqueDeps':
+                            # remove existing bisqueDeps stanza
+                            # (FIXME : assumes there is an arg (and that it comes before kwargs, etc, but I think that's safe))
+                            nodeValue = nodeValue.args[0]
+                            hadToRemoveExisting = True
+
+                        currLineOffset = nodeValue.lineno - 1 - startLine
+                        restOfCurrLine = sourceLines[currLineOffset][nodeValue.col_offset:]
+                        restOfLines = sourceLines[(currLineOffset + 1):]
+                        if not hadToRemoveExisting:
+                            # if bisqueDeps is already present, then user must
+                            #   have added, so no need to warn
+                            print '# FIXME : to examine manually (assumes original RHS is function or class) (N.B. stores %s)' % (', '.join(storeGlobals))
+                        print prettyPrintBisqueDepsStanza(sortedDeps, init = nameAssignedTo+' = ')+'('
+                        print '    '+restOfCurrLine
+                        for line in restOfLines:
+                            print line
+                        if not hadToRemoveExisting:
+                            print ')'
+                    else:
+                        print '# FIXME : to examine manually -- bisqueDeps(%s) (stores %s)' % (', '.join(sortedDeps), ', '.join(storeGlobals))
+                        for line in sourceLines:
+                            print line
+            else:
+                for line in sourceLines:
+                    print line
+
+        namesNotYetDefined.difference_update(assignsNames(node))
+
+
+if __name__ == '__main__':
+    main(sys.argv)
