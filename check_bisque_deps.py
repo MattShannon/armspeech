@@ -188,7 +188,7 @@ def main(args):
         loadGlobals = loadGlobalss[nodeIndex]
         newLoadGlobals = set()
         for name in loadGlobals:
-            if name.startswith('_'):
+            if name.startswith('_') and not name.startswith('__'):
                 newLoadGlobals.update(privateDeps[name])
             else:
                 newLoadGlobals.add(name)
