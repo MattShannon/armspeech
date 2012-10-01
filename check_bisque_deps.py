@@ -74,47 +74,26 @@ def isGlobal(symtab, symName):
     sym = symtab.lookup(symName)
     return symtab.get_type() == 'module' or sym.is_global()
 
-# (FIXME : is store stuff actually useful?)
-def findGlobalUses(node, onLoadGlobalFound, onStoreGlobalFound, insideAssignTarget = False):
+def findGlobalUses(node, onLoadGlobalFound):
     curr_symtab = node.symtab_current_scope
     depth = curr_symtab.scope_depth
     if isinstance(node, _ast.Call) and isinstance(node.func, _ast.Name) and node.func.id == 'bisqueDeps':
-        # ignore load / store events in arguments to bisqueDeps
+        # ignore names present in arguments to bisqueDeps
         for subNode in ast.iter_child_nodes(node):
-            findGlobalUses(subNode, lambda name: (), lambda name: (), insideAssignTarget = insideAssignTarget)
+            findGlobalUses(subNode, lambda name: ())
     elif isinstance(node, _ast.Name) and isGlobal(curr_symtab, node.id):
-        if not insideAssignTarget:
-            assert isinstance(node.ctx, (_ast.Load, _ast.AugLoad))
         if isinstance(node.ctx, (_ast.Load, _ast.AugLoad)):
             onLoadGlobalFound(node.id)
-        if insideAssignTarget:
-            onStoreGlobalFound(node.id)
         # no children
     elif isinstance(node, _ast.Attribute) and isinstance(node.value, _ast.Name) and isGlobal(curr_symtab, node.value.id):
-        assert isinstance(node.value.ctx, (_ast.Load, _ast.AugLoad))
-        if not insideAssignTarget:
-            assert isinstance(node.ctx, (_ast.Load, _ast.AugLoad))
+        if isinstance(node.ctx, (_ast.Load, _ast.AugLoad)):
             onLoadGlobalFound(node.value.id+'.'+node.attr)
         else:
-            if isinstance(node.ctx, (_ast.Load, _ast.AugLoad)):
-                onLoadGlobalFound(node.value.id+'.'+node.attr)
-            else:
-                onLoadGlobalFound(node.value.id)
-            sys.stderr.write('WARNING: may be assigned to an attribute of a global: %s (context = %s)\n' % (node.value.id+'.'+node.attr, node.ctx))
+            onLoadGlobalFound(node.value.id)
         # all children have already been dealt with
-    elif isinstance(node, (_ast.Delete, _ast.Assign, _ast.AugAssign)):
-        assert not insideAssignTarget
-        if isinstance(node, _ast.AugAssign):
-            targets = [node.target]
-        else:
-            targets = node.targets
-        for subNode in targets:
-            findGlobalUses(subNode, onLoadGlobalFound, onStoreGlobalFound, insideAssignTarget = True)
-        if not isinstance(node, _ast.Delete):
-            findGlobalUses(node.value, onLoadGlobalFound, onStoreGlobalFound, insideAssignTarget = False)
     else:
         for subNode in ast.iter_child_nodes(node):
-            findGlobalUses(subNode, onLoadGlobalFound, onStoreGlobalFound, insideAssignTarget = insideAssignTarget)
+            findGlobalUses(subNode, onLoadGlobalFound)
 
 def assignsNames(node):
     if isinstance(node, (_ast.FunctionDef, _ast.ClassDef)):
@@ -184,10 +163,8 @@ def main(args):
     sys.stderr.write('FINDING GLOBALS:\n')
 
     loadGlobalss = []
-    storeGlobalss = []
     for node in nodeModule.body:
         loadGlobals = []
-        storeGlobals = []
         def onLoadGlobalFound(name):
             if '.' in name:
                 nameLeft, nameRight = name.split('.', 1)
@@ -198,13 +175,9 @@ def main(args):
                     loadGlobals.append(nameLeft)
             else:
                 loadGlobals.append(name)
-        def onStoreGlobalFound(name):
-            storeGlobals.append(name)
-        findGlobalUses(node, onLoadGlobalFound, onStoreGlobalFound)
+        findGlobalUses(node, onLoadGlobalFound)
         loadGlobals = sorted(set(loadGlobals))
-        storeGlobals = sorted(set(storeGlobals))
         loadGlobalss.append(loadGlobals)
-        storeGlobalss.append(storeGlobals)
 
     sys.stderr.write('\n')
     sys.stderr.write('REWIRING DEPS FOR PRIVATE VARIABLES:\n')
@@ -233,7 +206,7 @@ def main(args):
     namesDefinedInModule = set([ subNode for node in nodeModule.body for subNode in assignsNames(node) ])
 
     names = set()
-    for node, loadGlobals, storeGlobals in zip(nodeModule.body, loadGlobalss, storeGlobalss):
+    for node, loadGlobals in zip(nodeModule.body, loadGlobalss):
         names.update(loadGlobals)
     namesWithinRoot = set()
     for name in names:
@@ -282,13 +255,10 @@ def main(args):
     sys.stderr.write('RESULTS:\n')
     sys.stderr.write('\n')
 
-    #for node, loadGlobals, storeGlobals in zip(nodeModule.body, loadGlobalss, storeGlobalss):
+    #for node, loadGlobals in zip(nodeModule.body, loadGlobalss):
     #    sortedDeps = [ name for name in loadGlobals if name in namesWithinRoot ]
-    #    sortedStoreDeps = storeGlobals
     #    sys.stderr.write('node = %s\n' % (repr(node)+(' ('+node.name+')' if hasattr(node, 'name') else '')))
     #    sys.stderr.write('\t %s\n' % sortedDeps)
-    #    if sortedStoreDeps:
-    #        sys.stderr.write('\t store: %s\n' % sortedStoreDeps)
     #    sys.stderr.write('\n')
     #sys.stderr.write('\n')
 
@@ -305,7 +275,7 @@ def main(args):
     for line in moduleFileLines[:bodyStartLine]:
         print line
 
-    for (node, nextNode), loadGlobals, storeGlobals in zip(peekIter(nodeModule.body), loadGlobalss, storeGlobalss):
+    for (node, nextNode), loadGlobals in zip(peekIter(nodeModule.body), loadGlobalss):
         # (module docstrings which last more than one line seem to have col_offset -1)
         assert node.col_offset == 0 or node.col_offset == -1
         if nextNode is not None:
@@ -317,7 +287,6 @@ def main(args):
 
         if isinstance(node, (_ast.FunctionDef, _ast.ClassDef)):
             sortedDeps = [ nameToString(name) for name in loadGlobals if name in namesWithinRoot and name != node.name ]
-            assert storeGlobals == []
 
             # work around the fact there is no completely reliable way to get the
             #   line number of the first non-decorator line from the AST alone
@@ -353,7 +322,7 @@ def main(args):
                 print line
         else:
             sortedDeps = [ nameToString(name) for name in loadGlobals if name in namesWithinRoot ]
-            if sortedDeps or storeGlobals:
+            if sortedDeps:
                 nameAssignedTo = simpleAssignToName(node)
                 if nameAssignedTo != None and nameAssignedTo.startswith('_'):
                     # node is a simple assignment to a private variable, so don't need a bisqueDeps line
@@ -376,7 +345,7 @@ def main(args):
                         if not hadToRemoveExisting:
                             # if bisqueDeps is already present, then user must
                             #   have added, so no need to warn
-                            print '# FIXME : to examine manually (assumes original RHS is function or class) (N.B. stores %s)' % (', '.join(storeGlobals))
+                            print '# FIXME : to examine manually (assumes original RHS is function or class)'
                         print prettyPrintBisqueDepsStanza(sortedDeps, init = nameAssignedTo+' = ')+'('
                         print '    '+restOfCurrLine
                         for line in restOfLines:
@@ -384,7 +353,7 @@ def main(args):
                         if not hadToRemoveExisting:
                             print ')'
                     else:
-                        print '# FIXME : to examine manually -- bisqueDeps(%s) (stores %s)' % (', '.join(sortedDeps), ', '.join(storeGlobals))
+                        print '# FIXME : to examine manually -- bisqueDeps(%s)' % (', '.join(sortedDeps))
                         for line in sourceLines:
                             print line
             else:
