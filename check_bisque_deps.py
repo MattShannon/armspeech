@@ -37,7 +37,7 @@ def attachAstAndSymtab(nodes, symtab, depth = 0):
 
 def attachAstAndSymtabSub(node, symtab, symtabChildrenLeft, depth):
     node.symtab_current_scope = symtab
-    if isinstance(node, (_ast.FunctionDef, _ast.ClassDef, _ast.Lambda)):
+    if isinstance(node, (_ast.FunctionDef, _ast.ClassDef, _ast.Lambda, _ast.GeneratorExp)):
         # new scope introduced, and used in some of the children
 
         if isinstance(node, _ast.FunctionDef):
@@ -53,6 +53,15 @@ def attachAstAndSymtabSub(node, symtab, symtabChildrenLeft, depth):
             subNodesNewScope = node.args.args + [node.body]
             # node.args itself would otherwise be missed out
             node.args.symtab_current_scope = symtab
+        elif isinstance(node, _ast.GeneratorExp):
+            subNodesOldScope = [ subNode.iter for subNode in node.generators ]
+            subNodesNewScope = [node.elt] + (
+                [ subNode.target for subNode in node.generators ] +
+                [ subSubNode for subNode in node.generators for subSubNode in subNode.ifs ]
+            )
+            # each node in node.generators would otherwise be missed out
+            for subNode in node.generators:
+                subNode.symtab_current_scope = symtab
 
         for subNode in subNodesOldScope:
             attachAstAndSymtabSub(subNode, symtab, symtabChildrenLeft, depth = depth)
