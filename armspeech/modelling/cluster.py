@@ -16,20 +16,22 @@ from collections import defaultdict
 
 def decisionTreeCluster(labelList, accForLabel, createAcc, questionGroups,
                         thresh, minCount, maxCount = None, mdlFactor = 1.0,
+                        estimateTotAux = d.defaultEstimateTotAux,
+                        paramSpec = d.defaultParamSpec,
                         verbosity = 2):
     root = createAcc()
     for label in labelList:
         d.addAcc(root, accForLabel(label))
     countRoot = root.count()
-    distRoot, (auxRoot, auxRootRat) = d.defaultEstimateTotAux(root)
+    distRoot, (auxRoot, auxRootRat) = estimateTotAux(root)
     if thresh is None:
-        numParamsPerLeaf = len(d.defaultParamSpec.params(distRoot))
+        numParamsPerLeaf = len(paramSpec.params(distRoot))
         thresh = 0.5 * mdlFactor * numParamsPerLeaf * math.log(countRoot + 1.0)
         if verbosity >= 1:
             print 'cluster: setting thresh using MDL: mdlFactor =', mdlFactor, 'and numParamsPerLeaf =', numParamsPerLeaf, 'and count =', countRoot
     if verbosity >= 1:
         print 'cluster: decision tree clustering with thresh =', thresh, 'and minCount =', minCount, 'and maxCount =', maxCount
-    dist, aux = decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minCount, maxCount, [], distRoot, auxRoot, countRoot, verbosity)
+    dist, aux = decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minCount, maxCount, [], distRoot, auxRoot, countRoot, estimateTotAux, verbosity)
     if verbosity >= 1:
         print 'cluster: %s leaves' % dist.countLeaves()
         print 'cluster: aux root = %s (%s) -> aux tree = %s (%s count)' % (auxRoot / countRoot, d.Rat.toString(auxRootRat), aux / countRoot, countRoot)
@@ -37,7 +39,7 @@ def decisionTreeCluster(labelList, accForLabel, createAcc, questionGroups,
 
 def decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups,
                            thresh, minCount, maxCount, isYesList, distLeaf,
-                           auxLeaf, countNode, verbosity):
+                           auxLeaf, countNode, estimateTotAux, verbosity):
     if verbosity >= 2:
         indent = '    '+''.join([ ('|  ' if isYes else '   ') for isYes in isYesList[:-1] ])
         if not isYesList:
@@ -53,7 +55,7 @@ def decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups,
         indent += extra2
 
     getBestSplit = timed(decisionTreeGetBestSplit, msg = 'cluster:'+indent+'choose split took') if verbosity >= 3 else decisionTreeGetBestSplit
-    bestFullQuestion, bestAux, bestEstimatedYes, bestEstimatedNo = getBestSplit(labelList, accForLabel, createAcc, questionGroups, minCount, auxLeaf)
+    bestFullQuestion, bestAux, bestEstimatedYes, bestEstimatedNo = getBestSplit(labelList, accForLabel, createAcc, questionGroups, minCount, auxLeaf, estimateTotAux)
 
     if bestFullQuestion is not None and (bestAux - auxLeaf > thresh or maxCount is not None and countNode > maxCount):
         bestLabelValuer, bestQuestion = bestFullQuestion
@@ -69,8 +71,8 @@ def decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups,
         distYesLeaf, auxYesLeaf, countYes = bestEstimatedYes
         distNoLeaf, auxNoLeaf, countNo = bestEstimatedNo
         assert_allclose(countYes + countNo, countNode)
-        distYes, auxYes = decisionTreeSubCluster(labelListYes, accForLabel, createAcc, questionGroups, thresh, minCount, maxCount, isYesList + [True], distYesLeaf, auxYesLeaf, countYes, verbosity)
-        distNo, auxNo = decisionTreeSubCluster(labelListNo, accForLabel, createAcc, questionGroups, thresh, minCount, maxCount, isYesList + [False], distNoLeaf, auxNoLeaf, countNo, verbosity)
+        distYes, auxYes = decisionTreeSubCluster(labelListYes, accForLabel, createAcc, questionGroups, thresh, minCount, maxCount, isYesList + [True], distYesLeaf, auxYesLeaf, countYes, estimateTotAux, verbosity)
+        distNo, auxNo = decisionTreeSubCluster(labelListNo, accForLabel, createAcc, questionGroups, thresh, minCount, maxCount, isYesList + [False], distNoLeaf, auxNoLeaf, countNo, estimateTotAux, verbosity)
         aux = auxYes + auxNo
         return d.DecisionTreeNode(bestFullQuestion, distYes, distNo), aux
     else:
@@ -82,7 +84,7 @@ def decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups,
         return d.DecisionTreeLeaf(distLeaf), auxLeaf
 
 def decisionTreeGetBestSplit(labelList, accForLabel, createAcc, questionGroups,
-                             minCount, auxLeaf):
+                             minCount, auxLeaf, estimateTotAux):
     # (N.B. Could probably get a further speed-up (over and above that
     #   obtained by using question groups) for EqualityQuestion and
     #   ThreshQuestion by doing clever stuff with subtracting accs (i.e.
@@ -110,8 +112,8 @@ def decisionTreeGetBestSplit(labelList, accForLabel, createAcc, questionGroups,
                     d.addAcc(no, acc)
             if yes.count() > minCount and no.count() > minCount:
                 try:
-                    distYesLeaf, (auxYesLeaf, auxYesLeafRat) = d.defaultEstimateTotAux(yes)
-                    distNoLeaf, (auxNoLeaf, auxNoLeafRat) = d.defaultEstimateTotAux(no)
+                    distYesLeaf, (auxYesLeaf, auxYesLeafRat) = estimateTotAux(yes)
+                    distNoLeaf, (auxNoLeaf, auxNoLeafRat) = estimateTotAux(no)
                 except d.EstimationError:
                     pass
                 else:
