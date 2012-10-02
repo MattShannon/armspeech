@@ -89,8 +89,8 @@ def isGlobal(symtab, symName):
 
 def findGlobalUses(node, onLoadGlobalFound):
     curr_symtab = node.symtab_current_scope
-    if isinstance(node, _ast.Call) and isinstance(node.func, _ast.Name) and node.func.id == 'bisqueDeps':
-        # ignore names present in arguments to bisqueDeps
+    if isinstance(node, _ast.Call) and isinstance(node.func, _ast.Name) and node.func.id == 'codeDeps':
+        # ignore names present in arguments to codeDeps
         for subNode in ast.iter_child_nodes(node):
             findGlobalUses(subNode, lambda name: ())
     elif isinstance(node, _ast.Name) and isGlobal(curr_symtab, node.id):
@@ -133,14 +133,14 @@ def simpleAssignToName(node):
 
 def prettyPrintBisqueDepsStanza(deps, init = '@', maxLineLength = 80):
     if not deps:
-        return init+'bisqueDeps()'
+        return init+'codeDeps()'
     else:
-        ret = init+'bisqueDeps('+(', '.join(deps))+')'
+        ret = init+'codeDeps('+(', '.join(deps))+')'
         if len(ret) <= maxLineLength:
             return ret
         else:
             ret = ''
-            currLine = init+'bisqueDeps('+deps[0]+','
+            currLine = init+'codeDeps('+deps[0]+','
             for dep in deps[1:]:
                 if len(currLine) + len(dep) + 2 <= maxLineLength:
                     currLine += (' '+dep+',')
@@ -310,24 +310,24 @@ def main(args):
             assert defLineOffset is not None
             assert all([ (dec.lineno - 1) < startLine + defLineOffset for dec in node.decorator_list ])
 
-            bisqueDepsPrinted = False
+            codeDepsPrinted = False
 
             # print decorator lines
             for subNode, nextSubNode in peekIter(node.decorator_list):
-                if isinstance(subNode, _ast.Call) and isinstance(subNode.func, _ast.Name) and subNode.func.id == 'bisqueDeps':
-                    # print new bisqueDeps stanza in place of old one
+                if isinstance(subNode, _ast.Call) and isinstance(subNode.func, _ast.Name) and subNode.func.id == 'codeDeps':
+                    # print new codeDeps stanza in place of old one
                     print prettyPrintBisqueDepsStanza(sortedDeps)
-                    bisqueDepsPrinted = True
+                    codeDepsPrinted = True
                 else:
                     startSubOffset = subNode.lineno - 1 - startLine
                     endSubOffset = (nextSubNode.lineno - 1 - startLine) if nextSubNode is not None else defLineOffset
                     assert 0 <= startSubOffset < endSubOffset <= len(sourceLines)
                     for line in sourceLines[startSubOffset:endSubOffset]:
                         print line
-            if not bisqueDepsPrinted:
-                # print bisqueDeps stanza just before def
+            if not codeDepsPrinted:
+                # print codeDeps stanza just before def
                 print prettyPrintBisqueDepsStanza(sortedDeps)
-                bisqueDepsPrinted = True
+                codeDepsPrinted = True
 
             # print rest of function / class
             for line in sourceLines[defLineOffset:]:
@@ -337,7 +337,7 @@ def main(args):
             if sortedDeps:
                 nameAssignedTo = simpleAssignToName(node)
                 if nameAssignedTo != None and nameAssignedTo.startswith('_'):
-                    # node is a simple assignment to a private variable, so don't need a bisqueDeps line
+                    # node is a simple assignment to a private variable, so don't need a codeDeps line
                     for line in sourceLines:
                         print line
                 else:
@@ -345,8 +345,8 @@ def main(args):
                         nodeValue = node.value
 
                         hadToRemoveExisting = False
-                        if isinstance(nodeValue, _ast.Call) and isinstance(nodeValue.func, _ast.Call) and isinstance(nodeValue.func.func, _ast.Name) and nodeValue.func.func.id == 'bisqueDeps':
-                            # remove existing bisqueDeps stanza
+                        if isinstance(nodeValue, _ast.Call) and isinstance(nodeValue.func, _ast.Call) and isinstance(nodeValue.func.func, _ast.Name) and nodeValue.func.func.id == 'codeDeps':
+                            # remove existing codeDeps stanza
                             # (FIXME : assumes there is an arg (and that it comes before kwargs, etc, but I think that's safe))
                             nodeValue = nodeValue.args[0]
                             hadToRemoveExisting = True
@@ -355,7 +355,7 @@ def main(args):
                         restOfCurrLine = sourceLines[currLineOffset][nodeValue.col_offset:]
                         restOfLines = sourceLines[(currLineOffset + 1):]
                         if not hadToRemoveExisting:
-                            # if bisqueDeps is already present, then user must
+                            # if codeDeps is already present, then user must
                             #   have added, so no need to warn
                             print '# FIXME : to examine manually (assumes original RHS is function or class)'
                         print prettyPrintBisqueDepsStanza(sortedDeps, init = nameAssignedTo+' = ')+'('
@@ -365,7 +365,7 @@ def main(args):
                         if not hadToRemoveExisting:
                             print ')'
                     else:
-                        print '# FIXME : to examine manually -- bisqueDeps(%s)' % (', '.join(sortedDeps))
+                        print '# FIXME : to examine manually -- codeDeps(%s)' % (', '.join(sortedDeps))
                         for line in sourceLines:
                             print line
             else:
