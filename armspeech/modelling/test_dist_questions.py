@@ -10,30 +10,32 @@ from __future__ import division
 
 import questions as ques
 
-a = 'a'
-b = 'b'
-i = 'i'
-m = 'm'
-sil = 'sil'
+class SimplePhoneset(object):
+    def __init__(self):
+        a = 'a'
+        b = 'b'
+        i = 'i'
+        m = 'm'
+        sil = 'sil'
 
-phoneList = [
-    a,
-    b,
-    i,
-    m,
-    sil
-]
+        self.phoneList = [
+            a,
+            b,
+            i,
+            m,
+            sil
+        ]
 
-namedPhoneSubsetList = [
-    ['vowel', [a, i]],
-    ['consonant', [b, m]],
-    ['b', [b]],
-    ['m', [m]],
-    ['i', [i]],
-    ['a', [a]],
-    ['silence', [sil]],
-]
-namedPhoneSubsets = [ (subsetName, frozenset(subsetList)) for subsetName, subsetList in namedPhoneSubsetList ]
+        namedPhoneSubsetList = [
+            ['vowel', [a, i]],
+            ['consonant', [b, m]],
+            ['b', [b]],
+            ['m', [m]],
+            ['i', [i]],
+            ['a', [a]],
+            ['silence', [sil]],
+        ]
+        self.namedPhoneSubsets = [ (subsetName, frozenset(subsetList)) for subsetName, subsetList in namedPhoneSubsetList ]
 
-def getQuestionGroups():
-    return [(ques.IdLabelValuer(), ques.getSubsetQuestions(namedPhoneSubsets))]
+def getQuestionGroups(phoneset):
+    return [(ques.IdLabelValuer(), ques.getSubsetQuestions(phoneset.namedPhoneSubsets))]

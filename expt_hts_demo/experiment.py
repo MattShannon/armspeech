@@ -108,7 +108,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
     os.makedirs(figOutDir)
     print 'CONFIG: outDir =', outDir
 
-    phoneset = phoneset_cmu
+    phoneset = phoneset_cmu.CmuPhoneset()
     corpus = corpus_arctic.getCorpusSynthFewer(trainUttIds = corpus_arctic.trainUttIds, mgcOrder = 40, dataDir = dataDir, labDir = labDir, scriptsDir = scriptsDir)
 
     mgcStream, lf0Stream, bapStream = corpus.streams
@@ -311,7 +311,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
                     for time in range(startTime, endTime):
                         yield questionAnswers, subLabel
 
-        questionGroups = questions_hts_demo.getTriphoneQuestionGroups()
+        questionGroups = questions_hts_demo.getTriphoneQuestionGroups(phoneset)
 
         # FIXME : only works if no cross-stream stuff happening. Make more robust somehow.
         shiftToPrevTransform = xf.ShiftOutputTransform(lambda x: -x[1][-1])
@@ -608,7 +608,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         lgVarianceFloorMult = 1e-3
         print 'lgVarianceFloorMult =', lgVarianceFloorMult
 
-        questionGroups = questions_hts_demo.getFullContextQuestionGroups()
+        questionGroups = questions_hts_demo.getFullContextQuestionGroups(phoneset)
 
         def globalToFullCtxCreateAccPartial(dist, createAccChild):
             if isinstance(dist, d.MappedInputDist) and getFirst(dist.tag) == 'stream':

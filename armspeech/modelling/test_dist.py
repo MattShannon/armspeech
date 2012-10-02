@@ -155,8 +155,9 @@ def gen_shared_DiscreteDist(keys = ['a', 'b', 'c'], dimIn = 3):
     return dist, getInputGen()
 
 def gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = 3):
-    labels = test_dist_questions.phoneList
-    questionGroups = test_dist_questions.getQuestionGroups()
+    phoneset = test_dist_questions.SimplePhoneset()
+    labels = phoneset.phoneList
+    questionGroups = test_dist_questions.getQuestionGroups(phoneset)
 
     def decisionTree(labelsLeft):
         fullQuestionsLeft = []
@@ -870,6 +871,8 @@ class TestDist(unittest.TestCase):
     # (FIXME : add a separate, independent unit test for decisionTreeCluster
     #   (put in test_cluster.py))
     def test_AutoGrowingDiscreteAcc_and_decisionTreeCluster(self, eps = 1e-8, numDists = 20, numPoints = 100):
+        phoneset = test_dist_questions.SimplePhoneset()
+        questionGroups = test_dist_questions.getQuestionGroups(phoneset)
         for distIndex in range(numDists):
             dimIn = randint(0, 5)
             dist, inputGen = gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = dimIn)
@@ -877,7 +880,7 @@ class TestDist(unittest.TestCase):
                 acc = d.AutoGrowingDiscreteAcc(createAcc = lambda: d.LinearGaussianAcc(inputLength = dimIn, varianceFloor = 0.0))
                 for input, output, occ in training:
                     acc.add(input, output, occ)
-                return cluster.decisionTreeCluster(acc.accDict.keys(), lambda label: acc.accDict[label], acc.createAcc, test_dist_questions.getQuestionGroups(), thresh = None, minCount = 0.0, verbosity = 0)
+                return cluster.decisionTreeCluster(acc.accDict.keys(), lambda label: acc.accDict[label], acc.createAcc, questionGroups, thresh = None, minCount = 0.0, verbosity = 0)
             if True:
                 # check decision tree clustering runs at all
                 training = [ (input, dist.synth(input), math.exp(randn())) for input, index in zip(inputGen, range(numPoints)) ]

@@ -12,7 +12,6 @@
 from __future__ import division
 
 import armspeech.modelling.questions as ques
-import phoneset_cmu
 
 def getSubsetQG(labelKey, namedSubsets):
     return (ques.AttrLabelValuer(labelKey), ques.getSubsetQuestions(namedSubsets))
@@ -24,23 +23,23 @@ def getSubsetQGs(labelKeys, namedSubsets):
     questions = ques.getSubsetQuestions(namedSubsets)
     return [ (ques.AttrLabelValuer(labelKey), questions) for labelKey in labelKeys ]
 
-def getMonophoneQuestionGroups():
+def getMonophoneQuestionGroups(phoneset):
     return getSubsetQGs(
         ['phone'],
-        phoneset_cmu.namedPhoneSubsets
+        phoneset.namedPhoneSubsets
     )
-def getTriphoneQuestionGroups():
+def getTriphoneQuestionGroups(phoneset):
     return getSubsetQGs(
         ['l_phone', 'phone', 'r_phone'],
-        phoneset_cmu.namedPhoneSubsets
+        phoneset.namedPhoneSubsets
     )
-def getQuinphoneQuestionGroups():
+def getQuinphoneQuestionGroups(phoneset):
     return getSubsetQGs(
         ['ll_phone', 'l_phone', 'phone', 'r_phone', 'rr_phone'],
-        phoneset_cmu.namedPhoneSubsets
+        phoneset.namedPhoneSubsets
     )
-def getFullContextQuestionGroups():
-    quinphoneQuestionGroups = getQuinphoneQuestionGroups()
+def getFullContextQuestionGroups(phoneset):
+    quinphoneQuestionGroups = getQuinphoneQuestionGroups(phoneset)
     otherQuestionGroups = [
         getEqualityQG('seg_fw', [None] + range(1, 8)),
         getThreshQG('seg_fw', range(1, 8)),
@@ -51,7 +50,7 @@ def getFullContextQuestionGroups():
             [
                 ques.EqualityQuestion(None),
                 ques.EqualityQuestion('novowel')
-            ] + ques.getSubsetQuestions(phoneset_cmu.namedVowelSubsets)
+            ] + ques.getSubsetQuestions(phoneset.namedVowelSubsets)
         ),
         # FIXME : add more questions here
     ]
