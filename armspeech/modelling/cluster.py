@@ -14,7 +14,9 @@ import logging
 import math
 from collections import defaultdict
 
-def decisionTreeCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minCount, maxCount = None, mdlFactor = 1.0, verbosity = 2):
+def decisionTreeCluster(labelList, accForLabel, createAcc, questionGroups,
+                        thresh, minCount, maxCount = None, mdlFactor = 1.0,
+                        verbosity = 2):
     root = createAcc()
     for label in labelList:
         d.addAcc(root, accForLabel(label))
@@ -33,7 +35,9 @@ def decisionTreeCluster(labelList, accForLabel, createAcc, questionGroups, thres
         print 'cluster: aux root = %s (%s) -> aux tree = %s (%s count)' % (auxRoot / countRoot, d.Rat.toString(auxRootRat), aux / countRoot, countRoot)
     return dist
 
-def decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minCount, maxCount, isYesList, distLeaf, auxLeaf, countNode, verbosity):
+def decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups,
+                           thresh, minCount, maxCount, isYesList, distLeaf,
+                           auxLeaf, countNode, verbosity):
     if verbosity >= 2:
         indent = '    '+''.join([ ('|  ' if isYes else '   ') for isYes in isYesList[:-1] ])
         if not isYesList:
@@ -77,7 +81,8 @@ def decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups, th
             print 'cluster:'+indent+'leaf'
         return d.DecisionTreeLeaf(distLeaf), auxLeaf
 
-def decisionTreeGetBestSplit(labelList, accForLabel, createAcc, questionGroups, minCount, auxLeaf):
+def decisionTreeGetBestSplit(labelList, accForLabel, createAcc, questionGroups,
+                             minCount, auxLeaf):
     # (N.B. Could probably get a further speed-up (over and above that
     #   obtained by using question groups) for EqualityQuestion and
     #   ThreshQuestion by doing clever stuff with subtracting accs (i.e.
