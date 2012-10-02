@@ -41,8 +41,6 @@ class RealsField(object):
     def max(self, it):
         return max(it)
 
-realsField = RealsField()
-
 class LogRealsField(object):
     @property
     def zero(self):
@@ -68,5 +66,3 @@ class LogRealsField(object):
         return a < b
     def max(self, it):
         return max(it)
-
-logRealsField = LogRealsField()

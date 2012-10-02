@@ -2569,7 +2569,7 @@ class AutoregressiveNetDist(Dist):
 
         assert len(self.fillFrames) <= self.depth
 
-        self.ring = semiring.logRealsField
+        self.ring = semiring.LogRealsField()
 
     def __repr__(self):
         return 'AutoregressiveNetDist('+repr(self.depth)+', '+repr(self.netFor)+', '+repr(self.fillFrames)+', '+repr(self.durDist)+', '+repr(self.acDist)+', '+repr(self.pruneSpec)+', tag = '+repr(self.tag)+')'

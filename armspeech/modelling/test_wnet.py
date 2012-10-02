@@ -161,7 +161,7 @@ class TestWnet(unittest.TestCase):
                 return 0
             net = gen_simple_ConcreteNet(defaultGenLabel, deltaTime, sortable = True, pathMustExist = True)
 
-            ring = semiring.logRealsField
+            ring = semiring.LogRealsField()
             labelToWeight = memoize(lambda label: ring.one if label is None else randn())
             def getAgenda(forwards):
                 return wnet.SimpleSumAgenda(ring)
