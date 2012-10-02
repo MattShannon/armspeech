@@ -1022,7 +1022,7 @@ def testBinaryLogisticClassifier():
     dim = 2
     blcTrue = gen_BinaryLogisticClassifier(dimIn = dim + 1)[0]
     num = 10000
-    trainData = list((input, blcTrue.synth(input)) for input in inputGen(num))
+    trainData = [ (input, blcTrue.synth(input)) for input in inputGen(num) ]
     def accumulate(acc):
         for input, output in trainData:
             acc.add(input, output)
@@ -1072,7 +1072,7 @@ def testBinaryLogisticClassifierFunGraph():
             yield np.append(randn(dim), 1.0)
 
     num = 3000
-    trainData = list((input, blcTrue.synth(input)) for input in inputGen(num))
+    trainData = [ (input, blcTrue.synth(input)) for input in inputGen(num) ]
     def accumulate(acc):
         for input, output in trainData:
             acc.add(input, output)
@@ -1144,7 +1144,7 @@ def testMixtureOfTwoExpertsInitialization():
             yield np.append(np.dot(transform[classIndex], randn(dim)) + bias[classIndex], 1.0)
 
     num = 10000
-    trainData = list((input, randn()) for input in inputGen(num))
+    trainData = [ (input, randn()) for input in inputGen(num) ]
     def accumulate(acc):
         for input, output in trainData:
             acc.add(input, output)
