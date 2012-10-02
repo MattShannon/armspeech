@@ -15,7 +15,6 @@ from __future__ import division
 import armspeech.modelling.corpus as cps
 import armspeech.speech.labels as lab
 import armspeech.speech.features as feat
-import labels_hts_demo
 from armspeech.util import iterhelp
 from armspeech.util.timing import timed
 
@@ -27,13 +26,14 @@ def parseState(stateString):
     return int(stateString[6:-1]) - 2
 
 class ArcticCorpus(cps.Corpus):
-    def __init__(self, trainUttIds, testUttIds, synthUttIds, dataDir, labDir, scriptsDir, mgcOrder, framePeriod):
+    def __init__(self, trainUttIds, testUttIds, synthUttIds, dataDir, labDir, scriptsDir, parseLabel, mgcOrder, framePeriod):
         self.trainUttIds = trainUttIds
         self.testUttIds = testUttIds
         self.synthUttIds = synthUttIds
         self.dataDir = dataDir
         self.labDir = labDir
         self.scriptsDir = scriptsDir
+        self.parseLabel = parseLabel
         self.mgcOrder = mgcOrder
         self.framePeriod = framePeriod
 
@@ -47,13 +47,13 @@ class ArcticCorpus(cps.Corpus):
 
     def chunk(self, numChunks):
         trainUttIdsList = iterhelp.chunkList(self.trainUttIds, numChunks = numChunks)
-        return [ ArcticCorpus(trainUttIds, self.testUttIds, self.synthUttIds, self.dataDir, self.labDir, self.scriptsDir, self.mgcOrder, self.framePeriod) for trainUttIds in trainUttIdsList ]
+        return [ ArcticCorpus(trainUttIds, self.testUttIds, self.synthUttIds, self.dataDir, self.labDir, self.scriptsDir, self.parseLabel, self.mgcOrder, self.framePeriod) for trainUttIds in trainUttIdsList ]
 
     def rawAlignment(self, uttId):
         return lab.readTwoLevelHtkLabFile(
             os.path.join(self.labDir, uttId+'.lab'),
             self.framePeriod,
-            decodeHigh = labels_hts_demo.parseLabel,
+            decodeHigh = self.parseLabel,
             decodeLow = parseState,
             fallbackToOneLevel = True
         )
@@ -114,10 +114,10 @@ def cleanAlignment(alignment, acousticSeq, verbose = True):
         alignmentNew[-1] = startTime, endTime, label, subAlignment
     return alignmentNew
 
-def getCorpus(trainUttIds, dataDir, labDir, scriptsDir, mgcOrder):
-    return ArcticCorpus(trainUttIds, testUttIds, testUttIds, dataDir, labDir, scriptsDir, mgcOrder = mgcOrder, framePeriod = 0.005)
-def getCorpusSynthFewer(trainUttIds, dataDir, labDir, scriptsDir, mgcOrder):
-    return ArcticCorpus(trainUttIds, testUttIds, testUttIds[2:4], dataDir, labDir, scriptsDir, mgcOrder = mgcOrder, framePeriod = 0.005)
+def getCorpus(trainUttIds, dataDir, labDir, scriptsDir, parseLabel, mgcOrder):
+    return ArcticCorpus(trainUttIds, testUttIds, testUttIds, dataDir, labDir, scriptsDir, parseLabel = parseLabel, mgcOrder = mgcOrder, framePeriod = 0.005)
+def getCorpusSynthFewer(trainUttIds, dataDir, labDir, scriptsDir, parseLabel, mgcOrder):
+    return ArcticCorpus(trainUttIds, testUttIds, testUttIds[2:4], dataDir, labDir, scriptsDir, parseLabel = parseLabel, mgcOrder = mgcOrder, framePeriod = 0.005)
 
 trainUttIds = [
     'cmu_us_arctic_slt_a0001',

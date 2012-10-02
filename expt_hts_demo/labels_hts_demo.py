@@ -110,5 +110,3 @@ def getParseLabel():
     labelFormat = getLabelFormat()
     parseLabel = lab.getParseLabel(labelFormat, Label)
     return parseLabel
-
-parseLabel = getParseLabel()

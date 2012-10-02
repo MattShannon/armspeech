@@ -20,6 +20,7 @@ from armspeech.speech import draw
 from armspeech.util.timing import timed, printTime
 
 import phoneset_cmu
+import labels_hts_demo
 import questions_hts_demo
 import corpus_arctic
 
@@ -109,9 +110,10 @@ def run(dataDir, labDir, scriptsDir, outDir):
     print 'CONFIG: outDir =', outDir
 
     phoneset = phoneset_cmu.CmuPhoneset()
+    parseLabel = labels_hts_demo.getParseLabel()
     corpus = corpus_arctic.getCorpusSynthFewer(
         trainUttIds = corpus_arctic.trainUttIds,
-        mgcOrder = 40,
+        parseLabel = parseLabel, mgcOrder = 40,
         dataDir = dataDir, labDir = labDir, scriptsDir = scriptsDir
     )
 
