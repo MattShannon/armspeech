@@ -51,6 +51,14 @@ def roundTrip(obj):
 def checkRoundTrip(obj):
     assert pickle.dumps(roundTrip(obj), protocol = 2) == pickle.dumps(obj, protocol = 2)
 
+@codeDeps()
+def secHashString(strr):
+    """Computes git-style hash of a string."""
+    m = hashlib.sha1()
+    m.update('blob '+str(len(strr))+'\0')
+    m.update(strr)
+    return m.hexdigest()
+
 @codeDeps(roundTrip)
 def secHashObject(obj):
     """Computes git-style hash of the pickled version of an object."""

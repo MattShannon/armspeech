@@ -21,7 +21,7 @@ class ShouldNotPickle(object):
     pass
 
 @codeDeps(ShouldNotPickle, TempDir, persist.loadPickle, persist.savePickle,
-    persist.secHashFile, persist.secHashObject
+    persist.secHashFile, persist.secHashObject, persist.secHashString
 )
 class TestPersist(unittest.TestCase):
     def setUp(self):
@@ -62,7 +62,13 @@ class TestPersist(unittest.TestCase):
         persist.savePickle(loc('d.pickle'), d)
         assert persist.secHashFile(loc('d.pickle')) == persist.secHashObject(d)
         tempDir.remove()
-    def test_secHashObject_char(self):
+    def test_secHashString_characterization(self):
+        """Simple characterization test for secHashString so we will know if it ever changes."""
+        assert persist.secHashString('') == 'e69de29bb2d1d6434b8b29ae775ad8c2e48c5391'
+        assert persist.secHashString('"') == '9d68933c44f13985b9eb19159da6eb3ff0e574bf'
+        assert persist.secHashString('abc') == 'f2ba8f84ab5c1bce84a7b441cb1959cfc7093b7f'
+        assert persist.secHashString('aRvo;ui') == 'af7aa2bc77f03b961a67b633f93674331eab36c8'
+    def test_secHashObject_characterization(self):
         """Simple characterization test for secHashObject so we will know if it ever changes."""
         l = [1, 2, 3]
         d = dict()
