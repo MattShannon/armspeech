@@ -18,11 +18,15 @@ import numpy.linalg as la
 import itertools
 import subprocess
 
-mcdConstant = 10.0 / math.log(10.0) * math.sqrt(2.0)
+def getMcdConstant():
+    return 10.0 / math.log(10.0) * math.sqrt(2.0)
+
+_mcdConstant = getMcdConstant()
+
 def stdCepDist(synthVec, actualVec):
-    return mcdConstant * la.norm(np.asarray(synthVec)[1:] - np.asarray(actualVec)[1:])
+    return _mcdConstant * la.norm(np.asarray(synthVec)[1:] - np.asarray(actualVec)[1:])
 def stdCepDistIncZero(synthVec, actualVec):
-    return mcdConstant * la.norm(np.asarray(synthVec) - np.asarray(actualVec))
+    return _mcdConstant * la.norm(np.asarray(synthVec) - np.asarray(actualVec))
 
 def readParamFile(paramFile, paramOrder, decode = None):
     floatLittleEndian = struct.Struct('<'+''.join([ 'f' for i in range(paramOrder) ]))
