@@ -155,4 +155,3 @@ def trainCGandEM(distInit, accumulate, ps = d.defaultParamSpec, createAccEM = d.
 def mixupLinearGaussianEstimatePartial(acc, estimateChild):
     if isinstance(acc, d.LinearGaussianAcc):
         return acc.estimateInitialMixtureOfTwoExperts()
-mixupLinearGaussianEstimate = nodetree.getDagMap([mixupLinearGaussianEstimatePartial, d.defaultEstimatePartial])

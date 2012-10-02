@@ -217,7 +217,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         logLikeInit = acc.logLike()
         framesInit = acc.count()
         print 'initial training log likelihood = %s (%s frames)' % (logLikeInit / framesInit, framesInit)
-        dist = trn.mixupLinearGaussianEstimate(acc)
+        dist = nodetree.getDagMap([trn.mixupLinearGaussianEstimatePartial, d.defaultEstimatePartial])(acc)
         dist = trn.trainEM(dist, accumulate, deltaThresh = 1e-4, minIterations = 4, maxIterations = 8, verbosity = 2)
         return dist
 
