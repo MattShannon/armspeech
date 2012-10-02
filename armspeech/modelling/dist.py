@@ -2644,7 +2644,7 @@ class AutoregressiveNetDist(Dist):
         return AutoregressiveNetAcc(distPrev = self, durAcc = createAccChild(self.durDist), acAcc = createAccChild(self.acDist), verbosity = verbosity, tag = self.tag)
 
     def synth(self, (uttId, input), method = SynthMethod.Sample, actualOutput = None, maxLength = None):
-        # (FIXME : align actualOutSeq and pass down to frames below?  (What exactly do I mean?))
+        # (FIXME : align actualOutSeq and pass down to frames below? (What exactly do I mean?))
         # (FIXME : can we do anything simple and reasonable with durations for meanish case?)
         forwards = True
         net = self.netFor(input)
