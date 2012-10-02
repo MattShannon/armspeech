@@ -40,6 +40,9 @@ def attachAstAndSymtabSub(node, symtab, symtabChildrenLeft, depth):
     if isinstance(node, (_ast.FunctionDef, _ast.ClassDef, _ast.Lambda, _ast.GeneratorExp)):
         # new scope introduced, and used in some of the children
 
+        # (FIXME : order of descent into new scopes may not be correct (that is,
+        #   may disagree with ordering used by symtable) for complicated nested
+        #   scope cases. Need to think about.)
         if isinstance(node, _ast.FunctionDef):
             subNodesOldScope = node.args.defaults + node.decorator_list
             subNodesNewScope = node.args.args + node.body
@@ -86,7 +89,6 @@ def isGlobal(symtab, symName):
 
 def findGlobalUses(node, onLoadGlobalFound):
     curr_symtab = node.symtab_current_scope
-    depth = curr_symtab.scope_depth
     if isinstance(node, _ast.Call) and isinstance(node.func, _ast.Name) and node.func.id == 'bisqueDeps':
         # ignore names present in arguments to bisqueDeps
         for subNode in ast.iter_child_nodes(node):
