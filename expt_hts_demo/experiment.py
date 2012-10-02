@@ -112,7 +112,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
     phoneset = phoneset_cmu.CmuPhoneset()
     parseLabel = labels_hts_demo.getParseLabel()
     corpus = corpus_arctic.getCorpusSynthFewer(
-        trainUttIds = corpus_arctic.trainUttIds,
+        trainUttIds = corpus_arctic.getTrainUttIds(),
         parseLabel = parseLabel, mgcOrder = 40,
         dataDir = dataDir, labDir = labDir, scriptsDir = scriptsDir
     )
