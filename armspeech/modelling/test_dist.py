@@ -434,18 +434,18 @@ def iidLogProb(dist, training):
     return logProb
 
 def trainedAcc(dist, training):
-    acc = d.defaultCreateAcc(dist)
+    acc = d.getDefaultCreateAcc()(dist)
     for input, output, occ in training:
         acc.add(input, output, occ)
     return acc
 
-def trainedAccG(dist, training, ps = d.defaultParamSpec):
+def trainedAccG(dist, training, ps = d.getDefaultParamSpec()):
     acc = ps.createAccG(dist)
     for input, output, occ in training:
         acc.add(input, output, occ)
     return acc
 
-def randomizeParams(dist, ps = d.defaultParamSpec):
+def randomizeParams(dist, ps = d.getDefaultParamSpec()):
     return ps.parseAll(dist, randn(*np.shape(ps.params(dist))))
 
 def reparse(dist, ps):
@@ -542,7 +542,7 @@ def getTrainEM(initEstDist, maxIterations = None, verbosity = 0):
         return dist
     return doTrainEM
 
-def getTrainCG(initEstDist, ps = d.defaultParamSpec, length = -500, verbosity = 0):
+def getTrainCG(initEstDist, ps = d.getDefaultParamSpec(), length = -500, verbosity = 0):
     def doTrainCG(training):
         def accumulate(acc):
             for input, output, occ in training:
@@ -559,13 +559,13 @@ def getTrainFromAcc(createAcc):
         acc = createAcc()
         for input, output, occ in training:
             acc.add(input, output, occ)
-        dist = d.defaultEstimate(acc)
+        dist = d.getDefaultEstimate()(acc)
         assert acc.tag is not None
         assert dist.tag == acc.tag
         return dist
     return doTrainFromAcc
 
-def check_est(trueDist, train, inputGen, hasParams, iid = True, unitOcc = False, ps = d.defaultParamSpec, logLikeThresh = 2e-2, tslpThresh = 2e-2, testSetSize = 50, initTrainingSetSize = 100, trainingSetMult = 5, maxTrainingSetSize = 100000):
+def check_est(trueDist, train, inputGen, hasParams, iid = True, unitOcc = False, ps = d.getDefaultParamSpec(), logLikeThresh = 2e-2, tslpThresh = 2e-2, testSetSize = 50, initTrainingSetSize = 100, trainingSetMult = 5, maxTrainingSetSize = 100000):
     """Checks specified training method converges with sufficient data.
 
     More specifically, checks that, for a sufficient amount of training data,
@@ -630,18 +630,18 @@ def getTrainingSet(dist, inputGen, typicalSize, iid, unitOcc):
         updatedDist = dist
         trainingSet = []
         for inputNew in inputs:
-            acc = d.defaultCreateAcc(updatedDist)
+            acc = d.getDefaultCreateAcc()(updatedDist)
             for input, output, occ in trainingSet:
                 acc.add(input, output, occ)
-            updatedDist = d.defaultEstimate(acc)
+            updatedDist = d.getDefaultEstimate()(acc)
             trainingSet.append((inputNew, updatedDist.synth(inputNew), 1.0))
     assert len(trainingSet) == trainingSetSize
     return trainingSet
 
-def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = False, hasEM = True, evalShouldWork = True, ps = d.defaultParamSpec, logProbDerivInputCheck = False, logProbDerivInput_hasDiscrete_check = False, logProbDerivOutputCheck = False, logProbDerivOutput_hasDiscrete_checkFor = lambda output: False, checkAdditional = None, checkAccAdditional = None):
+def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = False, hasEM = True, evalShouldWork = True, ps = d.getDefaultParamSpec(), logProbDerivInputCheck = False, logProbDerivInput_hasDiscrete_check = False, logProbDerivOutputCheck = False, logProbDerivOutput_hasDiscrete_checkFor = lambda output: False, checkAdditional = None, checkAccAdditional = None):
     assert dist.tag is not None
     if hasEM:
-        assert d.defaultCreateAcc(dist).tag == dist.tag
+        assert d.getDefaultCreateAcc()(dist).tag == dist.tag
     assert ps.createAccG(dist).tag == dist.tag
 
     training = getTrainingSet(dist, inputGen, typicalSize = numPoints, iid = iid, unitOcc = unitOcc)

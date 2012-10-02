@@ -103,16 +103,19 @@ def getEstimateTotAux(estimateAuxPartials, idValue = id):
 
 def defaultEstimateAuxPartial(acc, estimateChild):
     return acc.estimateAux(estimateChild)
-defaultEstimateTotAux = getEstimateTotAux([defaultEstimateAuxPartial])
+def getDefaultEstimateTotAux():
+    return getEstimateTotAux([defaultEstimateAuxPartial])
 
 def defaultEstimatePartial(acc, estimateChild):
     dist, _ = acc.estimateAux(estimateChild)
     return dist
-defaultEstimate = nodetree.getDagMap([defaultEstimatePartial])
+def getDefaultEstimate():
+    return nodetree.getDagMap([defaultEstimatePartial])
 
 def defaultCreateAccPartial(dist, createAccChild):
     return dist.createAcc(createAccChild)
-defaultCreateAcc = nodetree.getDagMap([defaultCreateAccPartial])
+def getDefaultCreateAcc():
+    return nodetree.getDagMap([defaultCreateAccPartial])
 
 def getParams(partialMaps):
     return nodetree.getDagMap(
@@ -156,12 +159,13 @@ def defaultParsePartial(node, params, parseChild):
     return newNode.parseChildren(paramsLeft, parseChild)
 def defaultCreateAccGPartial(dist, createAccChild):
     return dist.createAccG(createAccChild)
-defaultParamSpec = ParamSpec(
-    [defaultParamsPartial],
-    [defaultDerivParamsPartial],
-    [defaultParsePartial],
-    [defaultCreateAccGPartial]
-)
+def getDefaultParamSpec():
+    return ParamSpec(
+        [defaultParamsPartial],
+        [defaultDerivParamsPartial],
+        [defaultParsePartial],
+        [defaultCreateAccGPartial]
+    )
 
 def nopParamsPartial(node, paramsChild):
     pass

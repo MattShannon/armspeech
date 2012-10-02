@@ -212,7 +212,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         corpus.synthComplete(dist, corpus.synthUttIds, d.SynthMethod.Meanish, synthOutDir, exptTag+'.meanish', afterSynth = afterSynth)
 
     def mixup(dist, accumulate):
-        acc = d.defaultCreateAcc(dist)
+        acc = d.getDefaultCreateAcc()(dist)
         accumulate(acc)
         logLikeInit = acc.logLike()
         framesInit = acc.count()
@@ -343,10 +343,10 @@ def run(dataDir, labDir, scriptsDir, outDir):
                 input, output = corpus.data(uttId)
                 acc.add(input, output)
 
-        trainAcc = d.defaultCreateAcc(dist)
+        trainAcc = d.getDefaultCreateAcc()(dist)
         timed(accumulate)(trainAcc, corpus.trainUttIds)
 
-        testAcc = d.defaultCreateAcc(dist)
+        testAcc = d.getDefaultCreateAcc()(dist)
         timed(accumulate)(testAcc, corpus.testUttIds)
 
         for desc, acc in [('train', trainAcc), ('test', testAcc)]:
@@ -419,7 +419,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
 
         print 'DEBUG: estimating global dist'
         timed(corpus.accumulate)(acc)
-        dist, (trainAux, trainAuxRat) = d.defaultEstimateTotAux(acc)
+        dist, (trainAux, trainAuxRat) = d.getDefaultEstimateTotAux()(acc)
         reportTrainAux((trainAux, trainAuxRat), acc.count())
 
         print 'lgVarianceFloorMult =', lgVarianceFloorMult
@@ -586,7 +586,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         )
 
         timed(corpus.accumulate)(acc)
-        dist, (trainAux, trainAuxRat) = d.defaultEstimateTotAux(acc)
+        dist, (trainAux, trainAuxRat) = d.getDefaultEstimateTotAux()(acc)
         reportTrainAux((trainAux, trainAuxRat), acc.count())
 
         writeDistFile(os.path.join(distOutDir, 'timingInfo.dist'), dist)
@@ -614,7 +614,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
             if isinstance(dist, d.MappedInputDist) and getFirst(dist.tag) == 'stream':
                 rootDist = dist.dist
                 def createAcc():
-                    leafAcc = d.defaultCreateAcc(rootDist)
+                    leafAcc = d.getDefaultCreateAcc()(rootDist)
                     return leafAcc
                 return d.MappedInputAcc(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
                     d.createDiscreteAcc(subLabels, lambda subLabel:
@@ -749,7 +749,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
 
         def drawVarious(dist, id, simpleResiduals = False, debugResiduals = False):
             assert not (simpleResiduals and debugResiduals)
-            acc = d.defaultParamSpec.createAccG(dist)
+            acc = d.getDefaultParamSpec().createAccG(dist)
             corpus.accumulate(acc)
             streamIndex = 0
             for outIndex in mgcSummarizer.outIndices:
@@ -852,7 +852,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
 
         print
         print 'ESTIMATING ALL PARAMETERS'
-        dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = d.defaultParamSpec, length = -200, verbosity = 2)
+        dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = d.getDefaultParamSpec(), length = -200, verbosity = 2)
         writeDistFile(os.path.join(distOutDir, 'xf.res.xf.dist'), dist)
         timed(drawVarious)(dist, id = 'xf.res.xf', debugResiduals = True)
         evaluateLogProb(dist, corpus)

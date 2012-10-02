@@ -16,8 +16,8 @@ from collections import defaultdict
 
 def decisionTreeCluster(labelList, accForLabel, createAcc, questionGroups,
                         thresh, minCount, maxCount = None, mdlFactor = 1.0,
-                        estimateTotAux = d.defaultEstimateTotAux,
-                        paramSpec = d.defaultParamSpec,
+                        estimateTotAux = d.getDefaultEstimateTotAux(),
+                        paramSpec = d.getDefaultParamSpec(),
                         verbosity = 2):
     root = createAcc()
     for label in labelList:

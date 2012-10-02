@@ -28,7 +28,7 @@ import dist as d
 from minimize import minimize
 from armspeech.util.timing import timed
 
-def expectationMaximization(distPrev, accumulate, createAcc = d.defaultCreateAcc, estimateTotAux = d.defaultEstimateTotAux, afterAcc = None, monotoneAux = True, verbosity = 0):
+def expectationMaximization(distPrev, accumulate, createAcc = d.getDefaultCreateAcc(), estimateTotAux = d.getDefaultEstimateTotAux(), afterAcc = None, monotoneAux = True, verbosity = 0):
     """Performs one step of expectation maximization.
 
     See the note in the docstring for this module for information on how the
@@ -49,7 +49,7 @@ def expectationMaximization(distPrev, accumulate, createAcc = d.defaultCreateAcc
         print 'trainEM:    logLikePrev = %s -> aux = %s (%s) (%s count)' % (logLikePrev / count, aux / count, d.Rat.toString(auxRat), count)
     return dist, logLikePrev, (aux, auxRat), count
 
-def trainEM(distInit, accumulate, createAcc = d.defaultCreateAcc, estimateTotAux = d.defaultEstimateTotAux, logLikePrevInit = float('-inf'), deltaThresh = 1e-8, minIterations = 1, maxIterations = None, beforeAcc = None, afterAcc = None, afterEst = None, monotone = False, monotoneAux = True, verbosity = 0):
+def trainEM(distInit, accumulate, createAcc = d.getDefaultCreateAcc(), estimateTotAux = d.getDefaultEstimateTotAux(), logLikePrevInit = float('-inf'), deltaThresh = 1e-8, minIterations = 1, maxIterations = None, beforeAcc = None, afterAcc = None, afterEst = None, monotone = False, monotoneAux = True, verbosity = 0):
     """Re-estimates a distribution using expectation maximization.
 
     See the note in the docstring for this module for information on how the
@@ -91,7 +91,7 @@ def trainEM(distInit, accumulate, createAcc = d.defaultCreateAcc, estimateTotAux
     return dist
 
 # FIXME : try alternative minimizers (e.g. LBFGS, minFunc)
-def trainCG(distInit, accumulate, ps = d.defaultParamSpec, length = -50, verbosity = 0):
+def trainCG(distInit, accumulate, ps = d.getDefaultParamSpec(), length = -50, verbosity = 0):
     """Re-estimates a distribution using a conjugate gradient optimizer.
 
     See the note in the docstring for this module for information on how the
@@ -125,7 +125,7 @@ def trainCG(distInit, accumulate, ps = d.defaultParamSpec, length = -50, verbosi
 
     return dist
 
-def trainCGandEM(distInit, accumulate, ps = d.defaultParamSpec, createAccEM = d.defaultCreateAcc, estimateTotAux = d.defaultEstimateTotAux, iterations = 5, length = -50, afterEst = None, verbosity = 0):
+def trainCGandEM(distInit, accumulate, ps = d.getDefaultParamSpec(), createAccEM = d.getDefaultCreateAcc(), estimateTotAux = d.getDefaultEstimateTotAux(), iterations = 5, length = -50, afterEst = None, verbosity = 0):
     """Re-estimates a distribution using conjugate gradients and EM.
 
     See the note in the docstring for this module for information on how the
