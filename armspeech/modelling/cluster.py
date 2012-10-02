@@ -30,7 +30,7 @@ def decisionTreeCluster(labelList, accForLabel, createAcc, questionGroups, thres
     dist, aux = decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minCount, maxCount, [], distRoot, auxRoot, countRoot, verbosity)
     if verbosity >= 1:
         print 'cluster: %s leaves' % dist.countLeaves()
-        print 'cluster: aux root = %s (%s) -> aux tree = %s (%s count)' % (auxRoot / countRoot, d.ratToString(auxRootRat), aux / countRoot, countRoot)
+        print 'cluster: aux root = %s (%s) -> aux tree = %s (%s count)' % (auxRoot / countRoot, d.Rat.toString(auxRootRat), aux / countRoot, countRoot)
     return dist
 
 def decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minCount, maxCount, isYesList, distLeaf, auxLeaf, countNode, verbosity):

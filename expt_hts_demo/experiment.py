@@ -167,7 +167,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
 
 
     def reportTrainAux((trainAux, trainAuxRat), trainFrames):
-        print 'training aux = %s (%s) (%s frames)' % (trainAux / trainFrames, d.ratToString(trainAuxRat), trainFrames)
+        print 'training aux = %s (%s) (%s frames)' % (trainAux / trainFrames, d.Rat.toString(trainAuxRat), trainFrames)
 
     def evaluateLogProb(dist, corpus):
         trainLogProb = corpus.logProb(dist, corpus.trainUttIds)

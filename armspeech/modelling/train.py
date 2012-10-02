@@ -46,7 +46,7 @@ def expectationMaximization(distPrev, accumulate, createAcc = d.defaultCreateAcc
     if monotoneAux and aux < logLikePrev:
         raise RuntimeError('re-estimated auxiliary value (%s) less than previous log likelihood (%s) during expectation-maximization (count = %s)' % (aux / count, logLikePrev / count, count))
     if verbosity >= 2:
-        print 'trainEM:    logLikePrev = %s -> aux = %s (%s) (%s count)' % (logLikePrev / count, aux / count, d.ratToString(auxRat), count)
+        print 'trainEM:    logLikePrev = %s -> aux = %s (%s) (%s count)' % (logLikePrev / count, aux / count, d.Rat.toString(auxRat), count)
     return dist, logLikePrev, (aux, auxRat), count
 
 def trainEM(distInit, accumulate, createAcc = d.defaultCreateAcc, estimateTotAux = d.defaultEstimateTotAux, logLikePrevInit = float('-inf'), deltaThresh = 1e-8, minIterations = 1, maxIterations = None, beforeAcc = None, afterAcc = None, afterEst = None, monotone = False, monotoneAux = True, verbosity = 0):

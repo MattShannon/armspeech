@@ -50,13 +50,16 @@ class Rat(object):
     Exact = 0
     Approx = 1
     LowerBound = 2
-ratToStringDict = {
-    Rat.Exact: 'Exact',
-    Rat.Approx: 'Approx',
-    Rat.LowerBound: 'LowerBound',
-}
-def ratToString(rat):
-    return ratToStringDict[rat]
+
+    ratToStringDict = {
+        Exact: 'Exact',
+        Approx: 'Approx',
+        LowerBound: 'LowerBound',
+    }
+
+    @staticmethod
+    def toString(rat):
+        return Rat.ratToStringDict[rat]
 
 def sumRats(rats):
     if any([ rat == Rat.Approx for rat in rats ]):
