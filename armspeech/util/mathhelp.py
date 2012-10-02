@@ -13,7 +13,10 @@ import armspeech.numpy_settings
 import math
 import random
 
-negInf = float('-inf')
+def getNegInf():
+    return float('-inf')
+
+_negInf = float('-inf')
 
 def assert_allclose(actual, desired, rtol = 1e-7, atol = 1e-14, msg = 'items not almost equal'):
     if np.shape(actual) != np.shape(desired):
@@ -35,9 +38,9 @@ def assert_allclose(actual, desired, rtol = 1e-7, atol = 1e-14, msg = 'items not
 
 def logAdd(a, b):
     """Computes log(exp(a) + exp(b)) in a way that avoids underflow."""
-    if a == negInf and b == negInf:
-        # np.logaddexp(negInf, negInf) incorrectly returns nan
-        return negInf
+    if a == _negInf and b == _negInf:
+        # np.logaddexp(_negInf, _negInf) incorrectly returns nan
+        return _negInf
     else:
         return np.logaddexp(a, b)
 
@@ -47,7 +50,7 @@ def logSum(l):
     N.B. l should be a sequence type (an iterable), not an iterator.
     """
     if len(l) == 0:
-        return negInf
+        return _negInf
     elif len(l) == 1:
         return l[0]
     elif len(l) == 2:
@@ -55,14 +58,14 @@ def logSum(l):
     elif len(l) < 10:
         ret = reduce(np.logaddexp, l)
         if math.isnan(ret):
-            # np.logaddexp(negInf, negInf) incorrectly returns nan
+            # np.logaddexp(_negInf, _negInf) incorrectly returns nan
             pass
         else:
             return ret
 
     k = max(l)
-    if k == negInf:
-        return negInf
+    if k == _negInf:
+        return _negInf
     else:
         return np.log(np.sum(np.exp(np.array(l) - k))) + k
 
