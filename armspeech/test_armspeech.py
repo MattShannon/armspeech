@@ -16,14 +16,20 @@ from armspeech.modelling import test_wnet
 from armspeech.util import test_mathhelp
 from armspeech.util import test_memoize
 from armspeech.util import test_persist
+from codedep import codeDeps
 
 import unittest
 import sys
 import argparse
 
+@codeDeps()
 class ShouldNotPickle(object):
     pass
 
+@codeDeps(ShouldNotPickle, test_dist.suite, test_mathhelp.suite,
+    test_memoize.suite, test_minimize.suite, test_persist.suite,
+    test_queuer.suite, test_transform.suite, test_wnet.suite
+)
 def suite(deepTest = False):
     return unittest.TestSuite([
         test_queuer.suite(),
@@ -36,6 +42,7 @@ def suite(deepTest = False):
         test_persist.suite(createShouldNotPickle = ShouldNotPickle),
     ])
 
+@codeDeps(suite)
 def main(rawArgs):
     parser = argparse.ArgumentParser(
         description = 'Runs all tests for armspeech.',

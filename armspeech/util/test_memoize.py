@@ -9,9 +9,11 @@
 from __future__ import division
 
 from memoize import memoize
+from codedep import codeDeps
 
 import unittest
 
+@codeDeps()
 class FnEval(object):
     def __init__(self, f):
         self.f = f
@@ -22,6 +24,7 @@ class FnEval(object):
         self.evalCount += 1
         return self.f(x)
 
+@codeDeps(FnEval, memoize)
 class TestMemoize(unittest.TestCase):
     def test_memoize(self):
         def f(x):
@@ -45,6 +48,7 @@ class TestMemoize(unittest.TestCase):
         assert fm(x3) == f(x3)
         assert fe.evalCount == 3
 
+@codeDeps(TestMemoize)
 def suite():
     return unittest.TestLoader().loadTestsFromTestCase(TestMemoize)
 

@@ -9,6 +9,8 @@
 
 from __future__ import division
 
+from codedep import codeDeps, ForwardRef
+
 import sys
 import logging
 import traceback
@@ -16,12 +18,14 @@ from numpy import array, zeros, shape, dot, isnan, isinf, isreal, sqrt, finfo, d
 import armspeech.numpy_settings
 from numpy.random import randn
 
+@codeDeps(ForwardRef(lambda: checkGradAt))
 def checkGrad(f, dim, drawInput = lambda dim: 2.0 * randn(dim), numPoints = 500, relTol = 1e-2, absTol = 1e-3):
     """checks analytic gradient returned by f agrees with numerical gradient at randomly chosen points (fairly weak test but still very useful)"""
     for i in range(numPoints):
         X = drawInput(dim)
         checkGradAt(f, X, relTol, absTol)
 
+@codeDeps()
 def checkGradAt(f, X, relTol, absTol):
     """checks analytic gradient returned by f agrees with numerical gradient at the specified point"""
     if len(shape(X)) != 1:
@@ -43,6 +47,7 @@ def checkGradAt(f, X, relTol, absTol):
         print 'NOTE: maxAbsDiff =', maxAbsDiff, '( absTol =', absTol, ')'
         raise RuntimeError('analytic and numeric derivatives differ ('+repr(df0)+' vs '+repr(dfn)+')')
 
+@codeDeps()
 def minimize(f, X, length, red = 1.0, verbosity = 0):
     if len(shape(X)) != 1:
         raise RuntimeError('argument of function to minimize must be a vector')
@@ -160,6 +165,7 @@ def minimize(f, X, length, red = 1.0, verbosity = 0):
             ls_failed = 1
     return X, fX, i
 
+@codeDeps()
 def solveToMinimize(F, a, convertFrom1D = False):
     """returns a function f whose global minima are precisely where F(x) = a"""
     def f(x):
@@ -170,6 +176,7 @@ def solveToMinimize(F, a, convertFrom1D = False):
         return 0.5 * dot(y, y), dot(y, dF0)
     return f
 
+@codeDeps()
 class NoSolutionError(Exception):
     def __init__(self, msg):
         self.msg = msg
@@ -177,6 +184,7 @@ class NoSolutionError(Exception):
     def __str__(self):
         return repr(self.msg)
 
+@codeDeps()
 class DidNotConvergeError(Exception):
     def __init__(self, msg):
         self.msg = msg
@@ -184,6 +192,7 @@ class DidNotConvergeError(Exception):
     def __str__(self):
         return repr(self.msg)
 
+@codeDeps(DidNotConvergeError, NoSolutionError, minimize, solveToMinimize)
 def solveByMinimize(F, a, x0, length, red = 1.0, verbosity = 0, solvedThresh = 1e-8):
     """solves F(x) = a iteratively, starting at x0"""
     convertFrom1D = (shape(x0) == ())

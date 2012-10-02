@@ -8,9 +8,13 @@
 
 from __future__ import division
 
+from codedep import codeDeps, ForwardRef
+
+@codeDeps(ForwardRef(lambda: MemoizedFn))
 def memoize(fn):
     return MemoizedFn(fn)
 
+@codeDeps()
 class MemoizedFn(object):
     """Dictionary-based function memoization.
 

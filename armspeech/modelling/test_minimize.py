@@ -9,6 +9,7 @@
 from __future__ import division
 
 from minimize import checkGrad, solveToMinimize, solveByMinimize
+from codedep import codeDeps
 
 import unittest
 import numpy as np
@@ -18,6 +19,7 @@ import numpy.linalg as la
 
 # FIXME : add tests for other minimize.py stuff (some manual tests currently exist in other files?)
 
+@codeDeps()
 def identity(x):
     s = np.shape(x)
     if len(s) == 0:
@@ -27,14 +29,17 @@ def identity(x):
     else:
         raise RuntimeError('function called on tensor of rank >= 2')
 
+@codeDeps()
 def cubic1D(x):
     assert len(np.shape(x)) == 0
     return x * x * x + x, np.array([3 * x * x + 1])
 
+@codeDeps()
 def cubic(x):
     assert len(np.shape(x)) == 1
     return x * x * x + x, np.array([3 * x * x + 1])
 
+@codeDeps(checkGrad, cubic, cubic1D, identity, solveByMinimize, solveToMinimize)
 class TestMinimize(unittest.TestCase):
     def test_solveToMinimize(self, its = 100, numPoints = 10):
         for it in range(its):
@@ -67,6 +72,7 @@ class TestMinimize(unittest.TestCase):
             a = randn(1)
             checkSolve(cubic, a, x0)
 
+@codeDeps(TestMinimize)
 def suite():
     return unittest.TestLoader().loadTestsFromTestCase(TestMinimize)
 

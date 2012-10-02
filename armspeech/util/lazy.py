@@ -6,6 +6,9 @@
 
 from __future__ import division
 
+from codedep import codeDeps
+
+@codeDeps()
 class lazyproperty(object):
     """(based on http://code.activestate.com/recipes/363602-lazy-property-evaluation/)"""
     def __init__(self, calculate_function):

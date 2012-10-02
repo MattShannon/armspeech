@@ -9,13 +9,16 @@
 from __future__ import division
 
 import dist as d
+from codedep import codeDeps, ForwardRef
 
 import numpy as np
 import armspeech.numpy_settings
 
+@codeDeps(d.AccG)
 class TransformAccG(d.AccG):
     pass
 
+@codeDeps(TransformAccG)
 class DerivInputTransformAccG(TransformAccG):
     def __init__(self, inputTransform, tag = None):
         self.inputTransform = inputTransform
@@ -45,9 +48,11 @@ class DerivInputTransformAccG(TransformAccG):
         return self.derivParams
 
 
+@codeDeps(d.AccG)
 class OutputTransformAccG(d.AccG):
     pass
 
+@codeDeps(OutputTransformAccG)
 class DerivOutputTransformAccG(OutputTransformAccG):
     def __init__(self, outputTransform, tag = None):
         self.outputTransform = outputTransform

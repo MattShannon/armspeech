@@ -10,14 +10,19 @@ from __future__ import division
 
 import persist
 from filehelp import TempDir
+from codedep import codeDeps
 
 import unittest
 import cPickle as pickle
 import os
 
+@codeDeps()
 class ShouldNotPickle(object):
     pass
 
+@codeDeps(ShouldNotPickle, TempDir, persist.loadPickle, persist.savePickle,
+    persist.secHashFile, persist.secHashObject
+)
 class TestPersist(unittest.TestCase):
     def setUp(self):
         self.createShouldNotPickle = ShouldNotPickle
@@ -72,6 +77,7 @@ class TestPersist(unittest.TestCase):
         assert persist.secHashObject(l) == '4af396d95ed2d87f7330f8418f1d7619623e5f42'
         assert persist.secHashObject(d) == 'bebad045b5f2d023efed1d4fc1840a28c532789e'
 
+@codeDeps(TestPersist)
 def suite(createShouldNotPickle = None):
     if createShouldNotPickle is None:
         return unittest.TestLoader().loadTestsFromTestCase(TestPersist)

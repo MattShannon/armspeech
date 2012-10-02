@@ -17,11 +17,13 @@ import armspeech.bisque.queuer as qr
 from armspeech.bisque import sge_queuer
 import armspeech.bisque.test_queuer_jobs as jobs
 from armspeech.util.filehelp import TempDir
+from codedep import codeDeps
 
 import unittest
 import logging
 import time
 
+@codeDeps(jobs.AddJob, jobs.OneJob)
 def simpleTestDag():
     oneJob1 = jobs.OneJob(name = 'oneJob1')
     oneJob2 = jobs.OneJob(name = 'oneJob2')
@@ -31,6 +33,9 @@ def simpleTestDag():
     addJobD = jobs.AddJob(oneJob1.valueOut, addJobB.valueOut, name = 'addJobD')
     return [(addJobC.valueOut, 5), (addJobD.valueOut, 4)], 6, 2
 
+@codeDeps(TempDir, qr.BuildRepo, qr.LocalQueuer, sge_queuer.MockSgeQueuer,
+    simpleTestDag
+)
 class TestDistribute(unittest.TestCase):
     def test_LocalQueuer(self):
         tempDir = TempDir()
@@ -90,6 +95,7 @@ class TestDistribute(unittest.TestCase):
                 assert len(live) == 0
         tempDir.remove()
 
+@codeDeps(TestDistribute)
 def suite():
     return unittest.TestLoader().loadTestsFromTestCase(TestDistribute)
 

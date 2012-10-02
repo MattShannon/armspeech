@@ -9,18 +9,21 @@
 from __future__ import division
 
 import armspeech.modelling.dist as d
+from codedep import codeDeps
 
 import math
 import numpy as np
 import armspeech.numpy_settings
 import matplotlib.transforms as transforms
 
+@codeDeps()
 def partitionSeq(xs, numPartitions):
     out = [ [] for i in range(numPartitions) ]
     for i, x in enumerate(xs):
         out[i % numPartitions].append(x)
     return out
 
+@codeDeps()
 def drawLabelledSeq(dataSeqs, labelSeqs, outPdf, figSizeRate = None, fillBetween = [], xmin = None, xmax = None, ylims = None, xlabel = None, ylabel = None, legend = None, colors = ['red', 'purple', 'orange', 'blue']):
     import matplotlib.pyplot as plt
 
@@ -65,6 +68,7 @@ def drawLabelledSeq(dataSeqs, labelSeqs, outPdf, figSizeRate = None, fillBetween
 
     plt.savefig(outPdf)
 
+@codeDeps()
 def drawWarping(transformList, outPdf, xlims, ylims = None, title = None):
     import matplotlib.pyplot as plt
 
@@ -83,6 +87,7 @@ def drawWarping(transformList, outPdf, xlims, ylims = None, title = None):
 
     plt.savefig(outPdf)
 
+@codeDeps()
 def drawLogPdf(outputs, bins, outPdf, fns = [], ylims = None, title = None):
     import matplotlib.pyplot as plt
 
@@ -103,6 +108,7 @@ def drawLogPdf(outputs, bins, outPdf, fns = [], ylims = None, title = None):
         plt.ylim(*ylims)
     plt.savefig(outPdf)
 
+@codeDeps(d.SynthMethod)
 def drawFor1DInput(debugAcc, subDist, outPdf, xlims, ylims, title = None, drawPlusMinusTwoStdev = False):
     """Draws plot showing several things of interest for the case of 1D input.
 

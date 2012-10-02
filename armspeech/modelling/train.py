@@ -27,7 +27,9 @@ import nodetree
 import dist as d
 from minimize import minimize
 from armspeech.util.timing import timed
+from codedep import codeDeps
 
+@codeDeps(d.Rat, d.getDefaultCreateAcc, d.getDefaultEstimateTotAux)
 def expectationMaximization(distPrev, accumulate, createAcc = d.getDefaultCreateAcc(), estimateTotAux = d.getDefaultEstimateTotAux(), afterAcc = None, monotoneAux = True, verbosity = 0):
     """Performs one step of expectation maximization.
 
@@ -49,6 +51,9 @@ def expectationMaximization(distPrev, accumulate, createAcc = d.getDefaultCreate
         print 'trainEM:    logLikePrev = %s -> aux = %s (%s) (%s count)' % (logLikePrev / count, aux / count, d.Rat.toString(auxRat), count)
     return dist, logLikePrev, (aux, auxRat), count
 
+@codeDeps(d.getDefaultCreateAcc, d.getDefaultEstimateTotAux,
+    expectationMaximization
+)
 def trainEM(distInit, accumulate, createAcc = d.getDefaultCreateAcc(), estimateTotAux = d.getDefaultEstimateTotAux(), logLikePrevInit = float('-inf'), deltaThresh = 1e-8, minIterations = 1, maxIterations = None, beforeAcc = None, afterAcc = None, afterEst = None, monotone = False, monotoneAux = True, verbosity = 0):
     """Re-estimates a distribution using expectation maximization.
 
@@ -91,6 +96,7 @@ def trainEM(distInit, accumulate, createAcc = d.getDefaultCreateAcc(), estimateT
     return dist
 
 # FIXME : try alternative minimizers (e.g. LBFGS, minFunc)
+@codeDeps(d.getDefaultParamSpec, minimize)
 def trainCG(distInit, accumulate, ps = d.getDefaultParamSpec(), length = -50, verbosity = 0):
     """Re-estimates a distribution using a conjugate gradient optimizer.
 
@@ -125,6 +131,9 @@ def trainCG(distInit, accumulate, ps = d.getDefaultParamSpec(), length = -50, ve
 
     return dist
 
+@codeDeps(d.getDefaultCreateAcc, d.getDefaultEstimateTotAux,
+    d.getDefaultParamSpec, expectationMaximization, timed, trainCG
+)
 def trainCGandEM(distInit, accumulate, ps = d.getDefaultParamSpec(), createAccEM = d.getDefaultCreateAcc(), estimateTotAux = d.getDefaultEstimateTotAux(), iterations = 5, length = -50, afterEst = None, verbosity = 0):
     """Re-estimates a distribution using conjugate gradients and EM.
 
@@ -152,6 +161,7 @@ def trainCGandEM(distInit, accumulate, ps = d.getDefaultParamSpec(), createAccEM
 
     return dist
 
+@codeDeps(d.LinearGaussianAcc)
 def mixupLinearGaussianEstimatePartial(acc, estimateChild):
     if isinstance(acc, d.LinearGaussianAcc):
         return acc.estimateInitialMixtureOfTwoExperts()

@@ -15,6 +15,7 @@ import wnet
 from armspeech.util.memoize import memoize
 from armspeech.util.mathhelp import assert_allclose
 from armspeech.util.util import orderedDictRepr
+from codedep import codeDeps, ForwardRef
 
 import logging
 import math
@@ -42,10 +43,12 @@ def eval_local(reprString):
 
     return eval(reprString)
 
+@codeDeps()
 class SynthMethod(object):
     Meanish = 0
     Sample = 1
 
+@codeDeps()
 class Rat(object):
     Exact = 0
     Approx = 1
@@ -61,6 +64,7 @@ class Rat(object):
     def toString(rat):
         return Rat.ratToStringDict[rat]
 
+@codeDeps(Rat)
 def sumRats(rats):
     if any([ rat == Rat.Approx for rat in rats ]):
         return Rat.Approx
@@ -70,21 +74,27 @@ def sumRats(rats):
         assert all([ rat == Rat.Exact for rat in rats ])
         return Rat.Exact
 
+@codeDeps(sumRats)
 def sumValuedRats(valuedRats):
     values, rats = zip(*valuedRats)
     return sum(values), sumRats(rats)
 
+@codeDeps(ForwardRef(lambda: AccCommon), nodetree.nodeList)
 def accNodeList(parentNode):
     return nodetree.nodeList(
         parentNode,
         includeNode = lambda node: isinstance(node, AccCommon)
     )
+@codeDeps(ForwardRef(lambda: Dist), nodetree.nodeList)
 def distNodeList(parentNode):
     return nodetree.nodeList(
         parentNode,
         includeNode = lambda node: isinstance(node, Dist)
     )
 
+@codeDeps(distNodeList, nodetree.chainPartialFns, nodetree.getDagMap,
+    sumValuedRats
+)
 def getEstimateTotAux(estimateAuxPartials, idValue = id):
     estimateAuxPartial = nodetree.chainPartialFns(estimateAuxPartials)
     def estimateTotAux(acc):
@@ -101,43 +111,54 @@ def getEstimateTotAux(estimateAuxPartials, idValue = id):
         return dist, (totAux, totAuxRat)
     return estimateTotAux
 
+@codeDeps()
 def defaultEstimateAuxPartial(acc, estimateChild):
     return acc.estimateAux(estimateChild)
+@codeDeps(defaultEstimateAuxPartial, getEstimateTotAux)
 def getDefaultEstimateTotAux():
     return getEstimateTotAux([defaultEstimateAuxPartial])
 
+@codeDeps()
 def defaultEstimatePartial(acc, estimateChild):
     dist, _ = acc.estimateAux(estimateChild)
     return dist
+@codeDeps(defaultEstimatePartial, nodetree.getDagMap)
 def getDefaultEstimate():
     return nodetree.getDagMap([defaultEstimatePartial])
 
+@codeDeps()
 def defaultCreateAccPartial(dist, createAccChild):
     return dist.createAcc(createAccChild)
+@codeDeps(defaultCreateAccPartial, nodetree.getDagMap)
 def getDefaultCreateAcc():
     return nodetree.getDagMap([defaultCreateAccPartial])
 
+@codeDeps(nodetree.getDagMap)
 def getParams(partialMaps):
     return nodetree.getDagMap(
         partialMaps,
         storeValue = lambda params, args: True,
         restoreValue = lambda b, args: []
     )
+@codeDeps(nodetree.getDagMap)
 def getDerivParams(partialMaps):
     return nodetree.getDagMap(
         partialMaps,
         storeValue = lambda derivParams, args: True,
         restoreValue = lambda b, args: []
     )
+@codeDeps(nodetree.getDagMap)
 def getParse(partialMaps):
     return nodetree.getDagMap(
         partialMaps,
         storeValue = lambda (node, paramsLeft), args: node,
         restoreValue = lambda node, args: (node, args[1])
     )
+@codeDeps(nodetree.getDagMap)
 def getCreateAccG(partialMaps):
     return nodetree.getDagMap(partialMaps)
 
+@codeDeps(getCreateAccG, getDerivParams, getParams, getParse)
 class ParamSpec(object):
     def __init__(self, paramsPartials, derivParamsPartials, parsePartials, createAccGPartials):
         self.params = getParams(paramsPartials)
@@ -150,15 +171,22 @@ class ParamSpec(object):
             raise RuntimeError('extra parameters left after parsing complete')
         return distNew
 
+@codeDeps()
 def defaultParamsPartial(node, paramsChild):
     return np.concatenate([node.paramsSingle(), node.paramsChildren(paramsChild)])
+@codeDeps()
 def defaultDerivParamsPartial(node, derivParamsChild):
     return np.concatenate([node.derivParamsSingle(), node.derivParamsChildren(derivParamsChild)])
+@codeDeps()
 def defaultParsePartial(node, params, parseChild):
     newNode, paramsLeft = node.parseSingle(params)
     return newNode.parseChildren(paramsLeft, parseChild)
+@codeDeps()
 def defaultCreateAccGPartial(dist, createAccChild):
     return dist.createAccG(createAccChild)
+@codeDeps(ParamSpec, defaultCreateAccGPartial, defaultDerivParamsPartial,
+    defaultParamsPartial, defaultParsePartial
+)
 def getDefaultParamSpec():
     return ParamSpec(
         [defaultParamsPartial],
@@ -167,22 +195,30 @@ def getDefaultParamSpec():
         [defaultCreateAccGPartial]
     )
 
+@codeDeps()
 def nopParamsPartial(node, paramsChild):
     pass
+@codeDeps()
 def nopDerivParamsPartial(node, derivParamsChild):
     pass
+@codeDeps()
 def nopParsePartial(node, params, parseChild):
     pass
+@codeDeps()
 def nopCreateAccGPartial(dist, createAccChild):
     pass
 
+@codeDeps()
 def noLocalParamsPartial(node, paramsChild):
     return node.paramsChildren(paramsChild)
+@codeDeps()
 def noLocalDerivParamsPartial(node, derivParamsChild):
     return node.derivParamsChildren(derivParamsChild)
+@codeDeps()
 def noLocalParsePartial(node, params, parseChild):
     return node.parseChildren(params, parseChild)
 
+@codeDeps(nodetree.getDefaultMap)
 def isolateDist(dist):
     """Returns an isolated copy of a distribution.
 
@@ -192,6 +228,10 @@ def isolateDist(dist):
     """
     return nodetree.getDefaultMap()(dist)
 
+@codeDeps(ParamSpec, defaultCreateAccGPartial, defaultDerivParamsPartial,
+    defaultParamsPartial, defaultParsePartial, noLocalDerivParamsPartial,
+    noLocalParamsPartial, noLocalParsePartial, nopCreateAccGPartial
+)
 def getByTagParamSpec(f):
     def byTagParamsPartial(node, paramsChild):
         if f(node.tag):
@@ -209,6 +249,7 @@ def getByTagParamSpec(f):
         [nopCreateAccGPartial, defaultCreateAccGPartial]
     )
 
+@codeDeps()
 def addAcc(accTo, accFrom):
     """Adds accumulator sub-DAG accFrom to accumulator sub-DAG accTo.
 
@@ -232,6 +273,7 @@ def addAcc(accTo, accFrom):
             nodeTo.addAccSingle(nodeFrom)
             agenda.extend(reversed(nodeTo.addAccChildPairs(nodeFrom)))
 
+@codeDeps()
 def parseConcat(dists, params, parseChild):
     distNews = []
     paramsLeft = params
@@ -240,8 +282,10 @@ def parseConcat(dists, params, parseChild):
         distNews.append(distNew)
     return distNews, paramsLeft
 
+@codeDeps()
 class PruneSpec(object):
     pass
+@codeDeps(PruneSpec)
 class SimplePruneSpec(PruneSpec):
     def __init__(self, betaThresh, logOccThresh):
         self.betaThresh = betaThresh
@@ -249,6 +293,7 @@ class SimplePruneSpec(PruneSpec):
     def __repr__(self):
         return 'SimplePruneSpec('+repr(self.betaThresh)+', '+repr(self.logOccThresh)+')'
 
+@codeDeps(assert_allclose)
 class Memo(object):
     def __init__(self, maxOcc):
         self.maxOcc = maxOcc
@@ -285,6 +330,7 @@ class Memo(object):
             self.inputs = self.inputs[:self.maxOcc]
             self.outputs = self.outputs[:self.maxOcc]
 
+@codeDeps()
 class EstimationError(Exception):
     def __init__(self, msg):
         self.msg = msg
@@ -292,6 +338,7 @@ class EstimationError(Exception):
     def __str__(self):
         return str(self.msg)
 
+@codeDeps()
 class InvalidParamsError(Exception):
     def __init__(self, msg):
         self.msg = msg
@@ -299,6 +346,7 @@ class InvalidParamsError(Exception):
     def __str__(self):
         return str(self.msg)
 
+@codeDeps()
 class SynthSeqTooLongError(Exception):
     def __init__(self, msg):
         self.msg = msg
@@ -306,6 +354,7 @@ class SynthSeqTooLongError(Exception):
     def __str__(self):
         return str(self.msg)
 
+@codeDeps(accNodeList)
 class AccCommon(object):
     def children(self):
         abstract
@@ -340,10 +389,12 @@ class AccCommon(object):
         self.tag = tag
         return self
 
+@codeDeps(AccCommon)
 class AccEM(AccCommon):
     def estimateAux(self, estimateChild):
         abstract
 
+@codeDeps(AccCommon)
 class AccG(AccCommon):
     def derivParamsSingle(self):
         abstract
@@ -351,9 +402,11 @@ class AccG(AccCommon):
         children = self.children()
         return [] if not children else np.concatenate([ derivParamsChild(child) for child in children ])
 
+@codeDeps(AccEM, AccG)
 class Acc(AccEM, AccG):
     pass
 
+@codeDeps(Acc)
 class TermAcc(Acc):
     """Acc with no children."""
     def children(self):
@@ -363,6 +416,7 @@ class TermAcc(Acc):
     def estimateAux(self, estimateChild):
         return self.estimateSingleAux()
 
+@codeDeps(AccG)
 class DerivTermAccG(AccG):
     def __init__(self, distPrev, tag = None):
         assert len(distPrev.children()) == 0
@@ -393,6 +447,7 @@ class DerivTermAccG(AccG):
     def derivParamsSingle(self):
         return self.derivParams
 
+@codeDeps(ForwardRef(lambda: FixedValueDist), Rat, TermAcc)
 class FixedValueAcc(TermAcc):
     def __init__(self, value, tag = None):
         self.value = value
@@ -418,6 +473,7 @@ class FixedValueAcc(TermAcc):
     def estimateSingleAux(self):
         return FixedValueDist(self.value, tag = self.tag), (0.0, Rat.Exact)
 
+@codeDeps(ForwardRef(lambda: OracleDist), Rat, TermAcc)
 class OracleAcc(TermAcc):
     def __init__(self, tag = None):
         self.tag = tag
@@ -439,6 +495,10 @@ class OracleAcc(TermAcc):
     def estimateSingleAux(self):
         return OracleDist(tag = self.tag), (0.0, Rat.Exact)
 
+@codeDeps(ForwardRef(lambda: BinaryLogisticClassifier), EstimationError,
+    ForwardRef(lambda: LinearGaussian), ForwardRef(lambda: MixtureDist), Rat,
+    TermAcc, mla.pinv
+)
 class LinearGaussianAcc(TermAcc):
     def __init__(self, distPrev = None, inputLength = None, varianceFloor = None, tag = None):
         self.distPrev = distPrev
@@ -558,6 +618,9 @@ class LinearGaussianAcc(TermAcc):
             dist1 = self.estimateSingleAux()[0]
             return MixtureDist(blc, [dist0, dist1])
 
+@codeDeps(ForwardRef(lambda: ConstantClassifier), EstimationError, Rat, TermAcc,
+    assert_allclose
+)
 class ConstantClassifierAcc(TermAcc):
     def __init__(self, distPrev = None, numClasses = None, probFloors = None, tag = None):
         self.distPrev = distPrev
@@ -631,6 +694,9 @@ class ConstantClassifierAcc(TermAcc):
                 probs = self.distPrev.probs
                 return ConstantClassifier(probs, self.probFloors, tag = self.tag), self.auxFn(probs)
 
+@codeDeps(ForwardRef(lambda: BinaryLogisticClassifier), EstimationError, Rat,
+    TermAcc, mla.pinv
+)
 class BinaryLogisticClassifierAcc(TermAcc):
     def __init__(self, distPrev, tag = None):
         self.distPrev = distPrev
@@ -709,6 +775,7 @@ class BinaryLogisticClassifierAcc(TermAcc):
             coeff = self.distPrev.coeff
             return BinaryLogisticClassifier(coeff, self.distPrev.coeffFloor, tag = self.tag), self.auxFn(coeff)
 
+@codeDeps(Acc, ForwardRef(lambda: MixtureDist), Rat, assert_allclose, logSum)
 class MixtureAcc(Acc):
     def __init__(self, distPrev, classAcc, regAccs, tag = None):
         self.numComps = distPrev.numComps
@@ -754,6 +821,7 @@ class MixtureAcc(Acc):
         regDists = [ estimateChild(regAcc) for regAcc in self.regAccs ]
         return MixtureDist(classDist, regDists, tag = self.tag), (self.entropy, Rat.LowerBound)
 
+@codeDeps(Acc, ForwardRef(lambda: IdentifiableMixtureDist), Rat)
 class IdentifiableMixtureAcc(Acc):
     def __init__(self, classAcc, regAccs, tag = None):
         self.classAcc = classAcc
@@ -786,12 +854,14 @@ class IdentifiableMixtureAcc(Acc):
         regDists = [ estimateChild(regAcc) for regAcc in self.regAccs ]
         return IdentifiableMixtureDist(classDist, regDists, tag = self.tag), (0.0, Rat.Exact)
 
+@codeDeps(ForwardRef(lambda: VectorAcc))
 def createVectorAcc(order, outIndices, vectorSummarizer, createAccForIndex):
     accComps = dict()
     for outIndex in outIndices:
         accComps[outIndex] = createAccForIndex(outIndex)
     return VectorAcc(order, vectorSummarizer, outIndices, accComps)
 
+@codeDeps(Acc, Rat, ForwardRef(lambda: VectorDist))
 class VectorAcc(Acc):
     def __init__(self, order, vectorSummarizer, keys, accComps, tag = None):
         assert len(keys) == len(accComps)
@@ -831,12 +901,14 @@ class VectorAcc(Acc):
             distComps[outIndex] = estimateChild(self.accComps[outIndex])
         return VectorDist(self.order, self.vectorSummarizer, self.keys, distComps, tag = self.tag), (0.0, Rat.Exact)
 
+@codeDeps(ForwardRef(lambda: DiscreteAcc))
 def createDiscreteAcc(keys, createAccFor):
     accDict = dict()
     for key in keys:
         accDict[key] = createAccFor(key)
     return DiscreteAcc(keys, accDict)
 
+@codeDeps(Acc, ForwardRef(lambda: DiscreteDist), Rat)
 class DiscreteAcc(Acc):
     def __init__(self, keys, accDict, tag = None):
         assert len(keys) == len(accDict)
@@ -872,6 +944,7 @@ class DiscreteAcc(Acc):
             distDict[label] = estimateChild(self.accDict[label])
         return DiscreteDist(self.keys, distDict, tag = self.tag), (0.0, Rat.Exact)
 
+@codeDeps(Acc)
 class AutoGrowingDiscreteAcc(Acc):
     """Discrete acc that creates sub-accs as necessary when a new phonetic context is seen.
 
@@ -910,9 +983,11 @@ class AutoGrowingDiscreteAcc(Acc):
             ret.append((self.accDict[label], acc.accDict[label]))
         return ret
 
+@codeDeps(Acc)
 class DecisionTreeAcc(Acc):
     pass
 
+@codeDeps(DecisionTreeAcc, ForwardRef(lambda: DecisionTreeNode), Rat)
 class DecisionTreeAccNode(DecisionTreeAcc):
     def __init__(self, fullQuestion, accYes, accNo, tag = None):
         self.fullQuestion = fullQuestion
@@ -949,6 +1024,7 @@ class DecisionTreeAccNode(DecisionTreeAcc):
         distNo = estimateChild(self.accNo)
         return DecisionTreeNode(self.fullQuestion, distYes, distNo, tag = self.tag), (0.0, Rat.Exact)
 
+@codeDeps(DecisionTreeAcc, ForwardRef(lambda: DecisionTreeLeaf), Rat)
 class DecisionTreeAccLeaf(DecisionTreeAcc):
     def __init__(self, acc, tag = None):
         self.acc = acc
@@ -977,6 +1053,7 @@ class DecisionTreeAccLeaf(DecisionTreeAcc):
         dist = estimateChild(self.acc)
         return DecisionTreeLeaf(dist, tag = self.tag), (0.0, Rat.Exact)
 
+@codeDeps(Acc, ForwardRef(lambda: MappedInputDist), Rat)
 class MappedInputAcc(Acc):
     """Acc where input is mapped using a fixed transform."""
     def __init__(self, inputTransform, acc, tag = None):
@@ -1006,6 +1083,7 @@ class MappedInputAcc(Acc):
         dist = estimateChild(self.acc)
         return MappedInputDist(self.inputTransform, dist, tag = self.tag), (0.0, Rat.Exact)
 
+@codeDeps(Acc, ForwardRef(lambda: MappedOutputDist), Rat)
 class MappedOutputAcc(Acc):
     """Acc where output is mapped using a fixed transform."""
     def __init__(self, outputTransform, acc, tag = None):
@@ -1038,6 +1116,7 @@ class MappedOutputAcc(Acc):
         dist = estimateChild(self.acc)
         return MappedOutputDist(self.outputTransform, dist, tag = self.tag), (self.logJac, Rat.Exact)
 
+@codeDeps(AccEM, Rat, ForwardRef(lambda: TransformedInputDist))
 class TransformedInputLearnDistAccEM(AccEM):
     """Acc for transformed input, where we learn the sub-dist parameters using EM."""
     def __init__(self, inputTransform, acc, tag = None):
@@ -1064,6 +1143,7 @@ class TransformedInputLearnDistAccEM(AccEM):
         dist = estimateChild(self.acc)
         return TransformedInputDist(self.inputTransform, dist, tag = self.tag), (0.0, Rat.Exact)
 
+@codeDeps(AccEM, Rat, ForwardRef(lambda: TransformedInputDist))
 class TransformedInputLearnTransformAccEM(AccEM):
     """Acc for transformed input, where we learn the transform parameters using EM."""
     def __init__(self, inputTransformAcc, dist, tag = None):
@@ -1090,6 +1170,7 @@ class TransformedInputLearnTransformAccEM(AccEM):
         inputTransform = estimateChild(self.inputTransformAcc)
         return TransformedInputDist(inputTransform, self.dist, tag = self.tag), (0.0, Rat.Exact)
 
+@codeDeps(AccG)
 class TransformedInputAccG(AccG):
     """Acc for transformed input, where we compute the gradient with respect to both the transform and sub-dist parameters."""
     def __init__(self, (inputTransformAcc, inputTransform), (acc, dist), tag = None):
@@ -1118,6 +1199,7 @@ class TransformedInputAccG(AccG):
     def derivParamsSingle(self):
         return []
 
+@codeDeps(AccEM, Rat, ForwardRef(lambda: TransformedOutputDist))
 class TransformedOutputLearnDistAccEM(AccEM):
     """Acc for transformed output, where we learn the sub-dist parameters using EM."""
     def __init__(self, outputTransform, acc, tag = None):
@@ -1147,6 +1229,7 @@ class TransformedOutputLearnDistAccEM(AccEM):
         dist = estimateChild(self.acc)
         return TransformedOutputDist(self.outputTransform, dist, tag = self.tag), (self.logJac, Rat.Exact)
 
+@codeDeps(AccEM, Rat, ForwardRef(lambda: TransformedOutputDist))
 class TransformedOutputLearnTransformAccEM(AccEM):
     """Acc for transformed output, where we learn the transform parameters using EM."""
     def __init__(self, outputTransformAcc, dist, tag = None):
@@ -1173,6 +1256,7 @@ class TransformedOutputLearnTransformAccEM(AccEM):
         outputTransform = estimateChild(self.outputTransformAcc)
         return TransformedOutputDist(outputTransform, self.dist, tag = self.tag), (0.0, Rat.Exact)
 
+@codeDeps(AccG)
 class TransformedOutputAccG(AccG):
     """Acc for transformed output, where we compute the gradient with respect to both the transform and sub-dist parameters."""
     def __init__(self, (outputTransformAcc, outputTransform), (acc, dist), tag = None):
@@ -1205,6 +1289,7 @@ class TransformedOutputAccG(AccG):
     def derivParamsSingle(self):
         return []
 
+@codeDeps(Acc, ForwardRef(lambda: PassThruDist), Rat)
 class PassThruAcc(Acc):
     def __init__(self, acc, tag = None):
         self.acc = acc
@@ -1232,6 +1317,7 @@ class PassThruAcc(Acc):
         dist = estimateChild(self.acc)
         return PassThruDist(dist, tag = self.tag), (0.0, Rat.Exact)
 
+@codeDeps(Acc, ForwardRef(lambda: DebugDist), Memo, Rat)
 class DebugAcc(Acc):
     def __init__(self, maxOcc, acc, tag = None):
         self.acc = acc
@@ -1263,6 +1349,9 @@ class DebugAcc(Acc):
         dist = estimateChild(self.acc)
         return DebugDist(self.memo.maxOcc, dist, tag = self.tag), (0.0, Rat.Exact)
 
+@codeDeps(Acc, ForwardRef(lambda: AutoregressiveSequenceDist), Rat,
+    contextualizeIter
+)
 class AutoregressiveSequenceAcc(Acc):
     def __init__(self, depth, seqFor, fillFrames, acc, tag = None):
         self.depth = depth
@@ -1304,6 +1393,9 @@ class AutoregressiveSequenceAcc(Acc):
         dist = estimateChild(self.acc)
         return AutoregressiveSequenceDist(self.depth, self.seqFor, self.fillFrames, dist, tag = self.tag), (0.0, Rat.Exact)
 
+@codeDeps(Acc, ForwardRef(lambda: AutoregressiveNetDist), Rat,
+    wnet.forwardBackwardAlt
+)
 class AutoregressiveNetAcc(Acc):
     def __init__(self, distPrev, durAcc, acAcc, verbosity, tag = None):
         self.distPrev = distPrev
@@ -1383,6 +1475,7 @@ class AutoregressiveNetAcc(Acc):
         return AutoregressiveNetDist(self.distPrev.depth, self.distPrev.netFor, self.distPrev.fillFrames, durDist, acDist, self.distPrev.pruneSpec, tag = self.tag), (self.entropy, Rat.LowerBound)
 
 
+@codeDeps(SynthMethod)
 class Dist(object):
     """Conditional probability distribution."""
     def children(self):
@@ -1425,6 +1518,7 @@ class Dist(object):
         self.tag = tag
         return self
 
+@codeDeps(Dist)
 class TermDist(Dist):
     """Dist with no children."""
     def children(self):
@@ -1436,6 +1530,7 @@ class TermDist(Dist):
     def parseChildren(self, params, parseChild):
         return self, params
 
+@codeDeps(FixedValueAcc, SynthMethod, TermDist)
 class FixedValueDist(TermDist):
     def __init__(self, value, tag = None):
         self.value = value
@@ -1468,6 +1563,7 @@ class FixedValueDist(TermDist):
     def parseSingle(self, params):
         return FixedValueDist(self.value, tag = self.tag), params
 
+@codeDeps(OracleAcc, SynthMethod, TermDist)
 class OracleDist(TermDist):
     def __init__(self, tag = None):
         self.tag = tag
@@ -1493,6 +1589,7 @@ class OracleDist(TermDist):
     def parseSingle(self, params):
         return OracleDist(tag = self.tag), params
 
+@codeDeps(InvalidParamsError, LinearGaussianAcc, SynthMethod, TermDist)
 class LinearGaussian(TermDist):
     def __init__(self, coeff, variance, varianceFloor, tag = None):
         self.coeff = coeff
@@ -1556,6 +1653,7 @@ class LinearGaussian(TermDist):
     def flooredSingle(self):
         return (1, 1) if np.allclose(self.variance, self.varianceFloor) else (0, 1)
 
+@codeDeps(DerivTermAccG, SynthMethod, TermDist)
 class StudentDist(TermDist):
     def __init__(self, df, precision, tag = None):
         if df <= 0.0:
@@ -1623,6 +1721,9 @@ class StudentDist(TermDist):
         precision = math.exp(params[1])
         return StudentDist(df, precision, tag = self.tag), params[2:]
 
+@codeDeps(ConstantClassifierAcc, InvalidParamsError, SynthMethod, TermDist,
+    assert_allclose, sampleDiscrete
+)
 class ConstantClassifier(TermDist):
     def __init__(self, probs, probFloors, tag = None):
         self.probs = probs
@@ -1690,6 +1791,9 @@ class ConstantClassifier(TermDist):
         else:
             return numFloored, len(self.probs) - 1
 
+@codeDeps(BinaryLogisticClassifierAcc, InvalidParamsError, SynthMethod,
+    TermDist, sigmoid
+)
 class BinaryLogisticClassifier(TermDist):
     def __init__(self, coeff, coeffFloor, tag = None):
         self.coeff = coeff
@@ -1752,6 +1856,7 @@ class BinaryLogisticClassifier(TermDist):
         numFloored = sum([ (1 if np.allclose(abs(coeffValue), coeffFloorValue) else 0) for coeffValue, coeffFloorValue in zip(self.coeff, self.coeffFloor) ])
         return numFloored, len(self.coeff)
 
+@codeDeps(Dist, MixtureAcc, SynthMethod, logSum, parseConcat)
 class MixtureDist(Dist):
     def __init__(self, classDist, regDists, tag = None):
         self.numComps = len(regDists)
@@ -1821,6 +1926,7 @@ class MixtureDist(Dist):
         dists, paramsLeft = parseConcat(self.children(), params, parseChild)
         return MixtureDist(dists[0], dists[1:], tag = self.tag), paramsLeft
 
+@codeDeps(Dist, IdentifiableMixtureAcc, SynthMethod, parseConcat)
 class IdentifiableMixtureDist(Dist):
     def __init__(self, classDist, regDists, tag = None):
         self.classDist = classDist
@@ -1871,12 +1977,14 @@ class IdentifiableMixtureDist(Dist):
         dists, paramsLeft = parseConcat(self.children(), params, parseChild)
         return IdentifiableMixtureDist(dists[0], dists[1:], tag = self.tag), paramsLeft
 
+@codeDeps(ForwardRef(lambda: VectorDist))
 def createVectorDist(order, outIndices, vectorSummarizer, createDistForIndex):
     distComps = dict()
     for outIndex in outIndices:
         distComps[outIndex] = createDistForIndex(outIndex)
     return VectorDist(order, vectorSummarizer, outIndices, distComps)
 
+@codeDeps(Dist, SynthMethod, VectorAcc, orderedDictRepr, parseConcat)
 class VectorDist(Dist):
     def __init__(self, order, vectorSummarizer, keys, distComps, tag = None):
         assert len(keys) == len(distComps)
@@ -1942,12 +2050,14 @@ class VectorDist(Dist):
         dists, paramsLeft = parseConcat(self.children(), params, parseChild)
         return VectorDist(self.order, self.vectorSummarizer, self.keys, dict(zip(self.keys, dists)), tag = self.tag), paramsLeft
 
+@codeDeps(ForwardRef(lambda: DiscreteDist))
 def createDiscreteDist(keys, createDistFor):
     distDict = dict()
     for key in keys:
         distDict[key] = createDistFor(key)
     return DiscreteDist(keys, distDict)
 
+@codeDeps(DiscreteAcc, Dist, SynthMethod, orderedDictRepr, parseConcat)
 class DiscreteDist(Dist):
     def __init__(self, keys, distDict, tag = None):
         assert len(keys) == len(distDict)
@@ -2001,9 +2111,11 @@ class DiscreteDist(Dist):
         dists, paramsLeft = parseConcat(self.children(), params, parseChild)
         return DiscreteDist(self.keys, dict(zip(self.keys, dists)), tag = self.tag), paramsLeft
 
+@codeDeps(Dist)
 class DecisionTree(Dist):
     pass
 
+@codeDeps(DecisionTree, DecisionTreeAccNode, SynthMethod)
 class DecisionTreeNode(DecisionTree):
     def __init__(self, fullQuestion, distYes, distNo, tag = None):
         self.fullQuestion = fullQuestion
@@ -2070,6 +2182,7 @@ class DecisionTreeNode(DecisionTree):
         distNo, paramsLeft = parseChild(self.distNo, paramsLeft)
         return DecisionTreeNode(self.fullQuestion, distYes, distNo, tag = self.tag), paramsLeft
 
+@codeDeps(DecisionTree, DecisionTreeAccLeaf, SynthMethod)
 class DecisionTreeLeaf(DecisionTree):
     def __init__(self, dist, tag = None):
         self.dist = dist
@@ -2117,6 +2230,7 @@ class DecisionTreeLeaf(DecisionTree):
         return DecisionTreeLeaf(dist, tag = self.tag), paramsLeft
 
 # (FIXME : merge MappedInputDist with TransformedInputDist? (Also merge some of the corresponding Accs?))
+@codeDeps(Dist, MappedInputAcc, SynthMethod)
 class MappedInputDist(Dist):
     """Dist where input is mapped using a fixed transform."""
     def __init__(self, inputTransform, dist, tag = None):
@@ -2164,6 +2278,7 @@ class MappedInputDist(Dist):
         return MappedInputDist(self.inputTransform, dist, tag = self.tag), paramsLeft
 
 # (FIXME : merge MappedOutputDist with TransformedOutputDist? (Also merge some of the corresponding Accs?))
+@codeDeps(Dist, MappedOutputAcc, SynthMethod)
 class MappedOutputDist(Dist):
     """Dist where output is mapped using a fixed transform."""
     def __init__(self, outputTransform, dist, tag = None):
@@ -2216,6 +2331,9 @@ class MappedOutputDist(Dist):
         dist, paramsLeft = parseChild(self.dist, params)
         return MappedOutputDist(self.outputTransform, dist, tag = self.tag), paramsLeft
 
+@codeDeps(Dist, SynthMethod, TransformedInputAccG,
+    TransformedInputLearnDistAccEM, TransformedInputLearnTransformAccEM
+)
 class TransformedInputDist(Dist):
     """Dist where input is transformed using a learnable transform."""
     def __init__(self, inputTransform, dist, tag = None):
@@ -2273,6 +2391,9 @@ class TransformedInputDist(Dist):
         dist, paramsLeft = parseChild(self.dist, paramsLeft)
         return TransformedInputDist(inputTransform, dist, tag = self.tag), paramsLeft
 
+@codeDeps(Dist, SynthMethod, TransformedOutputAccG,
+    TransformedOutputLearnDistAccEM, TransformedOutputLearnTransformAccEM
+)
 class TransformedOutputDist(Dist):
     """Dist where output is transformed using a learnable transform."""
     def __init__(self, outputTransform, dist, tag = None):
@@ -2336,6 +2457,7 @@ class TransformedOutputDist(Dist):
         dist, paramsLeft = parseChild(self.dist, paramsLeft)
         return TransformedOutputDist(outputTransform, dist, tag = self.tag), paramsLeft
 
+@codeDeps(Dist, PassThruAcc, SynthMethod)
 class PassThruDist(Dist):
     def __init__(self, dist, tag = None):
         self.dist = dist
@@ -2375,6 +2497,7 @@ class PassThruDist(Dist):
         dist, paramsLeft = parseChild(self.dist, params)
         return PassThruDist(dist, tag = self.tag), paramsLeft
 
+@codeDeps(DebugAcc, Dist, SynthMethod)
 class DebugDist(Dist):
     def __init__(self, maxOcc, dist, tag = None):
         self.maxOcc = maxOcc
@@ -2415,6 +2538,7 @@ class DebugDist(Dist):
         dist, paramsLeft = parseChild(self.dist, params)
         return DebugDist(self.maxOcc, dist, tag = self.tag), paramsLeft
 
+@codeDeps(AutoregressiveSequenceAcc, Dist, SynthMethod, contextualizeIter)
 class AutoregressiveSequenceDist(Dist):
     def __init__(self, depth, seqFor, fillFrames, dist, tag = None):
         self.depth = depth
@@ -2489,6 +2613,7 @@ class AutoregressiveSequenceDist(Dist):
         dist, paramsLeft = parseChild(self.dist, params)
         return AutoregressiveSequenceDist(self.depth, self.seqFor, self.fillFrames, dist, tag = self.tag), paramsLeft
 
+@codeDeps(wnet.FlatMappedNet, wnet.SequenceNet, wnet.probLeftToRightNet)
 class SimpleLeftToRightNetFor(object):
     def __init__(self, subLabels):
         self.subLabels = subLabels
@@ -2504,6 +2629,11 @@ class SimpleLeftToRightNetFor(object):
         )
         return net
 
+@codeDeps(AutoregressiveNetAcc, Dist, SynthMethod, SynthSeqTooLongError,
+    memoize, sampleDiscrete, semiring.LogRealsField, wnet.FlatMappedNet,
+    wnet.MappedLabelNet, wnet.PriorityQueueSumAgenda, wnet.TrivialNet,
+    wnet.UnrolledNet, wnet.concretizeNetTopSort, wnet.nodeSetCompute, wnet.sum
+)
 class AutoregressiveNetDist(Dist):
     """An autoregressive distribution over sequences.
 

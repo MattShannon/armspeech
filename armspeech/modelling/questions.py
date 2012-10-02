@@ -14,6 +14,9 @@ value to a boolean representing yes or no.
 
 from __future__ import division
 
+from codedep import codeDeps
+
+@codeDeps()
 class IdLabelValuer(object):
     def __init__(self):
         pass
@@ -24,6 +27,7 @@ class IdLabelValuer(object):
     def __call__(self, label):
         return label
 
+@codeDeps()
 class AttrLabelValuer(object):
     def __init__(self, labelKey):
         self.labelKey = labelKey
@@ -34,9 +38,11 @@ class AttrLabelValuer(object):
     def __call__(self, label):
         return getattr(label, self.labelKey)
 
+@codeDeps()
 class Question(object):
     pass
 
+@codeDeps(Question)
 class SubsetQuestion(Question):
     def __init__(self, subset, name):
         self.subset = subset
@@ -48,6 +54,7 @@ class SubsetQuestion(Question):
     def __call__(self, value):
         return value in self.subset
 
+@codeDeps(Question)
 class EqualityQuestion(Question):
     def __init__(self, value):
         self.value = value
@@ -58,6 +65,7 @@ class EqualityQuestion(Question):
     def __call__(self, value):
         return value == self.value
 
+@codeDeps(Question)
 class ThreshQuestion(Question):
     def __init__(self, thresh):
         self.thresh = thresh
@@ -68,9 +76,12 @@ class ThreshQuestion(Question):
     def __call__(self, value):
         return value <= self.thresh
 
+@codeDeps(SubsetQuestion)
 def getSubsetQuestions(namedSubsets):
     return [ SubsetQuestion(subset, subsetName) for subsetName, subset in namedSubsets ]
+@codeDeps(EqualityQuestion)
 def getEqualityQuestions(values):
     return [ EqualityQuestion(value) for value in values ]
+@codeDeps(ThreshQuestion)
 def getThreshQuestions(threshes):
     return [ ThreshQuestion(thresh) for thresh in threshes ]

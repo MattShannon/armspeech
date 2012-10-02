@@ -6,12 +6,16 @@
 
 from __future__ import division
 
+from codedep import codeDeps
+
 from datetime import datetime
 import time
 
+@codeDeps()
 def printTime(msg):
     print 'TIMING:', datetime.now(), msg
 
+@codeDeps()
 def timed(func, msg = None):
     """(probably based on http://www.daniweb.com/software-development/python/code/216610)"""
     if msg is None:

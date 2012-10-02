@@ -9,11 +9,15 @@
 import dist as d
 from armspeech.util.mathhelp import assert_allclose
 from armspeech.util.timing import timed
+from codedep import codeDeps, ForwardRef
 
 import logging
 import math
 from collections import defaultdict
 
+@codeDeps(d.Rat, d.addAcc, d.getDefaultEstimateTotAux, d.getDefaultParamSpec,
+    ForwardRef(lambda: decisionTreeSubCluster)
+)
 def decisionTreeCluster(labelList, accForLabel, createAcc, questionGroups,
                         thresh, minCount, maxCount = None, mdlFactor = 1.0,
                         estimateTotAux = d.getDefaultEstimateTotAux(),
@@ -37,6 +41,9 @@ def decisionTreeCluster(labelList, accForLabel, createAcc, questionGroups,
         print 'cluster: aux root = %s (%s) -> aux tree = %s (%s count)' % (auxRoot / countRoot, d.Rat.toString(auxRootRat), aux / countRoot, countRoot)
     return dist
 
+@codeDeps(assert_allclose, d.DecisionTreeLeaf, d.DecisionTreeNode,
+    ForwardRef(lambda: decisionTreeGetBestSplit), timed
+)
 def decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups,
                            thresh, minCount, maxCount, isYesList, distLeaf,
                            auxLeaf, countNode, estimateTotAux, verbosity):
@@ -83,6 +90,7 @@ def decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups,
             print 'cluster:'+indent+'leaf'
         return d.DecisionTreeLeaf(distLeaf), auxLeaf
 
+@codeDeps(d.EstimationError, d.addAcc)
 def decisionTreeGetBestSplit(labelList, accForLabel, createAcc, questionGroups,
                              minCount, auxLeaf, estimateTotAux):
     # (N.B. Could probably get a further speed-up (over and above that

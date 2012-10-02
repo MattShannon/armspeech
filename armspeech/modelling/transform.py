@@ -13,6 +13,7 @@ from __future__ import division
 from armspeech.util.mathhelp import logDet
 from minimize import solveByMinimize
 from armspeech.util.lazy import lazyproperty
+from codedep import codeDeps, ForwardRef
 
 import math
 import numpy as np
@@ -29,6 +30,7 @@ def eval_local(reprString):
 
     return eval(reprString)
 
+@codeDeps()
 def parseConcat(parsers, params):
     outs = []
     paramsLeft = params
@@ -37,6 +39,7 @@ def parseConcat(parsers, params):
         outs.append(out)
     return outs, paramsLeft
 
+@codeDeps()
 class DerivativeNotPositiveError(Exception):
     def __init__(self, msg):
         self.msg = msg
@@ -44,6 +47,7 @@ class DerivativeNotPositiveError(Exception):
     def __str__(self):
         return str(self.msg)
 
+@codeDeps()
 class Transform(object):
     """Function of one argument with learnable parameters.
 
@@ -84,6 +88,7 @@ class Transform(object):
         self.tag = tag
         return self
 
+@codeDeps(Transform)
 class ConstantTransform(Transform):
     def __init__(self, value, tag = None):
         self.value = value
@@ -102,6 +107,7 @@ class ConstantTransform(Transform):
     def derivParams(self, x):
         return np.zeros(np.shape(self.params) + np.shape(self.value))
 
+@codeDeps(Transform)
 class IdentityTransform(Transform):
     def __init__(self, tag = None):
         self.tag = tag
@@ -140,6 +146,7 @@ class IdentityTransform(Transform):
     def inv(self, y):
         return y
 
+@codeDeps(Transform)
 class DotProductTransform(Transform):
     def __init__(self, params, tag = None):
         self.params = params
@@ -159,6 +166,7 @@ class DotProductTransform(Transform):
         assert x.ndim == 1
         return x
 
+@codeDeps(Transform, lazyproperty, logDet, mla.inv)
 class LinearTransform(Transform):
     def __init__(self, mat, tag = None):
         assert mat.ndim == 2
@@ -211,6 +219,7 @@ class LinearTransform(Transform):
         # FIXME : store some factorization instead of inverse and use that instead to compute x for any given y?
         return np.dot(y, self.invMat)
 
+@codeDeps(Transform)
 class FrozenTransform(Transform):
     """prevents params of transform from being exposed, so they won't be re-estimated"""
     def __init__(self, transform, tag = None):
@@ -229,6 +238,7 @@ class FrozenTransform(Transform):
     def inv(self, y):
         return self.transform.inv(y)
 
+@codeDeps(Transform, mla.inv)
 class InvertedTransform(Transform):
     def __init__(self, transform, tag = None):
         self.transform = transform
@@ -270,6 +280,7 @@ class InvertedTransform(Transform):
     def inv(self, x):
         return self.transform(x)
 
+@codeDeps(Transform)
 class TransposeTransform(Transform):
     def __init__(self, tag = None):
         self.tag = tag
@@ -282,6 +293,7 @@ class TransposeTransform(Transform):
     def inv(self, y):
         return zip(*y)
 
+@codeDeps(Transform)
 class AddBias(Transform):
     def __init__(self, tag = None):
         self.tag = tag
@@ -297,6 +309,7 @@ class AddBias(Transform):
         n = len(x)
         return np.eye(n, n + 1)
 
+@codeDeps(Transform)
 class MinusPrev(Transform):
     def __init__(self, tag = None):
         self.tag = tag
@@ -313,6 +326,7 @@ class MinusPrev(Transform):
         v[-1] = -1.0
         return v
 
+@codeDeps(Transform)
 class Msd01ToVector(Transform):
     def __init__(self, tag = None):
         self.tag = tag
@@ -327,6 +341,7 @@ class Msd01ToVector(Transform):
                 out.extend([0.0, x])
         return np.array(out)
 
+@codeDeps(Transform)
 class VectorizeTransform(Transform):
     def __init__(self, transform1D, tag = None):
         self.transform1D = transform1D
@@ -367,6 +382,7 @@ class VectorizeTransform(Transform):
         assert y.ndim == 1
         return np.array(map(self.transform1D.inv, y))
 
+@codeDeps(Transform, solveByMinimize)
 class Transform1D(Transform):
     def logJac(self, x):
         return math.log(abs(self.deriv(x)))
@@ -380,6 +396,7 @@ class Transform1D(Transform):
             return self(x), np.array([self.deriv(x)])
         return solveByMinimize(F, y, y, length = length)
 
+@codeDeps(Transform1D)
 class PolynomialTransform1D(Transform1D):
     def __init__(self, params, tag = None):
         self.params = params
@@ -415,6 +432,7 @@ class PolynomialTransform1D(Transform1D):
             for power, coeff in enumerate(self.params)
         ])
 
+@codeDeps(Transform1D)
 class ScaledSinhTransform1D(Transform1D):
     """scaled sinh transform (scaling parameterized slightly oddly, since mainly for testing)"""
     def __init__(self, a, tag = None):
@@ -441,6 +459,7 @@ class ScaledSinhTransform1D(Transform1D):
     def inv(self, y):
         return math.asinh(y / self.a) / self.a
 
+@codeDeps(ForwardRef(lambda: TanhTransform1D), Transform1D)
 class TanhTransformLogParam1D(Transform1D):
     def __init__(self, params, tag = None):
         self.params = params
@@ -472,6 +491,7 @@ class TanhTransformLogParam1D(Transform1D):
     def inv(self, y):
         return self.tt.inv(y)
 
+@codeDeps(Transform1D)
 class TanhTransform1D(Transform1D):
     def __init__(self, params, warn = False, tag = None):
         self.params = params
@@ -529,6 +549,7 @@ class TanhTransform1D(Transform1D):
     def inv(self, y):
         return math.atanh(y / self.a) / self.b + self.c
 
+@codeDeps(Transform1D, parseConcat)
 class SumTransform1D(Transform1D):
     def __init__(self, transforms, tag = None):
         self.transforms = transforms
@@ -552,6 +573,7 @@ class SumTransform1D(Transform1D):
     def derivParamsDeriv(self, x):
         return np.concatenate([ transform.derivParamsDeriv(x) for transform in self.transforms ])
 
+@codeDeps(ForwardRef(lambda: TransformAtInput))
 class OutputTransform(object):
     """Input-dependent invertible transform of output.
 
@@ -597,6 +619,7 @@ class OutputTransform(object):
         self.tag = tag
         return self
 
+@codeDeps(Transform)
 class TransformAtInput(Transform):
     def __init__(self, outputTransform, input, tag = None):
         self.outputTransform = outputTransform
@@ -625,6 +648,7 @@ class TransformAtInput(Transform):
     def inv(self, y):
         return self.outputTransform.inv(self.input, y)
 
+@codeDeps(DerivativeNotPositiveError, OutputTransform)
 class SimpleOutputTransform(OutputTransform):
     """Output transform that is input-independent.
 
@@ -668,6 +692,7 @@ class SimpleOutputTransform(OutputTransform):
     def inv(self, input, modelledOutput):
         return self.transform.inv(modelledOutput)
 
+@codeDeps(OutputTransform)
 class ShiftOutputTransform(OutputTransform):
     def __init__(self, shift, tag = None):
         self.shift = shift

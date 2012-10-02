@@ -14,7 +14,9 @@ N.B. this has to be in a separate module and not in test_distribute due to the
 from __future__ import division
 
 import distribute
+from codedep import codeDeps
 
+@codeDeps(distribute.Job)
 class OneJob(distribute.Job):
     def __init__(self, name = 'oneJob'):
         self.name = name
@@ -26,6 +28,7 @@ class OneJob(distribute.Job):
 
         buildRepo.saveToArt(self.valueOut, valueOut)
 
+@codeDeps(distribute.Job)
 class AddJob(distribute.Job):
     def __init__(self, valueLeft, valueRight, name = 'addJob'):
         self.valueLeft = valueLeft

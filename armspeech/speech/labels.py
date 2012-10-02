@@ -8,8 +8,11 @@
 
 from __future__ import division
 
+from codedep import codeDeps
+
 import re
 
+@codeDeps()
 def readHtkLabFile(labFile, framePeriod, decode = lambda labelString: labelString):
     """Reads HTK-style label file."""
     divisor = framePeriod * 1e7
@@ -22,6 +25,7 @@ def readHtkLabFile(labFile, framePeriod, decode = lambda labelString: labelStrin
         alignment.append((startTime, endTime, label, None))
     return alignment
 
+@codeDeps(readHtkLabFile)
 def readTwoLevelHtkLabFile(labFile, framePeriod, decodeHigh = lambda labelString: labelString, decodeLow = lambda labelString: labelString, fallbackToOneLevel = False):
     """Reads two-level HTK-style label file."""
     divisor = framePeriod * 1e7
@@ -45,6 +49,7 @@ def readTwoLevelHtkLabFile(labFile, framePeriod, decodeHigh = lambda labelString
     return alignment
 
 # (FIXME : this should probably be moved into modelling subpackage)
+@codeDeps()
 def checkAlignment(alignment, startTimeReq = None, endTimeReq = None, allowZeroDur = True):
     """Checks an alignment for various possible inconsistencies.
 
@@ -74,6 +79,7 @@ def checkAlignment(alignment, startTimeReq = None, endTimeReq = None, allowZeroD
         if subAlignment is not None:
             checkAlignment(subAlignment, startTimeReq = startTime, endTimeReq = endTime, allowZeroDur = allowZeroDur)
 
+@codeDeps()
 def getParseLabel(labelFormat, createLabel):
     labelReStrings = []
     decodeDict = dict()

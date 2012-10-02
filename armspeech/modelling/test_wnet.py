@@ -11,15 +11,20 @@ from __future__ import division
 import wnet
 import semiring
 from armspeech.util.memoize import memoize
+from codedep import codeDeps
 
 import unittest
 import random
 from numpy.random import randn, randint
 import armspeech.numpy_settings
 
+@codeDeps()
 def randBool():
     return randint(0, 2) == 0
 
+@codeDeps(wnet.ConcreteNet, wnet.checkConsistent, wnet.concretizeNet,
+    wnet.nodeSetCompute
+)
 def gen_simple_ConcreteNet(genLabel, deltaTime, sortable = True, pathMustExist = False, maxNodes = 12, maxEdgesPerNode = 3):
     numNodes = randint(2, maxNodes + 1)
 
@@ -46,6 +51,7 @@ def gen_simple_ConcreteNet(genLabel, deltaTime, sortable = True, pathMustExist =
         wnet.checkConsistent(netPerm, nodeSet = set(range(numNodes)))
         return netPerm
 
+@codeDeps(wnet.nodeSetCompute)
 def is_valid_topSort(net, sortedNodes, deltaTime):
     nodeLookup = dict()
     for pos, node in enumerate(sortedNodes):
@@ -63,11 +69,19 @@ def is_valid_topSort(net, sortedNodes, deltaTime):
                         return False
     return True
 
+@codeDeps()
 def defaultGenLabel():
     return None if randint(0, 3) != 0 else randint(0, 3)
+@codeDeps()
 def defaultDeltaTime(label):
     return 0 if label is None else 1
 
+@codeDeps(defaultDeltaTime, defaultGenLabel, gen_simple_ConcreteNet,
+    is_valid_topSort, memoize, randBool, semiring.LogRealsField,
+    wnet.ConcreteNet, wnet.HasCycleError, wnet.SimpleSumAgenda, wnet.TrivialNet,
+    wnet.concretizeNetSimple, wnet.concretizeNetTopSort, wnet.isConsistent,
+    wnet.netIsTopSorted, wnet.nodeSetCompute, wnet.sum, wnet.topSort
+)
 class TestWnet(unittest.TestCase):
     def test_TrivialNet_one_parameter_construction(self):
         net = wnet.TrivialNet('a')
@@ -170,6 +184,7 @@ class TestWnet(unittest.TestCase):
             assert ring.isClose(totalWeightForwards, totalWeightBackwards)
     # FIXME : add tests for other stuff in wnet
 
+@codeDeps(TestWnet)
 def suite():
     return unittest.TestLoader().loadTestsFromTestCase(TestWnet)
 

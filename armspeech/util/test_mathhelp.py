@@ -10,6 +10,7 @@ from __future__ import division
 
 import mathhelp
 from armspeech.util.mathhelp import assert_allclose
+from codedep import codeDeps
 
 import unittest
 import numpy as np
@@ -17,12 +18,16 @@ import armspeech.numpy_settings
 import numpy.linalg as la
 from numpy.random import randn, randint
 
+@codeDeps()
 def randLogProb():
     if randint(0, 3) == 0:
         return float('-inf')
     else:
         return 5.0 * randn()
 
+@codeDeps(assert_allclose, mathhelp.logAdd, mathhelp.logDet, mathhelp.logSum,
+    mathhelp.sampleDiscrete, randLogProb
+)
 class TestMathHelp(unittest.TestCase):
     def test_logAdd(self, numPoints = 200):
         for pointIndex in range(numPoints):
@@ -65,6 +70,7 @@ class TestMathHelp(unittest.TestCase):
                 count[sample] += 1
             assert_allclose(count / numSamples, probs, rtol = 1e-2, atol = 1e-2)
 
+@codeDeps(TestMathHelp)
 def suite():
     return unittest.TestLoader().loadTestsFromTestCase(TestMathHelp)
 

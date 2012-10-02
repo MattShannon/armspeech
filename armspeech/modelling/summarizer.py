@@ -11,10 +11,12 @@ Summarizers condense (summarize) past input."""
 from __future__ import division
 
 import dist as d
+from codedep import codeDeps
 
 import numpy as np
 import armspeech.numpy_settings
 
+@codeDeps()
 class ContextualVectorSummarizer(object):
     def __init__(self, vectorSummarizer):
         self.vectorSummarizer = vectorSummarizer
@@ -27,6 +29,7 @@ class ContextualVectorSummarizer(object):
         summary = self.vectorSummarizer(vectorInput, partialOutput, outIndex)
         return context, summary
 
+@codeDeps(ContextualVectorSummarizer, d.createVectorAcc, d.createVectorDist)
 class IdentitySummarizer(object):
     def __init__(self, order, outIndices = None):
         if outIndices is None:
@@ -48,6 +51,7 @@ class IdentitySummarizer(object):
         vectorSummarizer = ContextualVectorSummarizer(self) if contextual else self
         return d.createVectorAcc(self.order, self.outIndices, vectorSummarizer, createAccForIndex)
 
+@codeDeps(ContextualVectorSummarizer, d.createVectorAcc, d.createVectorDist)
 class VectorSeqSummarizer(object):
     def __init__(self, order, depths, strictAboutDepth = True):
         self.order = order
@@ -75,6 +79,7 @@ class VectorSeqSummarizer(object):
         vectorSummarizer = ContextualVectorSummarizer(self) if contextual else self
         return d.createVectorAcc(self.order, sorted(self.depths.keys()), vectorSummarizer, createAccForIndex)
 
+@codeDeps(ContextualVectorSummarizer, d.createVectorAcc, d.createVectorDist)
 class IndexSpecSummarizer(object):
     def __init__(self, outIndices, fromOffset, toOffset, order, depth, powers = [1]):
         self.outIndices = outIndices

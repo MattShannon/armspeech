@@ -13,11 +13,14 @@ routines to check for these special cases.
 
 from __future__ import division
 
+from codedep import codeDeps
+
 import numpy as np
 import armspeech.numpy_settings
 import numpy.linalg as la
 import scipy.linalg as sla
 
+@codeDeps()
 def inv(*args, **kwargs):
     a = args[0] if len(args) > 0 else kwargs['a']
     if np.shape(a) == (0, 0):
@@ -25,6 +28,7 @@ def inv(*args, **kwargs):
     else:
         return la.inv(*args, **kwargs)
 
+@codeDeps()
 def pinv(*args, **kwargs):
     a = args[0] if len(args) > 0 else kwargs['a']
     if np.shape(a) == (0, 0):
@@ -32,6 +36,7 @@ def pinv(*args, **kwargs):
     else:
         return la.pinv(*args, **kwargs)
 
+@codeDeps()
 def solve(*args, **kwargs):
     a = args[0] if len(args) > 0 else kwargs['a']
     b = args[1] if len(args) > 1 else kwargs['b']
@@ -40,6 +45,7 @@ def solve(*args, **kwargs):
     else:
         return sla.solve(*args, **kwargs)
 
+@codeDeps()
 def cholesky(*args, **kwargs):
     a = args[0] if len(args) > 0 else kwargs['a']
     if np.shape(a) == (0, 0):
@@ -47,6 +53,7 @@ def cholesky(*args, **kwargs):
     else:
         return sla.cholesky(*args, **kwargs)
 
+@codeDeps()
 def cho_solve(*args, **kwargs):
     c, lower = args[0]
     b = args[1] if len(args) > 1 else kwargs['b']
@@ -56,6 +63,7 @@ def cho_solve(*args, **kwargs):
         return sla.cho_solve(*args, **kwargs)
 
 # (not strictly speaking in linalg but whatever)
+@codeDeps()
 def tensordot(*args, **kwargs):
     a = args[0] if len(args) > 0 else kwargs['a']
     b = args[1] if len(args) > 1 else kwargs['b']

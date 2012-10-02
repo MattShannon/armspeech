@@ -8,11 +8,14 @@
 
 from __future__ import division
 
+from codedep import codeDeps
+
 import os
 import logging
 import shutil
 import tempfile
 
+@codeDeps()
 class TempDir(object):
     def __init__(self):
         self.location = tempfile.mkdtemp(prefix = 'armspeech.')

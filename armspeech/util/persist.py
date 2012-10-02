@@ -8,16 +8,20 @@
 
 from __future__ import division
 
+from codedep import codeDeps
+
 import os
 import cPickle as pickle
 import hashlib
 import tempfile
 
+@codeDeps()
 def loadPickle(location):
     with open(location, 'rb') as f:
         obj = pickle.load(f)
     return obj
 
+@codeDeps(loadPickle)
 def savePickle(location, obj):
     head, tail = os.path.split(location)
     with tempfile.NamedTemporaryFile(prefix = '.'+tail+'.', dir = head, mode='wb', delete = False) as f:
@@ -39,12 +43,15 @@ def savePickle(location, obj):
     #   use cases?)
     os.rename(tempLocation, location)
 
+@codeDeps()
 def roundTrip(obj):
     return pickle.loads(pickle.dumps(obj, protocol = 2))
 
+@codeDeps(roundTrip)
 def checkRoundTrip(obj):
     assert pickle.dumps(roundTrip(obj), protocol = 2) == pickle.dumps(obj, protocol = 2)
 
+@codeDeps(roundTrip)
 def secHashObject(obj):
     """Computes git-style hash of the pickled version of an object."""
     m = hashlib.sha1()
@@ -56,6 +63,7 @@ def secHashObject(obj):
     m.update(pickledObj)
     return m.hexdigest()
 
+@codeDeps()
 def secHashFile(location, readChunkSize = 2 ** 20):
     """Computes git-style hash of a file."""
     m = hashlib.sha1()

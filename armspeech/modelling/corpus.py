@@ -9,7 +9,9 @@
 from __future__ import division
 
 import dist as d
+from codedep import codeDeps
 
+@codeDeps(d.SynthMethod)
 class Corpus(object):
     def accumulate(self, acc):
         for uttId in self.trainUttIds:

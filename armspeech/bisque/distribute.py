@@ -9,12 +9,14 @@
 from __future__ import division
 
 from armspeech.util import persist
+from codedep import codeDeps, ForwardRef
 
 import os
 import sys
 import inspect
 import modulefinder
 
+@codeDeps()
 def findDeps(srcFile):
     """Returns local dependencies for a given source file.
 
@@ -29,11 +31,13 @@ def findDeps(srcFile):
     depFiles = [ mod.__file__ for modName, mod in finder.modules.items() if mod.__file__ is not None ]
     return sorted(depFiles)
 
+@codeDeps(ForwardRef(lambda: ancestorArtifacts), persist.secHashObject)
 class Artifact(object):
     def secHash(self):
         secHashAllExternals = [ secHash for art in ancestorArtifacts([self]) for secHash in art.secHashExternals() ]
         return persist.secHashObject((self, secHashAllExternals, self.secHashSources()))
 
+@codeDeps(Artifact, persist.secHashFile)
 class FixedArtifact(Artifact):
     def __init__(self, location):
         self.location = location
@@ -48,6 +52,7 @@ class FixedArtifact(Artifact):
     def loc(self, baseDir):
         return self.location
 
+@codeDeps(Artifact, findDeps, persist.secHashFile)
 class JobArtifact(Artifact):
     def __init__(self, parentJob):
         self.parentJob = parentJob
@@ -62,6 +67,7 @@ class JobArtifact(Artifact):
     def loc(self, baseDir):
         return os.path.join(baseDir, self.secHash())
 
+@codeDeps()
 def ancestorArtifacts(initialArts):
     ret = []
     agenda = list(initialArts)
@@ -75,6 +81,7 @@ def ancestorArtifacts(initialArts):
             agenda.extend(reversed(art.parentArtifacts()))
     return ret
 
+@codeDeps(JobArtifact, ancestorArtifacts, persist.secHashObject)
 class Job(object):
     # (N.B. some client code uses default hash routines)
     def parentJobs(self):

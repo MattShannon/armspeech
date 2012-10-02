@@ -20,6 +20,7 @@ from armspeech.util.mathhelp import logSum
 from armspeech.util.iterhelp import chunkList
 from armspeech.util.mathhelp import assert_allclose
 from armspeech.util.mathhelp import AsArray
+from codedep import codeDeps, ForwardRef
 
 import test_dist_questions
 import test_transform
@@ -37,15 +38,19 @@ from scipy import stats
 import cPickle as pickle
 import string
 
+@codeDeps()
 def randBool():
     return randint(0, 2) == 0
 
+@codeDeps()
 def randTag():
     return 'tag'+str(randint(0, 1000000))
 
+@codeDeps()
 def randUttId():
     return 'utt'+str(randint(0, 1000000))
 
+@codeDeps()
 def simpleInputGen(dimIn, bias = False):
     while True:
         ret = randn(dimIn)
@@ -57,6 +62,7 @@ def simpleInputGen(dimIn, bias = False):
 # (FIXME : add tests for Transformed(Input|Output)Learn(Dist|Transform)AccEM (for the Transform ones, have to first add a transform that can be re-estimated using EM))
 # (FIXME : deep test for Transformed(Input|Output)Dist doesn't seem to converge to close to true dist in terms of parameters. Multiple local minima? Or just very insensitive to details? For more complicated transforms might the test procedure never converge?)
 
+@codeDeps(d.LinearGaussian, randBool, randTag, simpleInputGen)
 def gen_LinearGaussian(dimIn = 3, bias = False):
     coeff = randn(dimIn)
     varianceFloor = 0.0 if randBool() else math.exp(randn()) * 0.01
@@ -65,12 +71,14 @@ def gen_LinearGaussian(dimIn = 3, bias = False):
     numFloored, numFlooredDenom = dist.flooredSingle()
     return dist, simpleInputGen(dimIn, bias = bias)
 
+@codeDeps(d.StudentDist, randTag, simpleInputGen)
 def gen_StudentDist(dimIn = 3):
     df = math.exp(randn() + 1.0)
     precision = math.exp(randn())
     dist = d.StudentDist(df, precision).withTag(randTag())
     return dist, simpleInputGen(dimIn)
 
+@codeDeps(d.ConstantClassifier, randBool, randTag, simpleInputGen)
 def gen_ConstantClassifier(numClasses = 5):
     if randBool():
         probFloors = np.zeros((numClasses,))
@@ -86,6 +94,7 @@ def gen_ConstantClassifier(numClasses = 5):
     numFloored, numFlooredDenom = dist.flooredSingle()
     return dist, simpleInputGen(0)
 
+@codeDeps(d.BinaryLogisticClassifier, randBool, randTag, simpleInputGen)
 def gen_BinaryLogisticClassifier(dimIn = 3, bias = False, useZeroCoeff = False):
     coeffFloor = np.ones((dimIn,)) * (float('inf') if randBool() else 5.0)
     if useZeroCoeff:
@@ -98,6 +107,7 @@ def gen_BinaryLogisticClassifier(dimIn = 3, bias = False, useZeroCoeff = False):
     numFloored, numFlooredDenom = dist.flooredSingle()
     return dist, simpleInputGen(dimIn, bias = bias)
 
+@codeDeps(gen_BinaryLogisticClassifier, gen_ConstantClassifier, randBool)
 def gen_classifier(numClasses, dimIn, bias = False):
     """Generates a random classifier with vector input."""
     if numClasses == 2 and randBool():
@@ -105,9 +115,13 @@ def gen_classifier(numClasses, dimIn, bias = False):
     else:
         return gen_ConstantClassifier(numClasses)
 
+@codeDeps(ForwardRef(lambda: gen_MixtureOfTwoExperts))
 def gen_MixtureDist(dimIn):
     return gen_MixtureOfTwoExperts(dimIn = 3)
 
+@codeDeps(d.MixtureDist, gen_BinaryLogisticClassifier, gen_LinearGaussian,
+    randTag
+)
 def gen_MixtureOfTwoExperts(dimIn = 3, bias = False):
     blc, blcGen = gen_BinaryLogisticClassifier(dimIn, bias = bias)
     dist0 = gen_LinearGaussian(dimIn)[0]
@@ -115,6 +129,9 @@ def gen_MixtureOfTwoExperts(dimIn = 3, bias = False):
     dist = d.MixtureDist(blc, [dist0, dist1]).withTag(randTag())
     return dist, blcGen
 
+@codeDeps(d.FixedValueDist, d.IdentifiableMixtureDist,
+    gen_BinaryLogisticClassifier, gen_LinearGaussian, randTag
+)
 def gen_IdentifiableMixtureDist(dimIn = 3, blcUseZeroCoeff = False):
     blc, blcGen = gen_BinaryLogisticClassifier(dimIn, useZeroCoeff = blcUseZeroCoeff)
     dist0 = d.FixedValueDist(None)
@@ -122,6 +139,9 @@ def gen_IdentifiableMixtureDist(dimIn = 3, blcUseZeroCoeff = False):
     dist = d.IdentifiableMixtureDist(blc, [dist0, dist1]).withTag(randTag())
     return dist, blcGen
 
+@codeDeps(AsArray, d.MappedInputDist, gen_LinearGaussian, randTag,
+    summarizer.VectorSeqSummarizer
+)
 def gen_VectorDist(order = 10, depth = 3):
     depths = dict([ (outIndex, depth) for outIndex in range(order) ])
     vectorSummarizer = summarizer.VectorSeqSummarizer(order, depths)
@@ -135,6 +155,7 @@ def gen_VectorDist(order = 10, depth = 3):
             yield randn(depth, order)
     return dist, getInputGen()
 
+@codeDeps(d.createDiscreteDist, gen_LinearGaussian, randTag)
 def gen_DiscreteDist(keys = ['a', 'b', 'c'], dimIn = 3):
     dist = d.createDiscreteDist(keys, lambda key:
         gen_LinearGaussian(dimIn)[0]
@@ -144,6 +165,7 @@ def gen_DiscreteDist(keys = ['a', 'b', 'c'], dimIn = 3):
             yield random.choice(keys), randn(dimIn)
     return dist, getInputGen()
 
+@codeDeps(d.createDiscreteDist, gen_LinearGaussian, randTag)
 def gen_shared_DiscreteDist(keys = ['a', 'b', 'c'], dimIn = 3):
     subDist = gen_LinearGaussian(dimIn)[0]
     dist = d.createDiscreteDist(keys, lambda key:
@@ -154,6 +176,9 @@ def gen_shared_DiscreteDist(keys = ['a', 'b', 'c'], dimIn = 3):
             yield random.choice(keys), randn(dimIn)
     return dist, getInputGen()
 
+@codeDeps(d.DecisionTreeLeaf, d.DecisionTreeNode, gen_LinearGaussian, randTag,
+    test_dist_questions.SimplePhoneset, test_dist_questions.getQuestionGroups
+)
 def gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = 3):
     phoneset = test_dist_questions.SimplePhoneset()
     labels = phoneset.phoneList
@@ -193,26 +218,43 @@ def gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = 3):
             yield random.choice(labels), randn(dimIn)
     return decisionTree(labels).withTag(randTag()), getInputGen()
 
+@codeDeps(d.MappedInputDist, gen_LinearGaussian, randTag, simpleInputGen,
+    test_transform.gen_genericTransform
+)
 def gen_MappedInputDist(dimIn = 3, dimOut = 2):
     transform = test_transform.gen_genericTransform([dimIn], [dimOut])
     subDist = gen_LinearGaussian(dimOut)[0]
     return d.MappedInputDist(transform, subDist).withTag(randTag()), simpleInputGen(dimIn)
 
+@codeDeps(d.MappedOutputDist, gen_LinearGaussian, randTag,
+    test_transform.gen_genericOutputTransform
+)
 def gen_MappedOutputDist(dimInput = 3):
     outputTransform = test_transform.gen_genericOutputTransform([dimInput], [])
     subDist, inputGen = gen_LinearGaussian(dimInput)
     return d.MappedOutputDist(outputTransform, subDist).withTag(randTag()), inputGen
 
+@codeDeps(d.TransformedInputDist, gen_LinearGaussian, randTag, simpleInputGen,
+    test_transform.gen_genericTransform
+)
 def gen_TransformedInputDist(dimIn = 3, dimOut = 2):
     transform = test_transform.gen_genericTransform([dimIn], [dimOut])
     subDist = gen_LinearGaussian(dimOut)[0]
     return d.TransformedInputDist(transform, subDist).withTag(randTag()), simpleInputGen(dimIn)
 
+@codeDeps(d.TransformedOutputDist, gen_LinearGaussian, randTag,
+    test_transform.gen_genericOutputTransform
+)
 def gen_TransformedOutputDist(dimInput = 3):
     outputTransform = test_transform.gen_genericOutputTransform([dimInput], [])
     subDist, inputGen = gen_LinearGaussian(dimInput)
     return d.TransformedOutputDist(outputTransform, subDist).withTag(randTag()), inputGen
 
+@codeDeps(d.MappedInputDist, d.MappedOutputDist, d.TransformedInputDist,
+    d.TransformedOutputDist, gen_LinearGaussian, randBool, randTag,
+    simpleInputGen, test_transform.gen_genericOutputTransform,
+    test_transform.gen_genericTransform
+)
 def gen_nestedTransformDist(dimInputs = [3, 4, 2]):
     assert len(dimInputs) >= 1
     dimIn = dimInputs[-1]
@@ -237,19 +279,23 @@ def gen_nestedTransformDist(dimInputs = [3, 4, 2]):
                 dist = d.TransformedOutputDist(outputTransform, dist)
     return dist.withTag(randTag()), simpleInputGen(dimInputs[0])
 
+@codeDeps(d.PassThruDist, gen_LinearGaussian, randTag)
 def gen_PassThruDist(dimIn = 3):
     subDist, inputGen = gen_LinearGaussian(dimIn)
     return d.PassThruDist(subDist).withTag(randTag()), inputGen
 
+@codeDeps(d.DebugDist, gen_LinearGaussian, randTag)
 def gen_DebugDist(maxOcc = None, dimIn = 3):
     subDist, inputGen = gen_LinearGaussian(dimIn)
     return d.DebugDist(maxOcc, subDist).withTag(randTag()), inputGen
 
+@codeDeps(d.MappedInputDist, gen_LinearGaussian, xf.AddBias)
 def gen_autoregressive_dist(depth = 2):
     dist = d.MappedInputDist(xf.AddBias(),
         gen_LinearGaussian(dimIn = depth + 1)[0]
     )
     return dist, None
+@codeDeps()
 def autoregressive_1D_is_stable(dist, depth, starts = 5, stepsIntoFuture = 100, bigThresh = 1e6):
     for start in range(starts):
         input = deque(randn(depth))
@@ -261,6 +307,7 @@ def autoregressive_1D_is_stable(dist, depth, starts = 5, stepsIntoFuture = 100, 
             input.append(output)
             input.popleft()
     return True
+@codeDeps(autoregressive_1D_is_stable, gen_autoregressive_dist)
 def gen_stable_autoregressive_dist(depth = 2):
     while True:
         dist = gen_autoregressive_dist(depth)[0]
@@ -268,6 +315,9 @@ def gen_stable_autoregressive_dist(depth = 2):
             break
     return dist, None
 
+@codeDeps(d.AutoregressiveSequenceDist, d.createDiscreteDist,
+    gen_stable_autoregressive_dist, randTag, randUttId, xf.IdentityTransform
+)
 def gen_AutoregressiveSequenceDist(depth = 2):
     labels = string.lowercase[:randint(1, 10)]
     acDist = d.createDiscreteDist(labels, lambda label:
@@ -283,6 +333,7 @@ def gen_AutoregressiveSequenceDist(depth = 2):
     inputGen = getInputGen()
     return dist, getInputGen()
 
+@codeDeps(wnet.ConcreteNet)
 def add_autoregressive_style_labels(concreteNet, genLabels):
     net = concreteNet
     numNodes = net.numNodes
@@ -292,6 +343,9 @@ def add_autoregressive_style_labels(concreteNet, genLabels):
         labels = genLabels(numLabels = len(nextNodes))
         edgesForwards[node] = zip(labels, nextNodes)
     return wnet.ConcreteNet(startNode = net.startNode, endNode = net.endNode, elems = net.elems, edgesForwards = edgesForwards)
+@codeDeps(add_autoregressive_style_labels, randBool, wnet.ConcreteNet,
+    wnet.checkConsistent, wnet.concretizeNet, wnet.nodeSetCompute
+)
 def gen_autoregressive_style_net(genElem, genLabels, sortable = True, maxNodes = 20, maxEdgesPerNode = 3):
     numNodes = randint(2, maxNodes + 1)
     elems = [None] + [ genElem() for node in range(1, numNodes - 1) ] + [None]
@@ -324,6 +378,7 @@ def gen_autoregressive_style_net(genElem, genLabels, sortable = True, maxNodes =
 
         wnet.checkConsistent(netFinal, nodeSet = set(range(len(nodeSet))))
         return netFinal
+@codeDeps(gen_autoregressive_style_net, randBool, wnet.nodeSetCompute)
 def gen_simple_autoregressive_style_net(label, acSubLabels, durSubLabels):
     def genElem():
         return None if randBool() else random.choice([ (label, subLabel) for subLabel in acSubLabels ])
@@ -362,6 +417,11 @@ def gen_simple_autoregressive_style_net(label, acSubLabels, durSubLabels):
 
     return net, phInputsAc, phInputToNumClassesDur
 
+@codeDeps(d.AutoregressiveNetDist, d.MappedInputDist, d.SimplePruneSpec,
+    d.createDiscreteDist, gen_classifier, gen_simple_autoregressive_style_net,
+    gen_stable_autoregressive_dist, randBool, randTag, randUttId,
+    wnet.nodeSetCompute, xf.AddBias, xf.ConstantTransform
+)
 def gen_constant_AutoregressiveNetDist(depth = 2):
     """Generates an AutoregressiveNetDist which is independent of input."""
     numSubLabels = randint(1, 5)
@@ -387,6 +447,10 @@ def gen_constant_AutoregressiveNetDist(depth = 2):
             yield randUttId(), ''
     return dist, getInputGen()
 
+@codeDeps(d.AutoregressiveNetDist, d.MappedInputDist, d.SimpleLeftToRightNetFor,
+    d.SimplePruneSpec, d.createDiscreteDist, gen_classifier,
+    gen_stable_autoregressive_dist, randBool, randTag, randUttId, xf.AddBias
+)
 def gen_inSeq_AutoregressiveNetDist(depth = 2):
     """Generates a left-to-right AutoregressiveNetDist where input is a label sequence."""
     labels = string.lowercase[:randint(1, 10)]
@@ -410,6 +474,7 @@ def gen_inSeq_AutoregressiveNetDist(depth = 2):
             yield randUttId(), labelSeq
     return dist, getInputGen()
 
+@codeDeps(d.SynthSeqTooLongError)
 def restrictTypicalOutputLength(genDist, maxLength = 20, numPoints = 100):
     bad = True
     while bad:
@@ -424,31 +489,37 @@ def restrictTypicalOutputLength(genDist, maxLength = 20, numPoints = 100):
                 break
     return dist, inputGen
 
+@codeDeps(nodetree.nodeList)
 def dagInfoExtract(parentNode):
     """Extracts basic structure information about the DAG for a parentNode."""
     return [ type(node) for node in nodetree.nodeList(parentNode) ]
 
+@codeDeps()
 def iidLogProb(dist, training):
     logProb = 0.0
     for input, output, occ in training:
         logProb += dist.logProb(input, output) * occ
     return logProb
 
+@codeDeps(d.getDefaultCreateAcc)
 def trainedAcc(dist, training):
     acc = d.getDefaultCreateAcc()(dist)
     for input, output, occ in training:
         acc.add(input, output, occ)
     return acc
 
+@codeDeps(d.getDefaultParamSpec)
 def trainedAccG(dist, training, ps = d.getDefaultParamSpec()):
     acc = ps.createAccG(dist)
     for input, output, occ in training:
         acc.add(input, output, occ)
     return acc
 
+@codeDeps(d.getDefaultParamSpec)
 def randomizeParams(dist, ps = d.getDefaultParamSpec()):
     return ps.parseAll(dist, randn(*np.shape(ps.params(dist))))
 
+@codeDeps(assert_allclose, dagInfoExtract)
 def reparse(dist, ps):
     params = ps.params(dist)
     assert len(np.shape(params)) == 1
@@ -459,30 +530,35 @@ def reparse(dist, ps):
     assert dagInfoExtract(distParsed) == dagInfoExtract(dist)
     return distParsed
 
+@codeDeps(assert_allclose)
 def check_logProbDerivInput(dist, input, output, eps):
     inputDirection = randn(*np.shape(input))
     numericDeriv = (dist.logProb(input + inputDirection * eps, output) - dist.logProb(input, output)) / eps
     analyticDeriv = np.dot(inputDirection, dist.logProbDerivInput(input, output))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 
+@codeDeps(assert_allclose)
 def check_logProbDerivInput_hasDiscrete(dist, (disc, input), output, eps):
     inputDirection = randn(*np.shape(input))
     numericDeriv = (dist.logProb((disc, input + inputDirection * eps), output) - dist.logProb((disc, input), output)) / eps
     analyticDeriv = np.dot(inputDirection, dist.logProbDerivInput((disc, input), output))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 
+@codeDeps(assert_allclose)
 def check_logProbDerivOutput(dist, input, output, eps):
     outputDirection = randn(*np.shape(output))
     numericDeriv = (dist.logProb(input, output + outputDirection * eps) - dist.logProb(input, output)) / eps
     analyticDeriv = np.dot(outputDirection, dist.logProbDerivOutput(input, output))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 
+@codeDeps(assert_allclose)
 def check_logProbDerivOutput_hasDiscrete(dist, input, (disc, output), eps):
     outputDirection = randn(*np.shape(output))
     numericDeriv = (dist.logProb(input, (disc, output + outputDirection * eps)) - dist.logProb(input, (disc, output))) / eps
     analyticDeriv = np.dot(outputDirection, dist.logProbDerivOutput(input, (disc, output)))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 
+@codeDeps(assert_allclose, chunkList, d.addAcc, trainedAccG)
 def check_addAcc(dist, trainingAll, ps):
     accAll = trainedAccG(dist, trainingAll, ps = ps)
     occAll = accAll.occ
@@ -505,6 +581,7 @@ def check_addAcc(dist, trainingAll, ps):
     assert_allclose(logLikeFull, logLikeAll, atol = 1e-10)
     assert_allclose(derivParamsFull, derivParamsAll, atol = 1e-10)
 
+@codeDeps(assert_allclose, iidLogProb, trainedAcc, trainedAccG)
 def check_occ_and_logLike(dist, training, iid, hasEM):
     assert iid == True
     totOcc = sum([ occ for input, output, occ in training ])
@@ -517,6 +594,7 @@ def check_occ_and_logLike(dist, training, iid, hasEM):
     assert_allclose(acc.occ, totOcc)
     assert_allclose(acc.logLike(), logLikeFromDist, atol = 1e-10)
 
+@codeDeps(assert_allclose, trainedAccG)
 def check_derivParams(dist, training, ps, eps):
     params = ps.params(dist)
     acc = trainedAccG(dist, training, ps = ps)
@@ -531,6 +609,7 @@ def check_derivParams(dist, training, ps, eps):
     analyticDeriv = np.dot(derivParams, paramsDirection)
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-4, rtol = 1e-4)
 
+@codeDeps(dagInfoExtract, trn.trainEM)
 def getTrainEM(initEstDist, maxIterations = None, verbosity = 0):
     def doTrainEM(training):
         def accumulate(acc):
@@ -543,6 +622,7 @@ def getTrainEM(initEstDist, maxIterations = None, verbosity = 0):
         return dist
     return doTrainEM
 
+@codeDeps(d.getDefaultParamSpec, dagInfoExtract, trn.trainCG)
 def getTrainCG(initEstDist, ps = d.getDefaultParamSpec(), length = -500, verbosity = 0):
     def doTrainCG(training):
         def accumulate(acc):
@@ -555,6 +635,7 @@ def getTrainCG(initEstDist, ps = d.getDefaultParamSpec(), length = -500, verbosi
         return dist
     return doTrainCG
 
+@codeDeps(d.getDefaultEstimate)
 def getTrainFromAcc(createAcc):
     def doTrainFromAcc(training):
         acc = createAcc()
@@ -566,6 +647,7 @@ def getTrainFromAcc(createAcc):
         return dist
     return doTrainFromAcc
 
+@codeDeps(assert_allclose, d.getDefaultParamSpec, iidLogProb, trainedAccG)
 def check_est(trueDist, train, inputGen, hasParams, iid = True, unitOcc = False, ps = d.getDefaultParamSpec(), logLikeThresh = 2e-2, tslpThresh = 2e-2, testSetSize = 50, initTrainingSetSize = 100, trainingSetMult = 5, maxTrainingSetSize = 100000):
     """Checks specified training method converges with sufficient data.
 
@@ -620,6 +702,7 @@ def check_est(trueDist, train, inputGen, hasParams, iid = True, unitOcc = False,
     if not converged:
         raise AssertionError('estimated dist did not converge to true dist\n\ttraining set size = '+str(len(training))+'\n\tlogLikeTrue = '+str(logLikeTrue / totOcc)+' vs logLikeEst = '+str(logLikeEst / totOcc)+'\n\ttslpTrue = '+str(tslpTrue / testOcc)+' vs tslpEst = '+str(tslpEst / testOcc)+'\n\ttrueDist = '+repr(trueDist)+'\n\testDist = '+repr(estDist))
 
+@codeDeps(d.getDefaultCreateAcc, d.getDefaultEstimate)
 def getTrainingSet(dist, inputGen, typicalSize, iid, unitOcc):
     trainingSetSize = random.choice([0, 1, 2, typicalSize - 1, typicalSize, typicalSize + 1, 2 * typicalSize - 1, 2 * typicalSize, 2 * typicalSize + 1])
     inputs = [ input for input, index in zip(inputGen, range(trainingSetSize)) ]
@@ -639,6 +722,14 @@ def getTrainingSet(dist, inputGen, typicalSize, iid, unitOcc):
     assert len(trainingSet) == trainingSetSize
     return trainingSet
 
+@codeDeps(assert_allclose, check_addAcc, check_derivParams,
+    check_logProbDerivInput, check_logProbDerivInput_hasDiscrete,
+    check_logProbDerivOutput, check_logProbDerivOutput_hasDiscrete,
+    check_occ_and_logLike, d.eval_local, d.getDefaultCreateAcc,
+    d.getDefaultParamSpec, d.isolateDist, dagInfoExtract, getTrainCG,
+    getTrainEM, getTrainingSet, persist.roundTrip, reparse, trainedAcc,
+    trainedAccG
+)
 def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = False, hasEM = True, evalShouldWork = True, ps = d.getDefaultParamSpec(), logProbDerivInputCheck = False, logProbDerivInput_hasDiscrete_check = False, logProbDerivOutputCheck = False, logProbDerivOutput_hasDiscrete_checkFor = lambda output: False, checkAdditional = None, checkAccAdditional = None):
     assert dist.tag is not None
     if hasEM:
@@ -736,6 +827,22 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
         if len(training) >= numPoints - 1:
             getTrainCG(dist, length = -2)(training)
 
+@codeDeps(assert_allclose, checkLots, check_est, cluster.decisionTreeCluster,
+    d.AutoGrowingDiscreteAcc, d.ConstantClassifierAcc, d.LinearGaussianAcc,
+    d.Memo, gen_AutoregressiveSequenceDist, gen_BinaryLogisticClassifier,
+    gen_ConstantClassifier, gen_DebugDist,
+    gen_DecisionTree_with_LinearGaussian_leaves, gen_DiscreteDist,
+    gen_IdentifiableMixtureDist, gen_LinearGaussian, gen_MappedInputDist,
+    gen_MappedOutputDist, gen_MixtureDist, gen_MixtureOfTwoExperts,
+    gen_PassThruDist, gen_StudentDist, gen_TransformedInputDist,
+    gen_TransformedOutputDist, gen_VectorDist,
+    gen_constant_AutoregressiveNetDist, gen_inSeq_AutoregressiveNetDist,
+    gen_nestedTransformDist, gen_shared_DiscreteDist, getTrainCG, getTrainEM,
+    getTrainFromAcc, randBool, randTag, randomizeParams,
+    restrictTypicalOutputLength, test_dist_questions.SimplePhoneset,
+    test_dist_questions.getQuestionGroups, trn.trainEM, wnet.netIsTopSorted,
+    wnet.nodeSetCompute
+)
 class TestDist(unittest.TestCase):
     def setUp(self):
         self.deepTest = False
@@ -1008,6 +1115,7 @@ class TestDist(unittest.TestCase):
                 check_est(dist, getTrainEM(dist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(dist), inputGen, hasParams = True)
 
+@codeDeps()
 def logProb_occ(dist, trainData):
     lp = 0.0
     occ = 0
@@ -1017,6 +1125,7 @@ def logProb_occ(dist, trainData):
     return lp, occ
 
 # FIXME : this is nowhere near a proper unit test (need to make it more robust, automated, etc)
+@codeDeps(gen_BinaryLogisticClassifier, logProb_occ, trn.trainEM)
 def testBinaryLogisticClassifier():
     def inputGen(num):
         for i in range(num):
@@ -1050,6 +1159,7 @@ def testBinaryLogisticClassifier():
         logging.warning('unusually large discrepancy between estimated and true dist during BinaryLogisticClassifier test')
 
 # (N.B. not a unit test. Just draws pictures to help you assess whether results seem reasonable.)
+@codeDeps(gen_BinaryLogisticClassifier, logProb_occ, trn.trainEM)
 def testBinaryLogisticClassifierFunGraph():
     import pylab
 
@@ -1119,6 +1229,7 @@ def testBinaryLogisticClassifierFunGraph():
     pylab.show()
 
 # (N.B. not a unit test. Just draws pictures to help you assess whether results seem reasonable.)
+@codeDeps(d.LinearGaussianAcc)
 def testMixtureOfTwoExpertsInitialization():
     import pylab
 
@@ -1183,6 +1294,7 @@ def testMixtureOfTwoExpertsInitialization():
     pylab.ylim(-10.0, 10.0)
     pylab.show()
 
+@codeDeps(TestDist)
 def suite(deepTest = False):
     # below definition nested here so that unittest search only finds shallow
     #   version of tests by default

@@ -8,16 +8,20 @@
 
 from __future__ import division
 
+from codedep import codeDeps
+
 import numpy as np
 import armspeech.numpy_settings
 import math
 import random
 
+@codeDeps()
 def getNegInf():
     return float('-inf')
 
 _negInf = float('-inf')
 
+@codeDeps()
 def assert_allclose(actual, desired, rtol = 1e-7, atol = 1e-14, msg = 'items not almost equal'):
     if np.shape(actual) != np.shape(desired):
         raise AssertionError(
@@ -36,6 +40,7 @@ def assert_allclose(actual, desired, rtol = 1e-7, atol = 1e-14, msg = 'items not
             '\n REL ERR: '+repr(relErr)+' (max '+str(np.max(relErr))+')'
         )
 
+@codeDeps()
 def logAdd(a, b):
     """Computes log(exp(a) + exp(b)) in a way that avoids underflow."""
     if a == _negInf and b == _negInf:
@@ -44,6 +49,7 @@ def logAdd(a, b):
     else:
         return np.logaddexp(a, b)
 
+@codeDeps(logAdd)
 def logSum(l):
     """Computes log(sum(exp(l))) in a way that avoids underflow.
 
@@ -69,6 +75,7 @@ def logSum(l):
     else:
         return np.log(np.sum(np.exp(np.array(l) - k))) + k
 
+@codeDeps()
 def sigmoid(a):
     if a > 40.0:
         return 1.0
@@ -77,6 +84,7 @@ def sigmoid(a):
     else:
         return 1.0 / (1.0 + math.exp(-a))
 
+@codeDeps()
 def logDet(mat):
     if np.shape(mat) == (0, 0):
         return 0.0
@@ -84,6 +92,7 @@ def logDet(mat):
         # FIXME : replace with slogdet once we're using numpy 2.0?
         return np.sum(np.log(np.linalg.svd(mat, compute_uv = False)))
 
+@codeDeps()
 def sampleDiscrete(valueProbList, absTol = 1e-6):
     """Sample a value from the given discrete distribution.
 
@@ -104,6 +113,7 @@ def sampleDiscrete(valueProbList, absTol = 1e-6):
             break
     return value
 
+@codeDeps()
 class AsArray(object):
     def __init__(self):
         pass

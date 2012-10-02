@@ -9,7 +9,9 @@
 from __future__ import division
 
 import questions as ques
+from codedep import codeDeps
 
+@codeDeps()
 class SimplePhoneset(object):
     def __init__(self):
         a = 'a'
@@ -37,5 +39,6 @@ class SimplePhoneset(object):
         ]
         self.namedPhoneSubsets = [ (subsetName, frozenset(subsetList)) for subsetName, subsetList in namedPhoneSubsetList ]
 
+@codeDeps(ques.IdLabelValuer, ques.getSubsetQuestions)
 def getQuestionGroups(phoneset):
     return [(ques.IdLabelValuer(), ques.getSubsetQuestions(phoneset.namedPhoneSubsets))]

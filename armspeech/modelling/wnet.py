@@ -12,7 +12,9 @@ import logging
 import math
 import heapq
 from collections import deque, defaultdict
+from codedep import codeDeps, ForwardRef
 
+@codeDeps()
 class Net(object):
     def start(self, forwards):
         abstract
@@ -23,6 +25,7 @@ class Net(object):
     def next(self, node, forwards):
         abstract
 
+@codeDeps()
 def basicChecks(net):
     """Basic checks that all nets should satisfy."""
     assert net.start(True) != net.start(False)
@@ -33,6 +36,7 @@ def basicChecks(net):
     assert net.elem(net.start(True)) is None
     assert net.elem(net.end(True)) is None
 
+@codeDeps(Net, basicChecks)
 class MappedElemNet(Net):
     def __init__(self, fn, net):
         self.fn = fn
@@ -47,6 +51,7 @@ class MappedElemNet(Net):
     def next(self, node, forwards):
         return self.net.next(node, forwards)
 
+@codeDeps(Net, basicChecks)
 class MappedLabelNet(Net):
     """Applies a function to each non-None label in a net."""
     def __init__(self, fn, net):
@@ -61,6 +66,7 @@ class MappedLabelNet(Net):
     def next(self, node, forwards):
         return [ (None if label is None else self.fn(label), nextNode) for label, nextNode in self.net.next(node, forwards) ]
 
+@codeDeps(Net, basicChecks)
 class FlatMappedNet(Net):
     """Lazy flat-mapped net.
 
@@ -98,6 +104,7 @@ class FlatMappedNet(Net):
         else:
             return [ (label, (nodeTop, nextNodeBtm)) for label, nextNodeBtm in netBtm.next(nodeBtm, forwards) ]
 
+@codeDeps(Net, basicChecks)
 class TrivialNet(Net):
     def __init__(self, label):
         self.label = label
@@ -113,6 +120,7 @@ class TrivialNet(Net):
         else:
             return []
 
+@codeDeps(Net, basicChecks)
 class SequenceNet(Net):
     def __init__(self, elems, label):
         self.count = len(elems)
@@ -137,6 +145,7 @@ class SequenceNet(Net):
         else:
             return [(self.label, nextNode)]
 
+@codeDeps(Net, basicChecks)
 class ProbLeftToRightNet(Net):
     def __init__(self, numStates, elemFor, transLabelFor):
         self.count = numStates
@@ -171,13 +180,16 @@ class ProbLeftToRightNet(Net):
                 (neighTransLabel, nextNode)
             ]
 
+@codeDeps(ProbLeftToRightNet)
 def probLeftToRightNet(elems, transLabels):
     return ProbLeftToRightNet(len(elems), elemFor = lambda state: elems[state], transLabelFor = lambda state, adv: transLabels[state][adv])
 
+@codeDeps(ProbLeftToRightNet)
 def sumGeometricDurNet(elem, transLabels):
     numDurStates = len(transLabels)
     return ProbLeftToRightNet(numDurStates, elemFor = lambda durState: elem, transLabelFor = lambda durState, adv: transLabels[durState][adv])
 
+@codeDeps(Net, basicChecks)
 class ProbLeftToRightZeroNet(Net):
     def __init__(self, numStates, elemFor, transLabelFor):
         self.count = numStates
@@ -218,13 +230,16 @@ class ProbLeftToRightZeroNet(Net):
                     (neighTransLabel, nextNode)
                 ]
 
+@codeDeps(ProbLeftToRightZeroNet)
 def probLeftToRightZeroNet(elems, transLabels):
     return ProbLeftToRightZeroNet(len(elems), elemFor = lambda state: elems[state], transLabelFor = lambda state, adv: transLabels[state][adv])
 
+@codeDeps(ProbLeftToRightZeroNet)
 def sumGeometricZeroDurNet(elem, transLabels):
     numDurStates = len(transLabels)
     return ProbLeftToRightZeroNet(numDurStates, elemFor = lambda durState: elem, transLabelFor = lambda durState, adv: transLabels[durState][adv])
 
+@codeDeps(Net, basicChecks)
 class SemiMarkovDurNet(Net):
     def __init__(self, elemm, minDur, maxDur, transLabelFor):
         self.elemm = elemm
@@ -266,6 +281,7 @@ class SemiMarkovDurNet(Net):
                     ret.append((None, node + 1))
                 return ret
 
+@codeDeps(Net, basicChecks)
 class ConcreteNet(Net):
     """A net where nodes are 0, 1, ..., (N - 1)."""
     def __init__(self, startNode, endNode, elems, edgesForwards, edgesBackwards = None):
@@ -299,6 +315,7 @@ class ConcreteNet(Net):
     def next(self, node, forwards):
         return self.edgesForwards[node] if forwards else self.edgesBackwards[node]
 
+@codeDeps(ConcreteNet)
 def concretizeNet(net, nodes):
     """Concretizes an existing net.
 
@@ -320,15 +337,18 @@ def concretizeNet(net, nodes):
 
     return ConcreteNet(startNode = startIndex, endNode = endIndex, elems = elems, edgesForwards = edgesForwards, edgesBackwards = edgesBackwards)
 
+@codeDeps(concretizeNet, ForwardRef(lambda: nodeSetCompute))
 def concretizeNetSimple(net, accessibleOnly = True):
     nodeSet = nodeSetCompute(net, accessibleOnly = accessibleOnly)
     if not nodeSet:
         raise RuntimeError('no path from start to end for net '+repr(net))
     return concretizeNet(net, nodeSet)
 
+@codeDeps(concretizeNet, ForwardRef(lambda: topSort))
 def concretizeNetTopSort(net, deltaTime):
     sortedNodes = topSort(net, deltaTime)
     return concretizeNet(net, sortedNodes)
+@codeDeps()
 def netIsTopSorted(net, nodeSet, deltaTime):
     for node in nodeSet:
         for forwards in [True, False]:
@@ -340,8 +360,10 @@ def netIsTopSorted(net, nodeSet, deltaTime):
                         return False
     return True
 
+@codeDeps()
 class HasCycleError(Exception):
     pass
+@codeDeps(HasCycleError)
 def topSort(net, deltaTime, forwards = False, detectCycles = True, debugCheckInvariants = False):
     """Topologically sorts the nodes in a net.
 
@@ -430,6 +452,7 @@ def topSort(net, deltaTime, forwards = False, detectCycles = True, debugCheckInv
         sortedNodes.reverse()
     return sortedNodes
 
+@codeDeps(ForwardRef(lambda: nodeSetComputeSub))
 def nodeSetCompute(net, accessibleOnly = True):
     """Traverses a net to compute the set of nodes.
 
@@ -444,6 +467,7 @@ def nodeSetCompute(net, accessibleOnly = True):
         return nodeSet
     else:
         return nodeSetComputeSub(net, [True, False])
+@codeDeps()
 def nodeSetComputeSub(net, dirs):
     nodeSet = set()
     agenda = deque()
@@ -464,9 +488,11 @@ def nodeSetComputeSub(net, dirs):
 
     return nodeSet
 
+@codeDeps(ForwardRef(lambda: isConsistent))
 def checkConsistent(net, nodeSet):
     if not isConsistent(net, nodeSet):
         raise RuntimeError('net inconsistent (looks different viewed forwards and backwards)')
+@codeDeps()
 def isConsistent(net, nodeSet, verbose = False):
     """Checks if net looks the same viewed forwards and backwards.
 
@@ -501,12 +527,14 @@ def isConsistent(net, nodeSet, verbose = False):
             return False
     return True
 
+@codeDeps(nodeSetCompute, ForwardRef(lambda: toDotGeneral))
 def toDot(net, accessibleOnly = True, highlighted = lambda node: False):
     nodeSet = nodeSetCompute(net, accessibleOnly = accessibleOnly)
     if not nodeSet:
         raise RuntimeError('no path from start to end for net '+repr(net))
 
     return toDotGeneral(net, nodeSet, highlighted = highlighted)
+@codeDeps(concretizeNet, isConsistent)
 def toDotGeneral(net, nodeSet, highlighted = lambda node: False):
     assert isConsistent(net, nodeSet)
     net = concretizeNet(net, nodeSet)
@@ -544,6 +572,7 @@ def toDotGeneral(net, nodeSet, highlighted = lambda node: False):
 
     return '\n'.join(sb)
 
+@codeDeps(Net, basicChecks)
 class UnrolledNet(Net):
     """Unrolls given net over time.
 
@@ -577,6 +606,7 @@ class UnrolledNet(Net):
                 ret.append(((label, labelStartTime, labelEndTime), (nextTime, nextNodeTop)))
         return ret
 
+@codeDeps(Net, basicChecks)
 class ReweightedNet(Net):
     def __init__(self, net, labelToWeight, divisionRing, beta):
         self.net = net
@@ -600,11 +630,13 @@ class ReweightedNet(Net):
             if newWeight != ring.zero:
                 ret.append(((label, newWeight), nextNode))
         return ret
+@codeDeps(ReweightedNet, ForwardRef(lambda: sumGetAlpha))
 def reweight(net, labelToWeight, divisionRing, getAgenda):
     totalWeight, beta = sumGetAlpha(net, labelToWeight, ring = divisionRing, getAgenda = getAgenda, forwards = False)
     rnet = ReweightedNet(net, labelToWeight, divisionRing = divisionRing, beta = beta)
     return totalWeight, rnet
 
+@codeDeps()
 class SumAgenda(object):
     def __nonzero__(self):
         abstract
@@ -615,6 +647,7 @@ class SumAgenda(object):
     # (FIXME : add transform method (signature (node, weight) => weight)?)
     def printStats(self):
         pass
+@codeDeps(SumAgenda)
 class SimpleSumAgenda(SumAgenda):
     def __init__(self, ring, useQueue = True):
         self.ring = ring
@@ -635,6 +668,7 @@ class SimpleSumAgenda(SumAgenda):
         weight = self.active[node]
         del self.active[node]
         return node, weight
+@codeDeps(SumAgenda)
 class PriorityQueueSumAgenda(SumAgenda):
     """SumAgenda backed by a priority queue.
 
@@ -682,6 +716,7 @@ class PriorityQueueSumAgenda(SumAgenda):
             weight = self.active[node]
             if self.ring.lt(self.ring.times(weight, thresh) if self.forwards else self.ring.times(thresh, weight), best):
                 self.active[node] = self.ring.zero
+@codeDeps(SumAgenda)
 class TimeSyncSumAgenda(SumAgenda):
     # (FIXME : does stack (rather than queue) really work well enough for TimeSyncSumAgenda that we should have it as a default?)
     #   (note that stack definitely does have an advantage in avoiding repeat pops when dealing with ~flatmapped zero-duration stuff~)
@@ -735,6 +770,7 @@ class TimeSyncSumAgenda(SumAgenda):
             else:
                 queueNew.append(node)
         self.queue[self.time] = deque(queueNew)
+@codeDeps(SumAgenda)
 class TrackRepeatPopsSumAgenda(SumAgenda):
     def __init__(self, sumAgenda, verbose = True):
         self.sa = sumAgenda
@@ -770,6 +806,7 @@ class TrackRepeatPopsSumAgenda(SumAgenda):
             for count, node in self.topOffenders():
                 print 'SumAgenda:\t', node, '->', count, 'times'
 
+@codeDeps()
 def sum(net, labelToWeight, ring, getAgenda, forwards = True):
     """Sums over all paths in the given net.
 
@@ -798,6 +835,7 @@ def sum(net, labelToWeight, ring, getAgenda, forwards = True):
 
     agenda.printStats()
     return totalWeight
+@codeDeps()
 def sumGetAlpha(net, labelToWeight, ring, getAgenda, forwards = True):
     """Sums over all paths in the given net, storing alpha for all nodes.
 
@@ -827,6 +865,7 @@ def sumGetAlpha(net, labelToWeight, ring, getAgenda, forwards = True):
 
     agenda.printStats()
     return alpha[net.end(forwards)], alpha
+@codeDeps()
 def sumYieldGamma(net, labelToWeight, divisionRing, totalWeight, beta, getAgenda, forwards = True):
     """Computes gamma values for labelled edges in the given net.
 
@@ -877,6 +916,7 @@ def sumYieldGamma(net, labelToWeight, divisionRing, totalWeight, beta, getAgenda
         logging.warning('recomputed total weight ('+str(totalWeightAgain)+') differs from given value ('+str(totalWeight)+')')
     agenda.printStats()
 
+@codeDeps(sumGetAlpha, sumYieldGamma)
 def forwardBackward(net, labelToWeight, divisionRing, getAgenda, forwardsFirst = False):
     """Performs Forward-Backward algorithm on net.
 
@@ -887,6 +927,7 @@ def forwardBackward(net, labelToWeight, divisionRing, getAgenda, forwardsFirst =
     totalWeight, beta = sumGetAlpha(net, labelToWeight = labelToWeight, ring = divisionRing, getAgenda = getAgenda, forwards = forwardsFirst)
     edgeGen = sumYieldGamma(net, labelToWeight = labelToWeight, divisionRing = divisionRing, totalWeight = totalWeight, beta = lambda node: beta[node], getAgenda = getAgenda, forwards = not forwardsFirst)
     return totalWeight, edgeGen
+@codeDeps(reweight, sumYieldGamma)
 def forwardBackwardAlt(net, labelToWeight, divisionRing, getAgenda):
     totalWeight, rnet = reweight(net, labelToWeight = labelToWeight, divisionRing = divisionRing, getAgenda = getAgenda)
     edgeGen = sumYieldGamma(rnet, labelToWeight = lambda (label, weight): weight, divisionRing = divisionRing, totalWeight = divisionRing.one, beta = lambda node: divisionRing.one, getAgenda = getAgenda, forwards = True)

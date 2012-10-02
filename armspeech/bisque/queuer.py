@@ -9,6 +9,7 @@
 from __future__ import division
 
 from armspeech.util import persist
+from codedep import codeDeps, ForwardRef
 
 import os
 import tempfile
@@ -19,6 +20,7 @@ import time
 #   bisque. Not yet sure how I want to tackle this general issue, so for now
 #   just leave something that usually works.)
 
+@codeDeps()
 def createDir(path):
     try:
         os.mkdir(path)
@@ -27,6 +29,9 @@ def createDir(path):
         if e.errno != 17:
             raise
 
+@codeDeps(ForwardRef(lambda: LiveJob), createDir, persist.loadPickle,
+    persist.savePickle, persist.secHashObject
+)
 class BuildRepo(object):
     def __init__(self, base, createDirsIfNece = True):
         self.base = base
@@ -68,6 +73,7 @@ class BuildRepo(object):
 
         return liveJob
 
+@codeDeps()
 class LiveJob(object):
     def __init__(self, dir):
         self.dir = dir
@@ -101,6 +107,7 @@ class LiveJob(object):
         with open(os.path.join(self.dir, 'extra_'+key), 'wb') as f:
             f.write(value+'\n')
 
+@codeDeps()
 class Queuer(object):
     def secHash(self):
         return self.secHashUid
@@ -132,6 +139,7 @@ class Queuer(object):
                 print 'queuer:     '+self.buildRepo.artLocation(art)
         return live
 
+@codeDeps(Queuer, persist.secHashObject)
 class LocalQueuer(Queuer):
     def __init__(self, buildRepo):
         self.buildRepo = buildRepo

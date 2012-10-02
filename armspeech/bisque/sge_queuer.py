@@ -14,6 +14,7 @@ from __future__ import division
 import queuer as qr
 import sge_runner
 from armspeech.util import persist
+from codedep import codeDeps
 
 import re
 import os
@@ -27,6 +28,7 @@ import threading
 import socket
 from collections import defaultdict
 
+@codeDeps(qr.Queuer)
 class SgeQueuer(qr.Queuer):
     def submitOne(self, job, live, verbosity):
         liveJob = self.buildRepo.createLiveJob(job, queuer = self)
@@ -43,6 +45,7 @@ class SgeQueuer(qr.Queuer):
 
         return liveJob
 
+@codeDeps()
 class MockQueueState(object):
     def __init__(self):
         self.counter = 0
@@ -65,6 +68,7 @@ class MockQueueState(object):
 #   a separate file? Would require changes to the way code shares state, but
 #   would allow true multithreaded single-machine job running. At the moment
 #   we presumably only get a speed-up from using threads if jobs are I/O-bound.)
+@codeDeps(MockQueueState, SgeQueuer, persist.secHashObject, sge_runner)
 class MockSgeQueuer(SgeQueuer):
     def __init__(self, buildRepo, pythonExec = '/usr/bin/python'):
         self.buildRepo = buildRepo
@@ -144,6 +148,9 @@ class MockSgeQueuer(SgeQueuer):
 
 qsubRe = re.compile(r'Your job.* ([0-9]+) \("(.*)"\) has been submitted\n$')
 
+@codeDeps(SgeQueuer, persist.secHashObject, qsubRe, sge_runner,
+    subprocesshelp.check_output
+)
 class QsubSgeQueuer(SgeQueuer):
     def __init__(self, buildRepo, project, email = None, emailOpts = 'n', jointLog = False, pythonExec = '/usr/bin/python'):
         self.buildRepo = buildRepo

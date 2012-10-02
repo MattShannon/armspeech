@@ -14,8 +14,11 @@ based on memory location.
 
 from __future__ import division
 
+from codedep import codeDeps
+
 # (N.B. lookup code (for sharing) is not concurrent-safe, and doesn't detect loops)
 
+@codeDeps()
 def chainPartialFns(partialFns):
     def chainedPartialFn(*args):
         ret = None
@@ -26,6 +29,7 @@ def chainPartialFns(partialFns):
         return ret
     return chainedPartialFn
 
+@codeDeps()
 def nodeList(
     parentNode,
     idValue = lambda node: id(node),
@@ -49,6 +53,7 @@ def nodeList(
                 agenda.extend(reversed(node.children()))
     return ret
 
+@codeDeps(nodeList)
 def findTaggedNodes(parentNode, f):
     def includeNode(node):
         try:
@@ -58,6 +63,7 @@ def findTaggedNodes(parentNode, f):
         else:
             return f(tag)
     return nodeList(parentNode, includeNode = includeNode)
+@codeDeps(findTaggedNodes)
 def findTaggedNode(parentNode, f):
     nodes = findTaggedNodes(parentNode, f)
     if len(nodes) == 0:
@@ -68,6 +74,7 @@ def findTaggedNode(parentNode, f):
         return nodes[0]
 
 # (FIXME : could make this more concrete and live with code duplication if that improves clarity)
+@codeDeps()
 def getDagMap(
     partialMaps,
     idValue = lambda args: id(args[0]),
@@ -135,7 +142,9 @@ def getDagMap(
         return mapChild(*parentArgs)
     return dagMap
 
+@codeDeps()
 def defaultMapPartial(node, mapChild):
     return node.mapChildren(mapChild)
+@codeDeps(defaultMapPartial, getDagMap)
 def getDefaultMap():
     return getDagMap([defaultMapPartial])

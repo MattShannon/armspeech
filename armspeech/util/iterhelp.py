@@ -8,8 +8,11 @@
 
 from __future__ import division
 
+from codedep import codeDeps
+
 from collections import deque
 
+@codeDeps()
 def contextualizeIter(contextLength, iter, fillFrames = []):
     assert len(fillFrames) <= contextLength
     context = deque(fillFrames)
@@ -19,6 +22,7 @@ def contextualizeIter(contextLength, iter, fillFrames = []):
         if len(context) > contextLength:
             context.popleft()
 
+@codeDeps()
 def chunkList(xs, numChunks):
     """Splits list into roughly evenly-sized chunks."""
     n = len(xs)

@@ -8,6 +8,8 @@
 
 from __future__ import division
 
+from codedep import codeDeps
+
 import os
 import logging
 import struct
@@ -18,16 +20,20 @@ import numpy.linalg as la
 import itertools
 import subprocess
 
+@codeDeps()
 def getMcdConstant():
     return 10.0 / math.log(10.0) * math.sqrt(2.0)
 
 _mcdConstant = getMcdConstant()
 
+@codeDeps(getMcdConstant)
 def stdCepDist(synthVec, actualVec):
     return _mcdConstant * la.norm(np.asarray(synthVec)[1:] - np.asarray(actualVec)[1:])
+@codeDeps(getMcdConstant)
 def stdCepDistIncZero(synthVec, actualVec):
     return _mcdConstant * la.norm(np.asarray(synthVec) - np.asarray(actualVec))
 
+@codeDeps()
 def readParamFile(paramFile, paramOrder, decode = None):
     floatLittleEndian = struct.Struct('<'+''.join([ 'f' for i in range(paramOrder) ]))
     with open(paramFile, 'rb') as f:
@@ -40,9 +46,11 @@ def readParamFile(paramFile, paramOrder, decode = None):
 # (FIXME : use instead of above??)
 # (N.B. perhaps surprisingly, it seems quite a bit slower (43 sec vs 60 sec in one test)
 #   than readParamFile!)
+@codeDeps()
 def readParamFileAlt(paramFile, paramOrder):
     return np.reshape(np.fromfile(paramFile, dtype = np.float32), (-1, paramOrder))
 
+@codeDeps()
 def writeParamFile(outSeq, paramFile, paramOrder, encode = None):
     floatLittleEndian = struct.Struct('<'+''.join([ 'f' for i in range(paramOrder) ]))
     with open(paramFile, 'wb') as f:
@@ -51,11 +59,13 @@ def writeParamFile(outSeq, paramFile, paramOrder, encode = None):
             bytes = floatLittleEndian.pack(*curr)
             f.write(bytes)
 
+@codeDeps()
 class NoneEncoder(object):
     def __init__(self):
         self.decode = None
         self.encode = None
 
+@codeDeps(NoneEncoder)
 class Stream(object):
     def __init__(self, name, order, encoder = NoneEncoder()):
         self.name = name
@@ -65,16 +75,19 @@ class Stream(object):
     def __repr__(self):
         return 'Stream('+repr(self.name)+', '+repr(self.order)+', '+repr(self.encoder)+')'
 
+@codeDeps(readParamFile)
 def readAcousticGen(streams, paramFileFor):
     return itertools.izip(*[
         readParamFile(paramFileFor(stream), stream.order, stream.encoder.decode)
         for stream in streams
     ])
 
+@codeDeps(writeParamFile)
 def writeAcousticSeq(outSeq, streams, paramFileFor):
     for stream, outSeqStream in zip(streams, zip(*outSeq)):
         writeParamFile(outSeqStream, paramFileFor(stream), stream.order, stream.encoder.encode)
 
+@codeDeps()
 class Msd01Encoder(object):
     def __init__(self, specialValue):
         self.specialValue = specialValue
@@ -92,6 +105,7 @@ class Msd01Encoder(object):
         else:
             return [x]
 
+@codeDeps()
 def doHtsDemoWaveformGeneration(scriptsDir, synthOutDir, basenames, logFile = None):
     """HTS-demo-with-STRAIGHT-style waveform generation.
 
