@@ -309,7 +309,7 @@ def concretizeNet(net, nodes):
     first node becomes node 0, the second node becomes node 1, etc.
     """
     indexToNode = list(nodes)
-    nodeToIndex = dict((node, index) for index, node in enumerate(indexToNode))
+    nodeToIndex = dict([ (node, index) for index, node in enumerate(indexToNode) ])
 
     startIndex = nodeToIndex[net.start(True)]
     endIndex = nodeToIndex[net.start(False)]
