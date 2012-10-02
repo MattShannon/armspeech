@@ -109,7 +109,11 @@ def run(dataDir, labDir, scriptsDir, outDir):
     print 'CONFIG: outDir =', outDir
 
     phoneset = phoneset_cmu.CmuPhoneset()
-    corpus = corpus_arctic.getCorpusSynthFewer(trainUttIds = corpus_arctic.trainUttIds, mgcOrder = 40, dataDir = dataDir, labDir = labDir, scriptsDir = scriptsDir)
+    corpus = corpus_arctic.getCorpusSynthFewer(
+        trainUttIds = corpus_arctic.trainUttIds,
+        mgcOrder = 40,
+        dataDir = dataDir, labDir = labDir, scriptsDir = scriptsDir
+    )
 
     mgcStream, lf0Stream, bapStream = corpus.streams
     mgcStreamDepth, lf0StreamDepth, bapStreamDepth = 3, 2, 3
