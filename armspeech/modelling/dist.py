@@ -153,13 +153,12 @@ def defaultParsePartial(node, params, parseChild):
     return newNode.parseChildren(paramsLeft, parseChild)
 def defaultCreateAccGPartial(dist, createAccChild):
     return dist.createAccG(createAccChild)
-defaultPartial = (
-    defaultParamsPartial,
-    defaultDerivParamsPartial,
-    defaultParsePartial,
-    defaultCreateAccGPartial
+defaultParamSpec = ParamSpec(
+    [defaultParamsPartial],
+    [defaultDerivParamsPartial],
+    [defaultParsePartial],
+    [defaultCreateAccGPartial]
 )
-defaultParamSpec = ParamSpec(*zip(*[defaultPartial]))
 
 def nopParamsPartial(node, paramsChild):
     pass
@@ -176,12 +175,6 @@ def noLocalDerivParamsPartial(node, derivParamsChild):
     return node.derivParamsChildren(derivParamsChild)
 def noLocalParsePartial(node, params, parseChild):
     return node.parseChildren(params, parseChild)
-noLocalPartial = (
-    noLocalParamsPartial,
-    noLocalDerivParamsPartial,
-    noLocalParsePartial,
-    defaultCreateAccGPartial
-)
 
 def isolateDist(dist):
     """Returns an isolated copy of a distribution.
@@ -202,13 +195,12 @@ def getByTagParamSpec(f):
     def byTagParsePartial(node, params, parseChild):
         if f(node.tag):
             return defaultParsePartial(node, params, parseChild)
-    byTagPartial = (
-        byTagParamsPartial,
-        byTagDerivParamsPartial,
-        byTagParsePartial,
-        nopCreateAccGPartial
+    return ParamSpec(
+        [byTagParamsPartial, noLocalParamsPartial],
+        [byTagDerivParamsPartial, noLocalDerivParamsPartial],
+        [byTagParsePartial, noLocalParsePartial],
+        [nopCreateAccGPartial, defaultCreateAccGPartial]
     )
-    return ParamSpec(*zip(*[byTagPartial, noLocalPartial]))
 
 def addAcc(accTo, accFrom):
     """Adds accumulator sub-DAG accFrom to accumulator sub-DAG accTo.
