@@ -137,4 +137,5 @@ def getDagMap(
 
 def defaultMapPartial(node, mapChild):
     return node.mapChildren(mapChild)
-defaultMap = getDagMap([defaultMapPartial])
+def getDefaultMap():
+    return getDagMap([defaultMapPartial])

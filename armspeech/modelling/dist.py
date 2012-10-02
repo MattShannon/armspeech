@@ -190,7 +190,7 @@ def isolateDist(dist):
     with fresh objects at each node. Therefore no nodes in the new DAG are
     shared outside the new DAG.
     """
-    return nodetree.defaultMap(dist)
+    return nodetree.getDefaultMap()(dist)
 
 def getByTagParamSpec(f):
     def byTagParamsPartial(node, paramsChild):
