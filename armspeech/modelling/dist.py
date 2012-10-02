@@ -1150,7 +1150,7 @@ class TransformedOutputLearnDistAccEM(AccEM):
 
 class TransformedOutputLearnTransformAccEM(AccEM):
     """Acc for transformed output, where we learn the transform parameters using EM."""
-    def __init__(self, inputTransformAcc, dist, tag = None):
+    def __init__(self, outputTransformAcc, dist, tag = None):
         self.outputTransformAcc = outputTransformAcc
         self.dist = dist
         self.tag = tag
