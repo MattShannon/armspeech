@@ -53,9 +53,10 @@ def attachAstAndSymtabSub(node, symtab, symtabChildrenLeft, depth):
             subNodesNewScope = node.args.args + [node.body]
             # node.args itself would otherwise be missed out
             node.args.symtab_current_scope = symtab
-        elif isinstance(node, _ast.GeneratorExp):
+        elif isinstance(node, (_ast.SetComp, _ast.DictComp, _ast.GeneratorExp)):
             subNodesOldScope = [ subNode.iter for subNode in node.generators ]
-            subNodesNewScope = [node.elt] + (
+            subNodesNewScope = (
+                ([node.key, node.value] if isinstance(node, _ast.DictComp) else [node.elt]) +
                 [ subNode.target for subNode in node.generators ] +
                 [ subSubNode for subNode in node.generators for subSubNode in subNode.ifs ]
             )
