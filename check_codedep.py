@@ -201,7 +201,11 @@ def main(args):
         newLoadGlobals = set()
         for name in loadGlobals:
             if name.startswith('_') and not name.startswith('__'):
-                newLoadGlobals.update(privateDeps[name])
+                if name in privateDeps:
+                    newLoadGlobals.update(privateDeps[name])
+                else:
+                    newLoadGlobals.add(name)
+                    sys.stderr.write('NOTE: treating %s as non-private\n' % name)
             else:
                 newLoadGlobals.add(name)
         loadGlobalss[nodeIndex] = sorted(newLoadGlobals)
