@@ -16,15 +16,22 @@ import armspeech.modelling.corpus as cps
 import armspeech.speech.labels as lab
 import armspeech.speech.features as feat
 from armspeech.util import iterhelp
+from codedep import codeDeps, ForwardRef
 from armspeech.util.timing import timed
 
 import os
 
+@codeDeps()
 def parseState(stateString):
     assert stateString[:6] == 'state['
     assert stateString[-1] == ']'
     return int(stateString[6:-1]) - 2
 
+@codeDeps(ForwardRef(lambda: cleanAlignment), cps.Corpus, feat.Msd01Encoder,
+    feat.Stream, feat.doHtsDemoWaveformGeneration, feat.readAcousticGen,
+    feat.writeAcousticSeq, ForwardRef(lambda: getMgcLims40), iterhelp.chunkList,
+    lab.checkAlignment, lab.readTwoLevelHtkLabFile, parseState, timed
+)
 class ArcticCorpus(cps.Corpus):
     def __init__(self, trainUttIds, testUttIds, synthUttIds, dataDir, labDir, scriptsDir, parseLabel, mgcOrder, framePeriod):
         self.trainUttIds = trainUttIds
@@ -100,6 +107,7 @@ class ArcticCorpus(cps.Corpus):
             logFile = os.path.join(synthOutDir, exptTag+'.log')
         )
 
+@codeDeps()
 def cleanAlignment(alignment, acousticSeq, verbose = True):
     alignmentNew = alignment[:]
     startTime, endTime, label, subAlignment = alignment[-1]
@@ -114,13 +122,16 @@ def cleanAlignment(alignment, acousticSeq, verbose = True):
         alignmentNew[-1] = startTime, endTime, label, subAlignment
     return alignmentNew
 
+@codeDeps(ArcticCorpus, ForwardRef(lambda: getTestUttIds))
 def getCorpus(trainUttIds, dataDir, labDir, scriptsDir, parseLabel, mgcOrder):
     testUttIds = getTestUttIds()
     return ArcticCorpus(trainUttIds, testUttIds, testUttIds, dataDir, labDir, scriptsDir, parseLabel = parseLabel, mgcOrder = mgcOrder, framePeriod = 0.005)
+@codeDeps(ArcticCorpus, ForwardRef(lambda: getTestUttIds))
 def getCorpusSynthFewer(trainUttIds, dataDir, labDir, scriptsDir, parseLabel, mgcOrder):
     testUttIds = getTestUttIds()
     return ArcticCorpus(trainUttIds, testUttIds, testUttIds[2:4], dataDir, labDir, scriptsDir, parseLabel = parseLabel, mgcOrder = mgcOrder, framePeriod = 0.005)
 
+@codeDeps()
 def getTrainUttIds():
     return [
         'cmu_us_arctic_slt_a0001',
@@ -1207,6 +1218,7 @@ def getTrainUttIds():
         'cmu_us_arctic_slt_b0539',
     ]
 
+@codeDeps()
 def getTestUttIds():
     return [
         'cmu_us_arctic_slt_a0003',
@@ -1261,12 +1273,15 @@ def getTestUttIds():
         'cmu_us_arctic_slt_b0494',
     ]
 
+@codeDeps(getTrainUttIds)
 def getTrainUttIdsPartial():
     return getTrainUttIds()[:151]
 
+@codeDeps(getTrainUttIds)
 def getTrainUttIdsMinimal():
     return getTrainUttIds()[:2]
 
+@codeDeps()
 def getMgcLims40():
     return {
         0: [-12.6603, 1.0],

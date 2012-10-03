@@ -12,32 +12,43 @@
 from __future__ import division
 
 import armspeech.modelling.questions as ques
+from codedep import codeDeps
 
+@codeDeps(ques.AttrLabelValuer, ques.getSubsetQuestions)
 def getSubsetQG(labelKey, namedSubsets):
     return (ques.AttrLabelValuer(labelKey), ques.getSubsetQuestions(namedSubsets))
+@codeDeps(ques.AttrLabelValuer, ques.getEqualityQuestions)
 def getEqualityQG(labelKey, values):
     return (ques.AttrLabelValuer(labelKey), ques.getEqualityQuestions(values))
+@codeDeps(ques.AttrLabelValuer, ques.getThreshQuestions)
 def getThreshQG(labelKey, threshes):
     return (ques.AttrLabelValuer(labelKey), ques.getThreshQuestions(threshes))
+@codeDeps(ques.AttrLabelValuer, ques.getSubsetQuestions)
 def getSubsetQGs(labelKeys, namedSubsets):
     questions = ques.getSubsetQuestions(namedSubsets)
     return [ (ques.AttrLabelValuer(labelKey), questions) for labelKey in labelKeys ]
 
+@codeDeps(getSubsetQGs)
 def getMonophoneQuestionGroups(phoneset):
     return getSubsetQGs(
         ['phone'],
         phoneset.namedPhoneSubsets
     )
+@codeDeps(getSubsetQGs)
 def getTriphoneQuestionGroups(phoneset):
     return getSubsetQGs(
         ['l_phone', 'phone', 'r_phone'],
         phoneset.namedPhoneSubsets
     )
+@codeDeps(getSubsetQGs)
 def getQuinphoneQuestionGroups(phoneset):
     return getSubsetQGs(
         ['ll_phone', 'l_phone', 'phone', 'r_phone', 'rr_phone'],
         phoneset.namedPhoneSubsets
     )
+@codeDeps(getEqualityQG, getQuinphoneQuestionGroups, getThreshQG,
+    ques.AttrLabelValuer, ques.EqualityQuestion, ques.getSubsetQuestions
+)
 def getFullContextQuestionGroups(phoneset):
     quinphoneQuestionGroups = getQuinphoneQuestionGroups(phoneset)
     otherQuestionGroups = [

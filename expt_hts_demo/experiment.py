@@ -18,6 +18,7 @@ from armspeech.modelling import wnet
 from armspeech.speech.features import stdCepDist, stdCepDistIncZero
 from armspeech.speech import draw
 from armspeech.util.timing import timed, printTime
+from codedep import codeDeps
 
 import phoneset_cmu
 import labels_hts_demo
@@ -29,6 +30,7 @@ import math
 import numpy as np
 import armspeech.numpy_settings
 
+@codeDeps()
 def writeDistFile(distFile, dist):
     """Writes repr of a dist to a file.
 
@@ -41,6 +43,7 @@ def writeDistFile(distFile, dist):
         f.write('\n')
     print 'DEBUG: wrote dist to file', distFile
 
+@codeDeps()
 def getFirst(x, default = None):
     try:
         t = x[0]
@@ -49,6 +52,7 @@ def getFirst(x, default = None):
     else:
         return t
 
+@codeDeps()
 def getStandardizeAlignment(subLabels):
     numSubLabels = len(subLabels)
     haveWarned = [False]
@@ -88,6 +92,9 @@ def getStandardizeAlignment(subLabels):
         return alignmentOut
     return standardizeAlignment
 
+@codeDeps(d.BinaryLogisticClassifier, d.ConstantClassifier, d.LinearGaussian,
+    d.distNodeList
+)
 def reportFloored(distRoot, rootTag):
     dists = d.distNodeList(distRoot)
     taggedDistTypes = [('LG', d.LinearGaussian), ('CC', d.ConstantClassifier), ('BLC', d.BinaryLogisticClassifier)]

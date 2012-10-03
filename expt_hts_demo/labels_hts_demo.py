@@ -12,9 +12,11 @@
 from __future__ import division
 
 import armspeech.speech.labels as lab
+from codedep import codeDeps, codedepEvalThunk
 
 import collections
 
+@codeDeps()
 def getLabelFormat():
     phonePat = r'[a-z]+'
     phoneOrNonePat = r'(x|[a-z]+)'
@@ -97,6 +99,7 @@ def getLabelFormat():
 
     return labelFormat
 
+@codeDeps(getLabelFormat)
 def _getClassLabel():
     labelFormat = getLabelFormat()
     labelKeys = [ labelKey for labelKey, pat, decode, sep in labelFormat ]
@@ -104,8 +107,9 @@ def _getClassLabel():
     return Label
 
 # N.B. Label needs to be top-level so it can be pickled
-Label = _getClassLabel()
+Label = codedepEvalThunk(_getClassLabel)
 
+@codeDeps(Label, getLabelFormat, lab.getParseLabel)
 def getParseLabel():
     labelFormat = getLabelFormat()
     parseLabel = lab.getParseLabel(labelFormat, Label)

@@ -13,6 +13,9 @@
 
 from __future__ import division
 
+from codedep import codeDeps
+
+@codeDeps()
 class CmuPhoneset(object):
     def __init__(self):
         aa = 'aa'
