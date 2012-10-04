@@ -127,6 +127,8 @@ def _resolveAnyForwardRefs(deps):
 
 @codeDeps(_resolveAnyForwardRefs)
 def getDeps(fnOrClassOrObj):
+    if '_codedepCodeDeps' not in fnOrClassOrObj.__dict__:
+        raise RuntimeError('codedep values not found for %s' % fnOrClassOrObj)
     fnOrClassOrObj._codedepCodeDeps = _resolveAnyForwardRefs(fnOrClassOrObj.__dict__['_codedepCodeDeps'])
     return fnOrClassOrObj.__dict__['_codedepCodeDeps']
 
