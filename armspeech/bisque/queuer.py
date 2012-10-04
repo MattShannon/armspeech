@@ -66,10 +66,10 @@ class BuildRepo(object):
         persist.savePickle(os.path.join(liveJob.dir, 'queuer.pickle'), queuer)
         liveJob.setStored()
 
-        assert job.secHash() == jobSecHash
+        job.checkAllSecHash()
         assert self.getJobQueuerDir(job, queuer) == jobQueuerDir
         jobAgain = persist.loadPickle(os.path.join(liveJob.dir, 'job.pickle'))
-        assert jobAgain.secHash() == jobSecHash
+        job.checkAllSecHash()
 
         return liveJob
 
@@ -126,7 +126,7 @@ class Queuer(object):
 
     def generateArtifact(self, art, live, verbosity):
         if not self.buildRepo.artDone(art):
-            for job in art.parentJobs():
+            for job in art.parents():
                 self.submitAll(job, live, verbosity)
 
     def generateArtifacts(self, finalArtifacts, verbosity = 1):

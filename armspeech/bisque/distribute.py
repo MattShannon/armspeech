@@ -13,44 +13,63 @@ from armspeech.util import persist
 from codedep import codeDeps, ForwardRef
 
 import os
-import sys
-import inspect
-import modulefinder
 
-@codeDeps(ForwardRef(lambda: ancestorArtifacts), persist.secHashObject)
-class Artifact(object):
+@codeDeps(ForwardRef(lambda: ancestors))
+class DagNode(object):
     def secHash(self):
-        secHashAllExternals = [ secHash for art in ancestorArtifacts([self]) for secHash in art.secHashExternals() ]
-        secHashAllSources = [ secHash for art in ancestorArtifacts([self]) for secHash in art.secHashSources() ]
-        return persist.secHashObject((self, secHashAllExternals, secHashAllSources))
+        if not hasattr(self, '_secHash'):
+            self._secHash = self.computeSecHash()
+        return self._secHash
+    def checkAllSecHash(self):
+        for node in ancestors([self]):
+            node.checkSecHash()
 
-@codeDeps(Artifact, persist.secHashFile)
+@codeDeps()
+def ancestors(initialNodes):
+    ret = []
+    agenda = list(initialNodes)
+    lookup = dict()
+    while agenda:
+        node = agenda.pop()
+        ident = id(node)
+        if not ident in lookup:
+            lookup[ident] = True
+            ret.append(node)
+            agenda.extend(reversed(node.parents()))
+    return ret
+
+@codeDeps(DagNode)
+class Artifact(DagNode):
+    def checkSecHash(self):
+        if self.secHash() != self.computeSecHash():
+            raise RuntimeError('secHash of artifact %s has changed' % self)
+
+@codeDeps(Artifact, codedep.getHash, persist.secHashFile, persist.secHashObject)
 class FixedArtifact(Artifact):
     def __init__(self, location):
         self.location = location
-    def parentJobs(self):
+    def parents(self):
         return []
     def parentArtifacts(self):
         return []
-    def secHashExternals(self):
-        return [persist.secHashFile(self.location)]
-    def secHashSources(self):
-        return []
+    def computeSecHash(self):
+        secHashSource = codedep.getHash(self.__class__)
+        secHashFile = persist.secHashFile(self.location)
+        return persist.secHashObject((secHashSource, secHashFile))
     def loc(self, baseDir):
         return self.location
 
-@codeDeps(Artifact, codedep.getHash)
+@codeDeps(Artifact, codedep.getHash, persist.secHashObject)
 class JobArtifact(Artifact):
     def __init__(self, parentJob):
         self.parentJob = parentJob
-    def parentJobs(self):
+    def parents(self):
         return [self.parentJob]
     def parentArtifacts(self):
         return self.parentJob.inputs
-    def secHashExternals(self):
-        return []
-    def secHashSources(self):
-        return [codedep.getHash(self.parentJob.__class__)]
+    def computeSecHash(self):
+        secHashSource = codedep.getHash(self.__class__)
+        return persist.secHashObject((secHashSource, self.parentJob.secHash()))
     def loc(self, baseDir):
         return os.path.join(baseDir, self.secHash())
 
@@ -68,10 +87,8 @@ def ancestorArtifacts(initialArts):
             agenda.extend(reversed(art.parentArtifacts()))
     return ret
 
-@codeDeps(JobArtifact, ancestorArtifacts, codedep.getHash,
-    persist.secHashObject
-)
-class Job(object):
+@codeDeps(DagNode, JobArtifact, codedep.getHash, persist.secHashObject)
+class Job(DagNode):
     """A job specifies a computation to be run on some input.
 
     This class is intended to be subclassed. The subclass should set
@@ -91,14 +108,17 @@ class Job(object):
     Also note when subclassing that you should not break __hash__, since some
     of the queuer code calls this method.
     """
+    def parents(self):
+        return self.inputs
     def parentJobs(self):
-        return [ parentJob for input in self.inputs for parentJob in input.parentJobs() ]
+        return [ parentJob for input in self.inputs for parentJob in input.parents() ]
     def newOutput(self):
         return JobArtifact(parentJob = self)
     def run(self, buildRepo):
         abstract
-    def secHash(self):
+    def computeSecHash(self):
         secHashSource = codedep.getHash(self.__class__)
-        secHashAllExternals = [ secHash for art in ancestorArtifacts(self.inputs) for secHash in art.secHashExternals() ]
-        secHashAllSources = [ secHash for art in ancestorArtifacts(self.inputs) for secHash in art.secHashSources() ]
-        return persist.secHashObject((self, secHashSource, secHashAllExternals, secHashAllSources))
+        return persist.secHashObject((secHashSource, [ input.secHash() for input in self.inputs ]))
+    def checkSecHash(self):
+        if self.secHash() != self.computeSecHash():
+            raise RuntimeError('secHash of job %s has changed' % self.name)

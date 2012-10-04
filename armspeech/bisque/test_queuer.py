@@ -26,12 +26,11 @@ import time
 @codeDeps(jobs.AddJob, jobs.OneJob)
 def simpleTestDag():
     oneJob1 = jobs.OneJob(name = 'oneJob1')
-    oneJob2 = jobs.OneJob(name = 'oneJob2')
-    addJobA = jobs.AddJob(oneJob1.valueOut, oneJob2.valueOut, name = 'addJobA')
-    addJobB = jobs.AddJob(oneJob2.valueOut, addJobA.valueOut, name = 'addJobB')
+    addJobA = jobs.AddJob(oneJob1.valueOut, oneJob1.valueOut, name = 'addJobA')
+    addJobB = jobs.AddJob(oneJob1.valueOut, addJobA.valueOut, name = 'addJobB')
     addJobC = jobs.AddJob(addJobA.valueOut, addJobB.valueOut, name = 'addJobC')
     addJobD = jobs.AddJob(oneJob1.valueOut, addJobB.valueOut, name = 'addJobD')
-    return [(addJobC.valueOut, 5), (addJobD.valueOut, 4)], 6, 2
+    return [(addJobC.valueOut, 5), (addJobD.valueOut, 4)], 5, 2
 
 @codeDeps(TempDir, qr.BuildRepo, qr.LocalQueuer, sge_queuer.MockSgeQueuer,
     simpleTestDag
@@ -55,7 +54,7 @@ class TestDistribute(unittest.TestCase):
             finalArtifacts = [ art for art, expectedValue in testDag ]
             live = queuer.generateArtifacts(finalArtifacts, verbosity = 0)
             assert len(live) == totJobs
-            finalLiveJobs = [ live[job.secHash()] for art in finalArtifacts for job in art.parentJobs() if job.secHash() in live ]
+            finalLiveJobs = [ live[job.secHash()] for art in finalArtifacts for job in art.parents() if job.secHash() in live ]
             assert len(finalLiveJobs) == finalJobs
             while not all([ liveJob.hasEnded() for liveJob in finalLiveJobs ]):
                 time.sleep(0.1)
@@ -77,7 +76,7 @@ class TestDistribute(unittest.TestCase):
             totSubmitted = 0
             for art, expectedValue in testDag:
                 live = queuer.generateArtifacts([art], verbosity = 0)
-                finalLiveJobs.extend([ live[job.secHash()] for job in art.parentJobs() if job.secHash() in live ])
+                finalLiveJobs.extend([ live[job.secHash()] for job in art.parents() if job.secHash() in live ])
                 liveJobDirs.update([ liveJob.dir for liveJob in live.values() ])
                 totSubmitted += len(live)
             assert len(liveJobDirs) == totJobs

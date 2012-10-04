@@ -23,6 +23,9 @@ class OneJob(distribute.Job):
 
         self.inputs = []
         self.valueOut = self.newOutput()
+
+        self.secHash()
+
     def run(self, buildRepo):
         valueOut = 1
 
@@ -37,6 +40,9 @@ class AddJob(distribute.Job):
 
         self.inputs = [valueLeft, valueRight]
         self.valueOut = self.newOutput()
+
+        self.secHash()
+
     def run(self, buildRepo):
         valueLeft = buildRepo.loadFromArt(self.valueLeft)
         valueRight = buildRepo.loadFromArt(self.valueRight)
