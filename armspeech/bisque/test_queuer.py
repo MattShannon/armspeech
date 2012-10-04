@@ -27,9 +27,9 @@ import time
 @codeDeps(distribute.ThunkArtifact, jobs.AddJob, jobs.OneJob, jobs.getOne)
 def simpleTestDag():
     oneJob1 = jobs.OneJob(name = 'oneJob1')
-    getOneArt = distribute.ThunkArtifact(jobs.getOne)
-    addJobA = jobs.AddJob(oneJob1.valueOut, getOneArt, name = 'addJobA')
-    addJobB = jobs.AddJob(getOneArt, addJobA.valueOut, name = 'addJobB')
+    oneArt = distribute.ThunkArtifact(jobs.getOne)
+    addJobA = jobs.AddJob(oneJob1.valueOut, oneArt, name = 'addJobA')
+    addJobB = jobs.AddJob(oneArt, addJobA.valueOut, name = 'addJobB')
     addJobC = jobs.AddJob(addJobA.valueOut, addJobB.valueOut, name = 'addJobC')
     addJobD = jobs.AddJob(oneJob1.valueOut, addJobB.valueOut, name = 'addJobD')
     return [(addJobC.valueOut, 5), (addJobD.valueOut, 4)], 5, 2

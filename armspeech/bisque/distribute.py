@@ -191,7 +191,8 @@ class Job(DagNode):
         abstract
     def computeSecHash(self):
         secHashSource = codedep.getHash(self.__class__)
-        return persist.secHashObject((secHashSource, [ input.secHash() for input in self.inputs ]))
+        secHashInputs = [ art.secHash() for art in self.inputs ]
+        return persist.secHashObject((secHashSource, secHashInputs))
     def checkSecHash(self):
         if self.secHash() != self.computeSecHash():
             raise RuntimeError('secHash of job %s has changed' % self.name)
