@@ -176,6 +176,7 @@ class QsubSgeQueuer(SgeQueuer):
         #   being set (e.g. if we call it from a module defined in the parent
         #   directory of 'armspeech') then we still need to set PYTHONPATH when
         #   running the job (and sys.path[0] is just a decent heuristic guess).
+        # FIXME : does sys.path[0] ever do anything here? Should just fail instead?
         envPythonPath = os.environ['PYTHONPATH'] if 'PYTHONPATH' in os.environ else sys.path[0]
         args = [
             'qsub',

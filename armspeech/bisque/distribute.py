@@ -37,6 +37,7 @@ def findDeps(srcFile):
     the ones subject to change and need to be hashed.
     It is assumed that modules that are on the system search path are fixed.
     """
+    # FIXME : does sys.path[0] ever do anything here? Should just fail instead?
     envPythonPath = os.environ['PYTHONPATH'] if 'PYTHONPATH' in os.environ else sys.path[0]
     finder = modulefinder.ModuleFinder(path = [envPythonPath])
     finder.run_script(srcFile)
