@@ -146,12 +146,12 @@ def getAllDeps(fnOrClassOrObj):
             agenda.extend(reversed(getDeps(curr)))
     return ret
 
+# (FIXME : does this guarantee the hash will change if any changes are made to a
+#   set of functions? Can come up with a counter-example?)
 @codeDeps(getAllDeps)
 def computeHash(fnOrClassOrObj):
     return hashString(str([ dep.__dict__['_codedepCodeHash'] for dep in getAllDeps(fnOrClassOrObj) ]))
 
-# (FIXME : does this guarantee the hash will change if any changes are made to a
-#   set of functions? Can come up with a counter-example?)
 @codeDeps(computeHash)
 def getHash(fnOrClassOrObj):
     if '_codedepHash' not in fnOrClassOrObj.__dict__:
