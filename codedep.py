@@ -121,13 +121,16 @@ def codedepEvalThunk(fnOrClassOrObjThunk):
     _updateInfo(fnOrClassOrObj)
     return fnOrClassOrObj
 
+@codeDeps()
 def _resolveAnyForwardRefs(deps):
     return [ dep.thunk() if isinstance(dep, ForwardRef) else dep for dep in deps ]
 
+@codeDeps(_resolveAnyForwardRefs)
 def getDeps(fnOrClassOrObj):
     fnOrClassOrObj._codedepCodeDeps = _resolveAnyForwardRefs(fnOrClassOrObj.__dict__['_codedepCodeDeps'])
     return fnOrClassOrObj.__dict__['_codedepCodeDeps']
 
+@codeDeps(getDeps)
 def getAllDeps(fnOrClassOrObj):
     ret = []
     agenda = [fnOrClassOrObj]
@@ -141,11 +144,13 @@ def getAllDeps(fnOrClassOrObj):
             agenda.extend(reversed(getDeps(curr)))
     return ret
 
+@codeDeps(getAllDeps)
 def computeHash(fnOrClassOrObj):
     return hashString(str([ dep.__dict__['_codedepCodeHash'] for dep in getAllDeps(fnOrClassOrObj) ]))
 
 # (FIXME : does this guarantee the hash will change if any changes are made to a
 #   set of functions? Can come up with a counter-example?)
+@codeDeps(computeHash)
 def getHash(fnOrClassOrObj):
     if '_codedepHash' not in fnOrClassOrObj.__dict__:
         fnOrClassOrObj._codedepHash = computeHash(fnOrClassOrObj)
