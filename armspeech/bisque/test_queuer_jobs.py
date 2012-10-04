@@ -16,6 +16,10 @@ from __future__ import division
 import distribute
 from codedep import codeDeps
 
+@codeDeps()
+def getOne():
+    return 1
+
 @codeDeps(distribute.Job)
 class OneJob(distribute.Job):
     def __init__(self, name = 'oneJob'):

@@ -13,6 +13,7 @@ from __future__ import division
 #   jobs don't contain the fully-qualified names for any modules imported below
 #   using implicit relative imports, which leads to problems when these jobs
 #   are unpickled to be run.)
+from armspeech.bisque import distribute
 import armspeech.bisque.queuer as qr
 from armspeech.bisque import sge_queuer
 import armspeech.bisque.test_queuer_jobs as jobs
@@ -23,11 +24,12 @@ import unittest
 import logging
 import time
 
-@codeDeps(jobs.AddJob, jobs.OneJob)
+@codeDeps(distribute.ThunkArtifact, jobs.AddJob, jobs.OneJob, jobs.getOne)
 def simpleTestDag():
     oneJob1 = jobs.OneJob(name = 'oneJob1')
-    addJobA = jobs.AddJob(oneJob1.valueOut, oneJob1.valueOut, name = 'addJobA')
-    addJobB = jobs.AddJob(oneJob1.valueOut, addJobA.valueOut, name = 'addJobB')
+    getOneArt = distribute.ThunkArtifact(jobs.getOne)
+    addJobA = jobs.AddJob(oneJob1.valueOut, getOneArt, name = 'addJobA')
+    addJobB = jobs.AddJob(getOneArt, addJobA.valueOut, name = 'addJobB')
     addJobC = jobs.AddJob(addJobA.valueOut, addJobB.valueOut, name = 'addJobC')
     addJobD = jobs.AddJob(oneJob1.valueOut, addJobB.valueOut, name = 'addJobD')
     return [(addJobC.valueOut, 5), (addJobD.valueOut, 4)], 5, 2

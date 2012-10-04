@@ -44,8 +44,71 @@ class Artifact(DagNode):
         if self.secHash() != self.computeSecHash():
             raise RuntimeError('secHash of artifact %s has changed' % self)
 
+@codeDeps(Artifact, codedep.getHash, persist.secHashObject)
+class ThunkArtifact(Artifact):
+    """An artifact whose value is computed fresh each time it is needed.
+
+    thunk should be a callable function or class. If shouldCache is True, the
+    thunk is evaluated only once for each process and the value cached.
+    """
+    def __init__(self, thunk, shouldCache = True):
+        self.thunk = thunk
+        self.shouldCache = shouldCache
+    def parents(self):
+        return []
+    def parentArtifacts(self):
+        return []
+    def computeSecHash(self):
+        secHashSource = codedep.getHash(self.__class__)
+        secHashThunk = codedep.getHash(self.thunk)
+        return persist.secHashObject((secHashSource, secHashThunk, self.shouldCache))
+    def isDone(self, buildRepo):
+        return True
+    def loadValue(self, buildRepo):
+        if self.shouldCache:
+            if not hasattr(self, '_value'):
+                self._value = self.thunk()
+            return self._value
+        else:
+            return self.thunk()
+    def saveValue(self, buildRepo, value):
+        raise RuntimeError('a ThunkArtifact cannot be saved')
+
+@codeDeps(Artifact, codedep.getHash, persist.secHashObject)
+class FixedDirArtifact(Artifact):
+    """An artifact which is a fixed directory (or file).
+
+    The hash of the artifact is computed based on the location only, not the
+    contents. The artifact value is the location.
+    """
+    def __init__(self, location):
+        self.location = location
+    def parents(self):
+        return []
+    def parentArtifacts(self):
+        return []
+    def computeSecHash(self):
+        secHashSource = codedep.getHash(self.__class__)
+        return persist.secHashObject((secHashSource, self.location))
+    def loc(self, buildRepo):
+        return self.location
+    def isDone(self, buildRepo):
+        return os.path.exists(self.location)
+    def loadValue(self, buildRepo):
+        return self.location
+    def saveValue(self, buildRepo, value):
+        raise RuntimeError('a FixedDirArtifact cannot be saved')
+
 @codeDeps(Artifact, codedep.getHash, persist.secHashFile, persist.secHashObject)
-class FixedArtifact(Artifact):
+class FixedFileArtifact(Artifact):
+    """An artifact which is a fixed file.
+
+    The hash of the artifact is computed based on the contents of the file,
+    not its location.
+
+    This class needs to be subclassed further adding loadValue and saveValue
+    methods.
+    """
     def __init__(self, location):
         self.location = location
     def parents(self):
@@ -59,7 +122,7 @@ class FixedArtifact(Artifact):
     def loc(self, buildRepo):
         return self.location
     def isDone(self, buildRepo):
-        return os.path.exists(self.loc(buildRepo))
+        return os.path.exists(self.location)
 
 @codeDeps(Artifact, codedep.getHash, persist.loadPickle, persist.savePickle,
     persist.secHashObject
