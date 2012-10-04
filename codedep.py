@@ -30,6 +30,10 @@ def _updateInfo(fnOrClassOrObj):
     is set then they all are.
     This means that any one codedep decorator line suffices in the case where
     the other codedep values have their default values, which saves typing.
+
+    Note that adding codedep values to an instance of a class means that the
+    codedep values will be pickled (this may or may not be a problem,
+    depending on the use case).
     """
     if '_codedepCodeHash' not in fnOrClassOrObj.__dict__:
         fnOrClassOrObj._codedepCodeHash = hashString(inspect.getsource(fnOrClassOrObj))
@@ -106,6 +110,10 @@ def codedepEvalThunk(fnOrClassOrObjThunk):
             return Two()
 
         two = codedepEvalThunk(getTwo)
+
+    Note that adding codedep values to an instance of a class means that the
+    codedep values will be pickled (this may or may not be a problem,
+    depending on the use case).
     """
     fnOrClassOrObj = fnOrClassOrObjThunk()
     fnOrClassOrObj._codedepCodeHash = ''
