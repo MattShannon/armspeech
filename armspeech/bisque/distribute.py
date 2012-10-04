@@ -56,10 +56,14 @@ class FixedArtifact(Artifact):
         secHashSource = codedep.getHash(self.__class__)
         secHashFile = persist.secHashFile(self.location)
         return persist.secHashObject((secHashSource, secHashFile))
-    def loc(self, baseDir):
+    def loc(self, buildRepo):
         return self.location
+    def isDone(self, buildRepo):
+        return os.path.exists(self.loc(buildRepo))
 
-@codeDeps(Artifact, codedep.getHash, persist.secHashObject)
+@codeDeps(Artifact, codedep.getHash, persist.loadPickle, persist.savePickle,
+    persist.secHashObject
+)
 class JobArtifact(Artifact):
     def __init__(self, parentJob):
         self.parentJob = parentJob
@@ -70,8 +74,14 @@ class JobArtifact(Artifact):
     def computeSecHash(self):
         secHashSource = codedep.getHash(self.__class__)
         return persist.secHashObject((secHashSource, self.parentJob.secHash()))
-    def loc(self, baseDir):
-        return os.path.join(baseDir, self.secHash())
+    def loc(self, buildRepo):
+        return os.path.join(buildRepo.cacheDir(), self.secHash())
+    def isDone(self, buildRepo):
+        return os.path.exists(self.loc(buildRepo))
+    def loadValue(self, buildRepo):
+        return persist.loadPickle(self.loc(buildRepo))
+    def saveValue(self, buildRepo, value):
+        return persist.savePickle(self.loc(buildRepo), value)
 
 @codeDeps()
 def ancestorArtifacts(initialArts):

@@ -43,7 +43,7 @@ class TestDistribute(unittest.TestCase):
         for testDag, totJobs, finalJobs in [simpleTestDag()]:
             live = queuer.generateArtifacts([ art for art, expectedValue in testDag ], verbosity = 0)
             for art, expectedValue in testDag:
-                assert buildRepo.loadFromArt(art) == expectedValue
+                assert art.loadValue(buildRepo) == expectedValue
         tempDir.remove()
 
     def test_MockSgeQueuer_one_big_submission(self):
@@ -59,7 +59,7 @@ class TestDistribute(unittest.TestCase):
             while not all([ liveJob.hasEnded() for liveJob in finalLiveJobs ]):
                 time.sleep(0.1)
             for art, expectedValue in testDag:
-                assert buildRepo.loadFromArt(art) == expectedValue
+                assert art.loadValue(buildRepo) == expectedValue
 
             # check no jobs submitted if we already have the desired artifacts
             live = queuer.generateArtifacts(finalArtifacts, verbosity = 0)
@@ -86,7 +86,7 @@ class TestDistribute(unittest.TestCase):
             while not all([ liveJob.hasEnded() for liveJob in finalLiveJobs ]):
                 time.sleep(0.1)
             for art, expectedValue in testDag:
-                assert buildRepo.loadFromArt(art) == expectedValue
+                assert art.loadValue(buildRepo) == expectedValue
 
             # check no jobs submitted if we already have the desired artifacts
             for art, expectedValue in testDag:

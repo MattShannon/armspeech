@@ -39,14 +39,8 @@ class BuildRepo(object):
             createDir(self.base)
             createDir(os.path.join(self.base, 'cache'))
             createDir(os.path.join(self.base, 'liveJobs'))
-    def artLocation(self, art):
-        return art.loc(os.path.join(self.base, 'cache'))
-    def artDone(self, art):
-        return os.path.exists(self.artLocation(art))
-    def loadFromArt(self, art):
-        return persist.loadPickle(self.artLocation(art))
-    def saveToArt(self, art, obj):
-        return persist.savePickle(self.artLocation(art), obj)
+    def cacheDir(self):
+        return os.path.join(self.base, 'cache')
     def getJobQueuerDir(self, job, queuer):
         jobQueuerId = persist.secHashObject((job.secHash(), queuer.secHash()))
         return os.path.join(self.base, 'liveJobs', jobQueuerId)
@@ -125,7 +119,7 @@ class Queuer(object):
                 live[job.secHash()] = self.submitOne(job, live, verbosity)
 
     def generateArtifact(self, art, live, verbosity):
-        if not self.buildRepo.artDone(art):
+        if not art.isDone(self.buildRepo):
             for job in art.parents():
                 self.submitAll(job, live, verbosity)
 
@@ -136,7 +130,7 @@ class Queuer(object):
         if verbosity >= 1:
             print 'queuer: final artifacts will be at:'
             for art in finalArtifacts:
-                print 'queuer:     '+self.buildRepo.artLocation(art)
+                print 'queuer:     '+art.loc(buildRepo)
         return live
 
 @codeDeps(Queuer, persist.secHashObject)

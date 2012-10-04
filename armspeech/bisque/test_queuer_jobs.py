@@ -29,7 +29,7 @@ class OneJob(distribute.Job):
     def run(self, buildRepo):
         valueOut = 1
 
-        buildRepo.saveToArt(self.valueOut, valueOut)
+        self.valueOut.saveValue(buildRepo, valueOut)
 
 @codeDeps(distribute.Job)
 class AddJob(distribute.Job):
@@ -44,9 +44,9 @@ class AddJob(distribute.Job):
         self.secHash()
 
     def run(self, buildRepo):
-        valueLeft = buildRepo.loadFromArt(self.valueLeft)
-        valueRight = buildRepo.loadFromArt(self.valueRight)
+        valueLeft = self.valueLeft.loadValue(buildRepo)
+        valueRight = self.valueRight.loadValue(buildRepo)
 
         valueOut = valueLeft + valueRight
 
-        buildRepo.saveToArt(self.valueOut, valueOut)
+        self.valueOut.saveValue(buildRepo, valueOut)
