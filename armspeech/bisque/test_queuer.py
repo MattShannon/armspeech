@@ -49,10 +49,11 @@ class TestDistribute(unittest.TestCase):
         tempDir.remove()
 
     def test_MockSgeQueuer_one_big_submission(self):
-        tempDir = TempDir()
-        buildRepo = qr.BuildRepo(base = tempDir.location)
-        queuer = sge_queuer.MockSgeQueuer(buildRepo = buildRepo)
         for testDag, totJobs, finalJobs in [simpleTestDag()]:
+            tempDir = TempDir()
+            buildRepo = qr.BuildRepo(base = tempDir.location)
+            queuer = sge_queuer.MockSgeQueuer(buildRepo = buildRepo)
+
             finalArtifacts = [ art for art, expectedValue in testDag ]
             live = queuer.generateArtifacts(finalArtifacts, verbosity = 0)
             assert len(live) == totJobs
@@ -66,13 +67,15 @@ class TestDistribute(unittest.TestCase):
             # check no jobs submitted if we already have the desired artifacts
             live = queuer.generateArtifacts(finalArtifacts, verbosity = 0)
             assert len(live) == 0
-        tempDir.remove()
+
+            tempDir.remove()
 
     def test_MockSgeQueuer_several_little_submissions(self):
-        tempDir = TempDir()
-        buildRepo = qr.BuildRepo(base = tempDir.location)
-        queuer = sge_queuer.MockSgeQueuer(buildRepo = buildRepo)
         for testDag, totJobs, finalJobs in [simpleTestDag()]:
+            tempDir = TempDir()
+            buildRepo = qr.BuildRepo(base = tempDir.location)
+            queuer = sge_queuer.MockSgeQueuer(buildRepo = buildRepo)
+
             finalLiveJobs = []
             liveJobDirs = set()
             totSubmitted = 0
@@ -94,7 +97,8 @@ class TestDistribute(unittest.TestCase):
             for art, expectedValue in testDag:
                 live = queuer.generateArtifacts([art], verbosity = 0)
                 assert len(live) == 0
-        tempDir.remove()
+
+            tempDir.remove()
 
 @codeDeps(TestDistribute)
 def suite():
