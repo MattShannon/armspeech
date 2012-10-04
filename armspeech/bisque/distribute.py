@@ -17,23 +17,12 @@ import sys
 import inspect
 import modulefinder
 
-# FIXME : the hash of an artifact currently only incorporates the source for the
-#   class of the parent job (and everything that class definition could possibly
-#   depend on). This has the undesirable consequence that two different
-#   computations with different results may be stored in the same place (since
-#   if job JA produces artifact A, and A is used as input for job JB producing
-#   artifact B, then changing the code in JA may affect the hash of A and the
-#   value of both A and B without affecting the hash of B. For example, if we
-#   change a numerical constant in a method of JA, this does not affect anything
-#   in the pickle of the artifact B which is used to compute the hash of B, but
-#   may affect the value of A and B.)
-#   This bug needs to be fixed.
-
 @codeDeps(ForwardRef(lambda: ancestorArtifacts), persist.secHashObject)
 class Artifact(object):
     def secHash(self):
         secHashAllExternals = [ secHash for art in ancestorArtifacts([self]) for secHash in art.secHashExternals() ]
-        return persist.secHashObject((self, secHashAllExternals, self.secHashSources()))
+        secHashAllSources = [ secHash for art in ancestorArtifacts([self]) for secHash in art.secHashSources() ]
+        return persist.secHashObject((self, secHashAllExternals, secHashAllSources))
 
 @codeDeps(Artifact, persist.secHashFile)
 class FixedArtifact(Artifact):
@@ -79,9 +68,29 @@ def ancestorArtifacts(initialArts):
             agenda.extend(reversed(art.parentArtifacts()))
     return ret
 
-@codeDeps(JobArtifact, ancestorArtifacts, persist.secHashObject)
+@codeDeps(JobArtifact, ancestorArtifacts, codedep.getHash,
+    persist.secHashObject
+)
 class Job(object):
-    # (N.B. some client code uses default hash routines)
+    """A job specifies a computation to be run on some input.
+
+    This class is intended to be subclassed. The subclass should set
+    self.inputs to the list of artifacts this job depends on during object
+    initialization.
+
+    Any changes to the source code generating the artifacts in self.inputs will
+    be automatically detected and will be reflected in the hash value for this
+    job and its output artifact. However the source code used to generate
+    objects in the job's dictionary but not in self.inputs is *not*
+    incorporated into the hash. This means that any objects used to construct
+    this job which have even the remotest possibility of changing in the future
+    should be included explicitly as artifacts in self.inputs. The recommended
+    use is to make everything passed to the constructor except the job name
+    part of self.inputs.
+
+    Also note when subclassing that you should not break __hash__, since some
+    of the queuer code calls this method.
+    """
     def parentJobs(self):
         return [ parentJob for input in self.inputs for parentJob in input.parentJobs() ]
     def newOutput(self):
@@ -89,5 +98,7 @@ class Job(object):
     def run(self, buildRepo):
         abstract
     def secHash(self):
+        secHashSource = codedep.getHash(self.__class__)
         secHashAllExternals = [ secHash for art in ancestorArtifacts(self.inputs) for secHash in art.secHashExternals() ]
-        return persist.secHashObject((self, secHashAllExternals))
+        secHashAllSources = [ secHash for art in ancestorArtifacts(self.inputs) for secHash in art.secHashSources() ]
+        return persist.secHashObject((self, secHashSource, secHashAllExternals, secHashAllSources))
