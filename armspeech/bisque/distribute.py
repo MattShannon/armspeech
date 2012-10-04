@@ -16,6 +16,18 @@ import sys
 import inspect
 import modulefinder
 
+# FIXME : the hash of an artifact currently only incorporates the source for the
+#   class of the parent job (and everything that class definition could possibly
+#   depend on). This has the undesirable consequence that two different
+#   computations with different results may be stored in the same place (since
+#   if job JA produces artifact A, and A is used as input for job JB producing
+#   artifact B, then changing the code in JA may affect the hash of A and the
+#   value of both A and B without affecting the hash of B. For example, if we
+#   change a numerical constant in a method of JA, this does not affect anything
+#   in the pickle of the artifact B which is used to compute the hash of B, but
+#   may affect the value of A and B.)
+#   This bug needs to be fixed.
+
 @codeDeps()
 def findDeps(srcFile):
     """Returns local dependencies for a given source file.
