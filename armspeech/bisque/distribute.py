@@ -38,7 +38,7 @@ def findDeps(srcFile):
     It is assumed that modules that are on the system search path are fixed.
     """
     envPythonPath = os.environ['PYTHONPATH'] if 'PYTHONPATH' in os.environ else sys.path[0]
-    finder = modulefinder.ModuleFinder(path = envPythonPath)
+    finder = modulefinder.ModuleFinder(path = [envPythonPath])
     finder.run_script(srcFile)
     depFiles = [ mod.__file__ for modName, mod in finder.modules.items() if mod.__file__ is not None ]
     return sorted(depFiles)
