@@ -20,6 +20,10 @@ from codedep import codeDeps
 def getOne():
     return 1
 
+@codeDeps()
+def add(x, y):
+    return x + y
+
 @codeDeps(distribute.Job)
 class OneJob(distribute.Job):
     def __init__(self, name = 'oneJob'):

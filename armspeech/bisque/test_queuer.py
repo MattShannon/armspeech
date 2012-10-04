@@ -16,6 +16,7 @@ from __future__ import division
 from armspeech.bisque import distribute
 import armspeech.bisque.queuer as qr
 from armspeech.bisque import sge_queuer
+from armspeech.bisque.distribute import lift
 import armspeech.bisque.test_queuer_jobs as jobs
 from armspeech.util.filehelp import TempDir
 from codedep import codeDeps
@@ -34,22 +35,42 @@ def simpleTestDag():
     addJobD = jobs.AddJob(oneJob1.valueOut, addJobB.valueOut, name = 'addJobD')
     return [(addJobC.valueOut, 5), (addJobD.valueOut, 4)], 5, 2
 
-@codeDeps(TempDir, qr.BuildRepo, qr.LocalQueuer, sge_queuer.MockSgeQueuer,
-    simpleTestDag
+@codeDeps(distribute.ThunkArtifact, jobs.add, jobs.getOne, lift)
+def simpleTestDagFunctionalSugar():
+    outArt1 = lift(jobs.getOne, name = 'oneJob1')()
+    outArt2 = distribute.ThunkArtifact(jobs.getOne)
+    outArtA = lift(jobs.add, name = 'addJobA')(outArt1, outArt2)
+    outArtB = lift(jobs.add, name = 'addJobB')(outArt2, outArtA)
+    outArtC = lift(jobs.add, name = 'addJobC')(outArtA, outArtB)
+    outArtD = lift(jobs.add, name = 'addJobD')(outArt1, outArtB)
+    return [(outArtC, 5), (outArtD, 4)], 5, 2
+
+@codeDeps(jobs.add, jobs.getOne, lift)
+def liftExampleDag():
+    oneArt = lift(jobs.getOne)()
+    twoArt = lift(jobs.add)(oneArt, y = oneArt)
+    return [(twoArt, 2), (oneArt, 1)], 2, 2
+
+@codeDeps(TempDir, liftExampleDag, qr.BuildRepo, qr.LocalQueuer,
+    sge_queuer.MockSgeQueuer, simpleTestDag, simpleTestDagFunctionalSugar
 )
 class TestDistribute(unittest.TestCase):
     def test_LocalQueuer(self):
         tempDir = TempDir()
         buildRepo = qr.BuildRepo(base = tempDir.location)
         queuer = qr.LocalQueuer(buildRepo = buildRepo)
-        for testDag, totJobs, finalJobs in [simpleTestDag()]:
+        for testDag, totJobs, finalJobs in [simpleTestDag(),
+                                            simpleTestDagFunctionalSugar(),
+                                            liftExampleDag()]:
             live = queuer.generateArtifacts([ art for art, expectedValue in testDag ], verbosity = 0)
             for art, expectedValue in testDag:
                 assert art.loadValue(buildRepo) == expectedValue
         tempDir.remove()
 
     def test_MockSgeQueuer_one_big_submission(self):
-        for testDag, totJobs, finalJobs in [simpleTestDag()]:
+        for testDag, totJobs, finalJobs in [simpleTestDag(),
+                                            simpleTestDagFunctionalSugar(),
+                                            liftExampleDag()]:
             tempDir = TempDir()
             buildRepo = qr.BuildRepo(base = tempDir.location)
             queuer = sge_queuer.MockSgeQueuer(buildRepo = buildRepo)
@@ -71,7 +92,9 @@ class TestDistribute(unittest.TestCase):
             tempDir.remove()
 
     def test_MockSgeQueuer_several_little_submissions(self):
-        for testDag, totJobs, finalJobs in [simpleTestDag()]:
+        for testDag, totJobs, finalJobs in [simpleTestDag(),
+                                            simpleTestDagFunctionalSugar(),
+                                            liftExampleDag()]:
             tempDir = TempDir()
             buildRepo = qr.BuildRepo(base = tempDir.location)
             queuer = sge_queuer.MockSgeQueuer(buildRepo = buildRepo)

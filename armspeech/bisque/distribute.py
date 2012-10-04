@@ -196,3 +196,62 @@ class Job(DagNode):
     def checkSecHash(self):
         if self.secHash() != self.computeSecHash():
             raise RuntimeError('secHash of job %s has changed' % self.name)
+
+@codeDeps(Job, codedep.getHash, persist.secHashObject)
+class WrappedFuncJob(Job):
+    def __init__(self, func, argArts, kwargArts, name = None):
+        if name is None:
+            try:
+                name = func.func_name
+            except AttributeError:
+                name = '<noname>'
+        self.func = func
+        self.argArts = argArts
+        self.kwargArts = kwargArts
+        self.name = name
+
+        self.inputs = list(argArts) + kwargArts.values()
+        self.valueOut = self.newOutput()
+    def computeSecHash(self):
+        secHashSource = codedep.getHash(self.__class__)
+        secHashFunc = codedep.getHash(self.func)
+        secHashInputs = [ art.secHash() for art in self.inputs ]
+        return persist.secHashObject((secHashSource, secHashFunc, secHashInputs))
+    def run(self, buildRepo):
+        args = [ argArt.loadValue(buildRepo) for argArt in self.argArts ]
+        kwargs = dict([ (argKey, argArt.loadValue(buildRepo)) for argKey, argArt in self.kwargArts.items() ])
+
+        valueOut = self.func(*args, **kwargs)
+
+        self.valueOut.saveValue(buildRepo, valueOut)
+
+@codeDeps(WrappedFuncJob)
+def lift(func, name = None):
+    """Lifts a function, allowing easy creation of jobs.
+
+    func takes a collection of values and returns a value. lift(func) takes a
+    corresponding set of artifacts and returns an artifact. A job is created
+    which computes the value of the output artifact by applying func to the
+    values of the input artifacts.
+
+    This makes it easy to create distributable jobs from functions.
+
+    For example:
+
+        @codeDeps()
+        def one():
+            return 1
+
+        @codeDeps()
+        def add(x, y):
+            return x + y
+
+        oneArt = lift(one)()
+        twoArt = lift(add)(oneArt, y = oneArt)
+
+    Here twoArt is the output artifact of a job which has been created.
+    """
+    def argumentsToArt(*argArts, **kwargArts):
+        job = WrappedFuncJob(func, argArts, kwargArts, name = name)
+        return job.valueOut
+    return argumentsToArt
