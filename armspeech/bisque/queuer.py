@@ -130,7 +130,7 @@ class Queuer(object):
         if verbosity >= 1:
             print 'queuer: final artifacts will be at:'
             for art in finalArtifacts:
-                print 'queuer:     '+art.loc(buildRepo)
+                print 'queuer:     '+art.loc(self.buildRepo)
         return live
 
 @codeDeps(Queuer, persist.secHashObject)
