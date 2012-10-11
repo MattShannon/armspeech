@@ -306,642 +306,709 @@ def getBmiForCorpus(corpus, subLabels):
 def getInitialFrame(corpus, bmi):
     return mgc_lf0_bap.computeFirstFrameAverage(corpus, bmi.mgcOrder, bmi.bapOrder)
 
-def run(outDir):
-    synthOutDir = os.path.join(outDir, 'synth')
-    distOutDir = os.path.join(outDir, 'dist')
-    figOutDir = os.path.join(outDir, 'fig')
-    os.makedirs(synthOutDir)
-    os.makedirs(distOutDir)
-    os.makedirs(figOutDir)
-    print 'CONFIG: outDir =', outDir
 
+# (FIXME : this somewhat unnecessarily uses lots of memory)
+@codeDeps(StandardizeAlignment, align.AlignmentToPhoneticSeq,
+    d.AutoregressiveSequenceDist, d.DebugDist, d.MappedOutputDist, d.OracleDist,
+    d.getDefaultCreateAcc, getBmiForCorpus, getCorpusWithSubLabels,
+    getInitialFrame, nodetree.findTaggedNode, printTime,
+    questions_hts_demo.getTriphoneQuestionGroups, timed,
+    xf.ShiftOutputTransform
+)
+def doDumpCorpus(outDir):
+    print
+    print 'DUMPING CORPUS'
+    printTime('started dumpCorpus')
 
-    # (FIXME : this somewhat unnecessarily uses lots of memory)
-    def doDumpCorpus():
-        print
-        print 'DUMPING CORPUS'
-        printTime('started dumpCorpus')
+    corpus = getCorpusWithSubLabels()
+    bmi = getBmiForCorpus(corpus, subLabels = corpus.subLabels)
 
-        corpus = getCorpusWithSubLabels()
-        bmi = getBmiForCorpus(corpus, subLabels = corpus.subLabels)
+    print 'numSubLabels =', len(bmi.subLabels)
 
-        print 'numSubLabels =', len(bmi.subLabels)
+    questionGroups = questions_hts_demo.getTriphoneQuestionGroups(bmi.phoneset)
 
-        questionGroups = questions_hts_demo.getTriphoneQuestionGroups(bmi.phoneset)
+    def getQuestionAnswers(label):
+        questionAnswers = []
+        for labelValuer, questions in questionGroups:
+            labelValue = labelValuer(label)
+            for question in questions:
+                questionAnswers.append(question(labelValue))
+        return questionAnswers
 
-        def getQuestionAnswers(label):
-            questionAnswers = []
-            for labelValuer, questions in questionGroups:
-                labelValue = labelValuer(label)
-                for question in questions:
-                    questionAnswers.append(question(labelValue))
-            return questionAnswers
+    alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
+        mapAlignment = StandardizeAlignment(corpus.subLabels, bmi.subLabels),
+        mapLabel = getQuestionAnswers
+    )
 
-        alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
-            mapAlignment = StandardizeAlignment(corpus.subLabels, bmi.subLabels),
-            mapLabel = getQuestionAnswers
-        )
+    initialFrame = getInitialFrame(corpus, bmi)
 
-        initialFrame = getInitialFrame(corpus, bmi)
+    # FIXME : only works if no cross-stream stuff happening. Make more robust somehow.
+    shiftToPrevTransform = xf.ShiftOutputTransform(lambda x: -x[1][-1])
 
-        # FIXME : only works if no cross-stream stuff happening. Make more robust somehow.
-        shiftToPrevTransform = xf.ShiftOutputTransform(lambda x: -x[1][-1])
-
-        dist = d.AutoregressiveSequenceDist(
-            bmi.maxDepth,
-            alignmentToPhoneticSeq,
-            [ initialFrame for i in range(bmi.maxDepth) ],
-            bmi.frameSummarizer.createDist(True, lambda streamIndex:
-                {
-                    0:
-                        bmi.mgcSummarizer.createDist(True, lambda outIndex:
-                            d.MappedOutputDist(shiftToPrevTransform,
-                                d.DebugDist(None,
-                                    d.OracleDist()
-                                ).withTag(('debug-mgc', outIndex))
-                            )
-                        )
-                ,   1:
-                        d.OracleDist()
-                ,   2:
-                        d.OracleDist()
-                }[streamIndex]
-            )
-        )
-
-        def accumulate(acc, uttIds):
-            for uttId in uttIds:
-                input, output = corpus.data(uttId)
-                acc.add(input, output)
-
-        trainAcc = d.getDefaultCreateAcc()(dist)
-        timed(accumulate)(trainAcc, corpus.trainUttIds)
-
-        testAcc = d.getDefaultCreateAcc()(dist)
-        timed(accumulate)(testAcc, corpus.testUttIds)
-
-        for desc, acc in [('train', trainAcc), ('test', testAcc)]:
-            for outIndex in bmi.mgcSummarizer.outIndices:
-                debugAcc = nodetree.findTaggedNode(acc, lambda tag: tag == ('debug-mgc', outIndex))
-
-                dumpInputFn = os.path.join(outDir, 'corpus-'+desc+'-in.mgc'+str(outIndex)+'.mat')
-                with open(dumpInputFn, 'w') as f:
-                    print 'dump: dumping corpus input to:', dumpInputFn
-                    for (questionAnswers, subLabel), acInput in debugAcc.memo.inputs:
-                        f.write(' '.join(
-                            [ ('1' if questionAnswer else '0') for questionAnswer in questionAnswers ] +
-                            [ str(subLabel) ]+
-                            [ str(x) for x in acInput ]
-                        )+'\n')
-
-                dumpOutputFn = os.path.join(outDir, 'corpus-'+desc+'-out.mgc'+str(outIndex)+'.mat')
-                with open(dumpOutputFn, 'w') as f:
-                    print 'dump: dumping corpus output to:', dumpOutputFn
-                    for acOutput in debugAcc.memo.outputs:
-                        f.write(str(acOutput)+'\n')
-
-        printTime('finished dumpCorpus')
-
-    def doGlobalSystem():
-        print
-        print 'TRAINING GLOBAL SYSTEM'
-        printTime('started global')
-
-        corpus = getCorpusWithSubLabels()
-        bmi = getBmiForCorpus(corpus, subLabels = corpus.subLabels)
-
-        print 'numSubLabels =', len(bmi.subLabels)
-
-        lgVarianceFloorMult = 1e-3
-        print 'lgVarianceFloorMult =', lgVarianceFloorMult
-
-        alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
-            mapAlignment = align.StandardizeAlignment(corpus.subLabels, bmi.subLabels)
-        )
-        initialFrame = getInitialFrame(corpus, bmi)
-        # FIXME : setFloor shouldn't need to be specified here
-        createLeafAccs = [
-            lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer, lgTag = 'setFloor'),
-            d.OracleAcc,
-            d.OracleAcc,
-        ]
-        dist = trainGlobalDist(corpus, bmi.maxDepth, alignmentToPhoneticSeq,
-                               initialFrame, bmi.frameSummarizer,
-                               createLeafAccs, lgVarianceFloorMult)
-        reportFlooredPerStream(dist)
-        evaluateLogProb(dist, corpus)
-        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, synthOutDir, 'global', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
-
-        print
-        print 'MIXING UP (to 2 components)'
-        dist = mixup(dist, corpus.accumulate)
-        reportFlooredPerStream(dist)
-        evaluateLogProb(dist, corpus)
-        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, synthOutDir, 'global.2mix', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
-        print
-        print 'MIXING UP (to 4 components)'
-        dist = mixup(dist, corpus.accumulate)
-        reportFlooredPerStream(dist)
-        evaluateLogProb(dist, corpus)
-        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, synthOutDir, 'global.4mix', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
-
-        printTime('finished global')
-
-    def doMonophoneSystem():
-        print
-        print 'TRAINING MONOPHONE SYSTEM'
-        printTime('started mono')
-
-        corpus = getCorpusWithSubLabels()
-        bmi = getBmiForCorpus(corpus, subLabels = corpus.subLabels)
-
-        print 'numSubLabels =', len(bmi.subLabels)
-
-        lgVarianceFloorMult = 1e-3
-        print 'lgVarianceFloorMult =', lgVarianceFloorMult
-
-        def globalToMonophoneMapPartial(dist, mapChild):
-            if isinstance(dist, d.MappedInputDist) and getElem(dist.tag, 0, 2) == 'stream':
-                subDist = dist.dist
-                return d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label.phone, acInput)),
-                    d.createDiscreteDist(bmi.subLabels, lambda subLabel:
-                        d.createDiscreteDist(bmi.phoneset.phoneList, lambda phone:
-                            d.isolateDist(subDist)
+    dist = d.AutoregressiveSequenceDist(
+        bmi.maxDepth,
+        alignmentToPhoneticSeq,
+        [ initialFrame for i in range(bmi.maxDepth) ],
+        bmi.frameSummarizer.createDist(True, lambda streamIndex:
+            {
+                0:
+                    bmi.mgcSummarizer.createDist(True, lambda outIndex:
+                        d.MappedOutputDist(shiftToPrevTransform,
+                            d.DebugDist(None,
+                                d.OracleDist()
+                            ).withTag(('debug-mgc', outIndex))
                         )
                     )
-                ).withTag(dist.tag)
-
-        alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
-            mapAlignment = align.StandardizeAlignment(corpus.subLabels, bmi.subLabels)
+            ,   1:
+                    d.OracleDist()
+            ,   2:
+                    d.OracleDist()
+            }[streamIndex]
         )
-        initialFrame = getInitialFrame(corpus, bmi)
-        # FIXME : setFloor shouldn't need to be specified here
-        createLeafAccs = [
-            lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer, lgTag = 'setFloor'),
-            d.OracleAcc,
-            d.OracleAcc,
-        ]
-        globalDist = trainGlobalDist(corpus, bmi.maxDepth, alignmentToPhoneticSeq,
-                                     initialFrame, bmi.frameSummarizer,
-                                     createLeafAccs, lgVarianceFloorMult)
-        dist = globalDist
+    )
 
-        print 'DEBUG: converting global dist to monophone dist'
-        dist = nodetree.getDagMap([globalToMonophoneMapPartial, nodetree.defaultMapPartial])(dist)
+    def accumulate(acc, uttIds):
+        for uttId in uttIds:
+            input, output = corpus.data(uttId)
+            acc.add(input, output)
 
-        print 'DEBUG: estimating monophone dist'
-        dist, trainLogLike, (trainAux, trainAuxRat), trainFrames = trn.expectationMaximization(dist, timed(corpus.accumulate), verbosity = 3)
-        reportFlooredPerStream(dist)
-        evaluateLogProb(dist, corpus)
-        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, synthOutDir, 'mono', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    trainAcc = d.getDefaultCreateAcc()(dist)
+    timed(accumulate)(trainAcc, corpus.trainUttIds)
 
-        print
-        print 'MIXING UP (to 2 components)'
-        dist = mixup(dist, corpus.accumulate)
-        reportFlooredPerStream(dist)
-        evaluateLogProb(dist, corpus)
-        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, synthOutDir, 'mono.2mix', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
-        print
-        print 'MIXING UP (to 4 components)'
-        dist = mixup(dist, corpus.accumulate)
-        reportFlooredPerStream(dist)
-        evaluateLogProb(dist, corpus)
-        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, synthOutDir, 'mono.4mix', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    testAcc = d.getDefaultCreateAcc()(dist)
+    timed(accumulate)(testAcc, corpus.testUttIds)
 
-        printTime('finished mono')
+    for desc, acc in [('train', trainAcc), ('test', testAcc)]:
+        for outIndex in bmi.mgcSummarizer.outIndices:
+            debugAcc = nodetree.findTaggedNode(acc, lambda tag: tag == ('debug-mgc', outIndex))
 
-    def doTimingInfoSystem():
-        print
-        print 'TRAINING MONOPHONE SYSTEM WITH TIMING INFO'
-        printTime('started timingInfo')
+            dumpInputFn = os.path.join(outDir, 'corpus-'+desc+'-in.mgc'+str(outIndex)+'.mat')
+            with open(dumpInputFn, 'w') as f:
+                print 'dump: dumping corpus input to:', dumpInputFn
+                for (questionAnswers, subLabel), acInput in debugAcc.memo.inputs:
+                    f.write(' '.join(
+                        [ ('1' if questionAnswer else '0') for questionAnswer in questionAnswers ] +
+                        [ str(subLabel) ]+
+                        [ str(x) for x in acInput ]
+                    )+'\n')
 
-        corpus = getCorpusWithSubLabels()
-        bmi = getBmiForCorpus(corpus, subLabels = corpus.subLabels)
+            dumpOutputFn = os.path.join(outDir, 'corpus-'+desc+'-out.mgc'+str(outIndex)+'.mat')
+            with open(dumpOutputFn, 'w') as f:
+                print 'dump: dumping corpus output to:', dumpOutputFn
+                for acOutput in debugAcc.memo.outputs:
+                    f.write(str(acOutput)+'\n')
 
-        print 'numSubLabels =', len(bmi.subLabels)
+    printTime('finished dumpCorpus')
 
-        extraLength = 2
-        def mapTiming((framesBefore, framesAfter)):
-            return framesBefore, framesAfter
+@codeDeps(align.AlignmentToPhoneticSeq, align.StandardizeAlignment,
+    createLinearGaussianVectorAcc, d.OracleAcc, evaluateLogProb,
+    evaluateMgcArOutError, evaluateMgcOutError, evaluateSynthesize,
+    getBmiForCorpus, getCorpusWithSubLabels, getDrawMgc, getInitialFrame, mixup,
+    printTime, reportFlooredPerStream, stdCepDistIncZero, trainGlobalDist
+)
+def doGlobalSystem(synthOutDir, figOutDir):
+    print
+    print 'TRAINING GLOBAL SYSTEM'
+    printTime('started global')
 
-        alignmentToPhoneticSeq = align.AlignmentToPhoneticSeqWithTiming(
-            mapAlignment = StandardizeAlignment(corpus.subLabels, bmi.subLabels),
-            mapLabel = operator.attrgetter('phone'),
-            mapTiming = mapTiming
-        )
+    corpus = getCorpusWithSubLabels()
+    bmi = getBmiForCorpus(corpus, subLabels = corpus.subLabels)
 
-        initialFrame = getInitialFrame(corpus, bmi)
+    print 'numSubLabels =', len(bmi.subLabels)
 
-        def convertTimingInfo(input):
-            (phone, subLabel, extra), acousticContext = input
-            assert len(extra) == extraLength
-            return subLabel, (phone, (extra, acousticContext))
+    lgVarianceFloorMult = 1e-3
+    print 'lgVarianceFloorMult =', lgVarianceFloorMult
 
-        acc = d.AutoregressiveSequenceAcc(
-            bmi.maxDepth,
-            alignmentToPhoneticSeq,
-            [ initialFrame for i in range(bmi.maxDepth) ],
-            bmi.frameSummarizer.createAcc(True, lambda streamIndex:
-                {
-                    0:
-                        d.MappedInputAcc(convertTimingInfo,
-                            d.createDiscreteAcc(bmi.subLabels, lambda subLabel:
-                                d.createDiscreteAcc(bmi.phoneset.phoneList, lambda phone:
-                                    bmi.mgcSummarizer.createAcc(True, lambda outIndex:
-                                        d.MappedInputAcc(np.concatenate,
-                                            d.MappedInputAcc(xf.AddBias(),
-                                                d.LinearGaussianAcc(inputLength = bmi.mgcSummarizer.vectorLength(outIndex) + extraLength + 1, varianceFloor = 0.0)
-                                            )
+    alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
+        mapAlignment = align.StandardizeAlignment(corpus.subLabels, bmi.subLabels)
+    )
+    initialFrame = getInitialFrame(corpus, bmi)
+    # FIXME : setFloor shouldn't need to be specified here
+    createLeafAccs = [
+        lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer, lgTag = 'setFloor'),
+        d.OracleAcc,
+        d.OracleAcc,
+    ]
+    dist = trainGlobalDist(corpus, bmi.maxDepth, alignmentToPhoneticSeq,
+                           initialFrame, bmi.frameSummarizer,
+                           createLeafAccs, lgVarianceFloorMult)
+    reportFlooredPerStream(dist)
+    evaluateLogProb(dist, corpus)
+    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateSynthesize(dist, corpus, synthOutDir, 'global', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+
+    print
+    print 'MIXING UP (to 2 components)'
+    dist = mixup(dist, corpus.accumulate)
+    reportFlooredPerStream(dist)
+    evaluateLogProb(dist, corpus)
+    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateSynthesize(dist, corpus, synthOutDir, 'global.2mix', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    print
+    print 'MIXING UP (to 4 components)'
+    dist = mixup(dist, corpus.accumulate)
+    reportFlooredPerStream(dist)
+    evaluateLogProb(dist, corpus)
+    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateSynthesize(dist, corpus, synthOutDir, 'global.4mix', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+
+    printTime('finished global')
+
+@codeDeps(align.AlignmentToPhoneticSeq, align.StandardizeAlignment,
+    createLinearGaussianVectorAcc, d.MappedInputDist, d.OracleAcc,
+    d.createDiscreteDist, d.isolateDist, evaluateLogProb, evaluateMgcArOutError,
+    evaluateMgcOutError, evaluateSynthesize, getBmiForCorpus,
+    getCorpusWithSubLabels, getDrawMgc, getElem, getInitialFrame, mixup,
+    nodetree.defaultMapPartial, nodetree.getDagMap, printTime,
+    reportFlooredPerStream, stdCepDistIncZero, timed, trainGlobalDist,
+    trn.expectationMaximization
+)
+def doMonophoneSystem(synthOutDir, figOutDir):
+    print
+    print 'TRAINING MONOPHONE SYSTEM'
+    printTime('started mono')
+
+    corpus = getCorpusWithSubLabels()
+    bmi = getBmiForCorpus(corpus, subLabels = corpus.subLabels)
+
+    print 'numSubLabels =', len(bmi.subLabels)
+
+    lgVarianceFloorMult = 1e-3
+    print 'lgVarianceFloorMult =', lgVarianceFloorMult
+
+    def globalToMonophoneMapPartial(dist, mapChild):
+        if isinstance(dist, d.MappedInputDist) and getElem(dist.tag, 0, 2) == 'stream':
+            subDist = dist.dist
+            return d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label.phone, acInput)),
+                d.createDiscreteDist(bmi.subLabels, lambda subLabel:
+                    d.createDiscreteDist(bmi.phoneset.phoneList, lambda phone:
+                        d.isolateDist(subDist)
+                    )
+                )
+            ).withTag(dist.tag)
+
+    alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
+        mapAlignment = align.StandardizeAlignment(corpus.subLabels, bmi.subLabels)
+    )
+    initialFrame = getInitialFrame(corpus, bmi)
+    # FIXME : setFloor shouldn't need to be specified here
+    createLeafAccs = [
+        lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer, lgTag = 'setFloor'),
+        d.OracleAcc,
+        d.OracleAcc,
+    ]
+    globalDist = trainGlobalDist(corpus, bmi.maxDepth, alignmentToPhoneticSeq,
+                                 initialFrame, bmi.frameSummarizer,
+                                 createLeafAccs, lgVarianceFloorMult)
+    dist = globalDist
+
+    print 'DEBUG: converting global dist to monophone dist'
+    dist = nodetree.getDagMap([globalToMonophoneMapPartial, nodetree.defaultMapPartial])(dist)
+
+    print 'DEBUG: estimating monophone dist'
+    dist, trainLogLike, (trainAux, trainAuxRat), trainFrames = trn.expectationMaximization(dist, timed(corpus.accumulate), verbosity = 3)
+    reportFlooredPerStream(dist)
+    evaluateLogProb(dist, corpus)
+    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateSynthesize(dist, corpus, synthOutDir, 'mono', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+
+    print
+    print 'MIXING UP (to 2 components)'
+    dist = mixup(dist, corpus.accumulate)
+    reportFlooredPerStream(dist)
+    evaluateLogProb(dist, corpus)
+    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateSynthesize(dist, corpus, synthOutDir, 'mono.2mix', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    print
+    print 'MIXING UP (to 4 components)'
+    dist = mixup(dist, corpus.accumulate)
+    reportFlooredPerStream(dist)
+    evaluateLogProb(dist, corpus)
+    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateSynthesize(dist, corpus, synthOutDir, 'mono.4mix', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+
+    printTime('finished mono')
+
+@codeDeps(StandardizeAlignment, align.AlignmentToPhoneticSeqWithTiming,
+    d.AutoregressiveSequenceAcc, d.LinearGaussianAcc, d.MappedInputAcc,
+    d.OracleAcc, d.createDiscreteAcc, d.getDefaultEstimateTotAux,
+    evaluateLogProb, evaluateMgcArOutError, evaluateMgcOutError,
+    evaluateSynthesize, getBmiForCorpus, getCorpusWithSubLabels, getDrawMgc,
+    getInitialFrame, printTime, reportTrainAux, stdCepDistIncZero, timed,
+    xf.AddBias
+)
+def doTimingInfoSystem(synthOutDir, figOutDir):
+    print
+    print 'TRAINING MONOPHONE SYSTEM WITH TIMING INFO'
+    printTime('started timingInfo')
+
+    corpus = getCorpusWithSubLabels()
+    bmi = getBmiForCorpus(corpus, subLabels = corpus.subLabels)
+
+    print 'numSubLabels =', len(bmi.subLabels)
+
+    extraLength = 2
+    def mapTiming((framesBefore, framesAfter)):
+        return framesBefore, framesAfter
+
+    alignmentToPhoneticSeq = align.AlignmentToPhoneticSeqWithTiming(
+        mapAlignment = StandardizeAlignment(corpus.subLabels, bmi.subLabels),
+        mapLabel = operator.attrgetter('phone'),
+        mapTiming = mapTiming
+    )
+
+    initialFrame = getInitialFrame(corpus, bmi)
+
+    def convertTimingInfo(input):
+        (phone, subLabel, extra), acousticContext = input
+        assert len(extra) == extraLength
+        return subLabel, (phone, (extra, acousticContext))
+
+    acc = d.AutoregressiveSequenceAcc(
+        bmi.maxDepth,
+        alignmentToPhoneticSeq,
+        [ initialFrame for i in range(bmi.maxDepth) ],
+        bmi.frameSummarizer.createAcc(True, lambda streamIndex:
+            {
+                0:
+                    d.MappedInputAcc(convertTimingInfo,
+                        d.createDiscreteAcc(bmi.subLabels, lambda subLabel:
+                            d.createDiscreteAcc(bmi.phoneset.phoneList, lambda phone:
+                                bmi.mgcSummarizer.createAcc(True, lambda outIndex:
+                                    d.MappedInputAcc(np.concatenate,
+                                        d.MappedInputAcc(xf.AddBias(),
+                                            d.LinearGaussianAcc(inputLength = bmi.mgcSummarizer.vectorLength(outIndex) + extraLength + 1, varianceFloor = 0.0)
                                         )
                                     )
                                 )
                             )
                         )
-                ,   1:
-                        d.OracleAcc()
-                ,   2:
-                        d.OracleAcc()
-                }[streamIndex]
-            )
-        )
-
-        timed(corpus.accumulate)(acc)
-        dist, (trainAux, trainAuxRat) = d.getDefaultEstimateTotAux()(acc)
-        reportTrainAux((trainAux, trainAuxRat), acc.count())
-
-        evaluateLogProb(dist, corpus)
-        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, synthOutDir, 'timingInfo', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
-
-        printTime('finished timingInfo')
-
-    def doDecisionTreeClusteredSystem(mdlFactor = 0.3):
-        print
-        print 'DECISION TREE CLUSTERING'
-        printTime('started clustered')
-
-        corpus = getCorpusWithSubLabels()
-        bmi = getBmiForCorpus(corpus, subLabels = corpus.subLabels)
-
-        print 'numSubLabels =', len(bmi.subLabels)
-
-        lgVarianceFloorMult = 1e-3
-        print 'lgVarianceFloorMult =', lgVarianceFloorMult
-
-        questionGroups = questions_hts_demo.getFullContextQuestionGroups(bmi.phoneset)
-
-        def globalToFullCtxCreateAccPartial(dist, createAccChild):
-            if isinstance(dist, d.MappedInputDist) and getElem(dist.tag, 0, 2) == 'stream':
-                rootDist = dist.dist
-                def createAcc():
-                    leafAcc = d.getDefaultCreateAcc()(rootDist)
-                    return leafAcc
-                return d.MappedInputAcc(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
-                    d.createDiscreteAcc(bmi.subLabels, lambda subLabel:
-                        d.AutoGrowingDiscreteAcc(createAcc)
                     )
-                ).withTag(dist.tag)
-
-        alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
-            mapAlignment = align.StandardizeAlignment(corpus.subLabels, bmi.subLabels)
+            ,   1:
+                    d.OracleAcc()
+            ,   2:
+                    d.OracleAcc()
+            }[streamIndex]
         )
-        initialFrame = getInitialFrame(corpus, bmi)
-        # FIXME : setFloor shouldn't need to be specified here
-        createLeafAccs = [
-            lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer, lgTag = 'setFloor'),
-            d.OracleAcc,
-            d.OracleAcc,
-        ]
-        globalDist = trainGlobalDist(corpus, bmi.maxDepth, alignmentToPhoneticSeq,
-                                     initialFrame, bmi.frameSummarizer,
-                                     createLeafAccs, lgVarianceFloorMult)
-        dist = globalDist
+    )
 
-        print 'DEBUG: converting global dist to full ctx acc'
-        acc = nodetree.getDagMap([globalToFullCtxCreateAccPartial, d.defaultCreateAccPartial])(dist)
+    timed(corpus.accumulate)(acc)
+    dist, (trainAux, trainAuxRat) = d.getDefaultEstimateTotAux()(acc)
+    reportTrainAux((trainAux, trainAuxRat), acc.count())
 
-        print 'DEBUG: accumulating for decision tree clustering'
-        timed(corpus.accumulate)(acc)
+    evaluateLogProb(dist, corpus)
+    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateSynthesize(dist, corpus, synthOutDir, 'timingInfo', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
 
-        def decisionTreeClusterEstimatePartial(acc, estimateChild):
-            if isinstance(acc, d.AutoGrowingDiscreteAcc):
-                return timed(cluster.decisionTreeCluster)(acc.accDict.keys(), lambda label: acc.accDict[label], acc.createAcc, questionGroups, thresh = None, mdlFactor = mdlFactor, minCount = 10.0, maxCount = None, verbosity = 3)
-        decisionTreeClusterEstimate = nodetree.getDagMap([decisionTreeClusterEstimatePartial, d.defaultEstimatePartial])
+    printTime('finished timingInfo')
 
-        dist = decisionTreeClusterEstimate(acc)
-        print
-        reportFlooredPerStream(dist)
-        evaluateLogProb(dist, corpus)
-        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, synthOutDir, 'clustered', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+@codeDeps(align.AlignmentToPhoneticSeq, align.StandardizeAlignment,
+    cluster.decisionTreeCluster, createLinearGaussianVectorAcc,
+    d.AutoGrowingDiscreteAcc, d.MappedInputAcc, d.MappedInputDist, d.OracleAcc,
+    d.createDiscreteAcc, d.defaultCreateAccPartial, d.defaultEstimatePartial,
+    d.getDefaultCreateAcc, evaluateLogProb, evaluateMgcArOutError,
+    evaluateMgcOutError, evaluateSynthesize, getBmiForCorpus,
+    getCorpusWithSubLabels, getDrawMgc, getElem, getInitialFrame, mixup,
+    nodetree.getDagMap, printTime,
+    questions_hts_demo.getFullContextQuestionGroups, reportFlooredPerStream,
+    stdCepDistIncZero, timed, trainGlobalDist
+)
+def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
+    print
+    print 'DECISION TREE CLUSTERING'
+    printTime('started clustered')
 
-        print
-        print 'MIXING UP (to 2 components)'
-        dist = mixup(dist, corpus.accumulate)
-        reportFlooredPerStream(dist)
-        evaluateLogProb(dist, corpus)
-        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, synthOutDir, 'clustered.2mix', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
-        print
-        print 'MIXING UP (to 4 components)'
-        dist = mixup(dist, corpus.accumulate)
-        reportFlooredPerStream(dist)
-        evaluateLogProb(dist, corpus)
-        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, synthOutDir, 'clustered.4mix', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    corpus = getCorpusWithSubLabels()
+    bmi = getBmiForCorpus(corpus, subLabels = corpus.subLabels)
 
-        printTime('finished clustered')
+    print 'numSubLabels =', len(bmi.subLabels)
 
-    def doTransformSystem(globalPhone = True, studentResiduals = True, numTanhTransforms = 3):
-        print
-        print 'TRAINING TRANSFORM SYSTEM'
-        printTime('started xf')
+    lgVarianceFloorMult = 1e-3
+    print 'lgVarianceFloorMult =', lgVarianceFloorMult
 
-        corpus = getCorpusWithSubLabels()
-        bmi = getBmiForCorpus(corpus, subLabels = corpus.subLabels)
+    questionGroups = questions_hts_demo.getFullContextQuestionGroups(bmi.phoneset)
 
-        print 'globalPhone =', globalPhone
-        print 'studentResiduals =', studentResiduals
-        # mgcDepth affects what pictures we can draw
-        print 'mgcDepth =', bmi.mgcDepth
-        print 'numTanhTransforms =', numTanhTransforms
+    def globalToFullCtxCreateAccPartial(dist, createAccChild):
+        if isinstance(dist, d.MappedInputDist) and getElem(dist.tag, 0, 2) == 'stream':
+            rootDist = dist.dist
+            def createAcc():
+                leafAcc = d.getDefaultCreateAcc()(rootDist)
+                return leafAcc
+            return d.MappedInputAcc(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
+                d.createDiscreteAcc(bmi.subLabels, lambda subLabel:
+                    d.AutoGrowingDiscreteAcc(createAcc)
+                )
+            ).withTag(dist.tag)
 
-        # N.B. would be perverse to have globalPhone == True with numSubLabels != 1, but not disallowed
-        phoneList = ['global'] if globalPhone else bmi.phoneset.phoneList
+    alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
+        mapAlignment = align.StandardizeAlignment(corpus.subLabels, bmi.subLabels)
+    )
+    initialFrame = getInitialFrame(corpus, bmi)
+    # FIXME : setFloor shouldn't need to be specified here
+    createLeafAccs = [
+        lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer, lgTag = 'setFloor'),
+        d.OracleAcc,
+        d.OracleAcc,
+    ]
+    globalDist = trainGlobalDist(corpus, bmi.maxDepth, alignmentToPhoneticSeq,
+                                 initialFrame, bmi.frameSummarizer,
+                                 createLeafAccs, lgVarianceFloorMult)
+    dist = globalDist
 
-        print 'numSubLabels =', len(bmi.subLabels)
+    print 'DEBUG: converting global dist to full ctx acc'
+    acc = nodetree.getDagMap([globalToFullCtxCreateAccPartial, d.defaultCreateAccPartial])(dist)
 
-        alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
-            mapAlignment = StandardizeAlignment(corpus.subLabels, bmi.subLabels),
-            mapLabel = (ConstantFn('global') if globalPhone
-                        else operator.attrgetter('phone'))
-        )
+    print 'DEBUG: accumulating for decision tree clustering'
+    timed(corpus.accumulate)(acc)
 
-        initialFrame = getInitialFrame(corpus, bmi)
+    def decisionTreeClusterEstimatePartial(acc, estimateChild):
+        if isinstance(acc, d.AutoGrowingDiscreteAcc):
+            return timed(cluster.decisionTreeCluster)(acc.accDict.keys(), lambda label: acc.accDict[label], acc.createAcc, questionGroups, thresh = None, mdlFactor = mdlFactor, minCount = 10.0, maxCount = None, verbosity = 3)
+    decisionTreeClusterEstimate = nodetree.getDagMap([decisionTreeClusterEstimatePartial, d.defaultEstimatePartial])
 
-        # FIXME : only works if no cross-stream stuff happening. Make more robust somehow.
-        shiftToPrevTransform = xf.ShiftOutputTransform(xf.MinusPrev())
+    dist = decisionTreeClusterEstimate(acc)
+    print
+    reportFlooredPerStream(dist)
+    evaluateLogProb(dist, corpus)
+    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateSynthesize(dist, corpus, synthOutDir, 'clustered', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
 
-        mgcOutputTransform = dict()
-        mgcInputTransform = dict()
-        for outIndex in bmi.mgcSummarizer.outIndices:
-            xmin, xmax = corpus.mgcLims[outIndex]
-            bins = np.linspace(xmin, xmax, numTanhTransforms + 1)
-            binCentres = bins[:-1] + 0.5 * np.diff(bins)
-            width = (xmax - xmin) / numTanhTransforms / 2.0
-            tanhOutputTransforms = [ xf.TanhTransform1D(np.array([0.0, width, binCentre])) for binCentre in binCentres ]
-            outputWarp = xf.SumTransform1D([xf.IdentityTransform()] + tanhOutputTransforms).withTag(('mgcOutputWarp', outIndex))
-            mgcOutputTransform[outIndex] = xf.SimpleOutputTransform(outputWarp, checkDerivPositive1D = True).withTag(('mgcOutputTransform', outIndex))
-            tanhInputTransforms = [ xf.TanhTransform1D(np.array([0.0, width, binCentre])) for binCentre in binCentres ]
-            inputWarp = xf.SumTransform1D([xf.IdentityTransform()] + tanhInputTransforms).withTag(('mgcInputWarp', outIndex))
-            mgcInputTransform[outIndex] = xf.VectorizeTransform(inputWarp).withTag(('mgcInputTransform', outIndex))
+    print
+    print 'MIXING UP (to 2 components)'
+    dist = mixup(dist, corpus.accumulate)
+    reportFlooredPerStream(dist)
+    evaluateLogProb(dist, corpus)
+    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateSynthesize(dist, corpus, synthOutDir, 'clustered.2mix', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    print
+    print 'MIXING UP (to 4 components)'
+    dist = mixup(dist, corpus.accumulate)
+    reportFlooredPerStream(dist)
+    evaluateLogProb(dist, corpus)
+    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateSynthesize(dist, corpus, synthOutDir, 'clustered.4mix', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
 
-        dist = d.AutoregressiveSequenceDist(
-            bmi.maxDepth,
-            alignmentToPhoneticSeq,
-            [ initialFrame for i in range(bmi.maxDepth) ],
-            bmi.frameSummarizer.createDist(True, lambda streamIndex:
-                {
-                    0:
-                        d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
-                            d.createDiscreteDist(bmi.subLabels, lambda subLabel:
-                                d.createDiscreteDist(phoneList, lambda phone:
-                                    bmi.mgcSummarizer.createDist(False, lambda outIndex:
-                                        d.DebugDist(None,
-                                            d.TransformedOutputDist(mgcOutputTransform[outIndex],
-                                                d.TransformedInputDist(mgcInputTransform[outIndex],
-                                                    #d.MappedOutputDist(shiftToPrevTransform,
-                                                        d.DebugDist(None,
-                                                            d.MappedInputDist(xf.AddBias(),
-                                                                # arbitrary dist to get things rolling
-                                                                d.LinearGaussian(np.zeros((bmi.mgcSummarizer.vectorLength(outIndex) + 1,)), 1.0, varianceFloor = 0.0)
-                                                            )
-                                                        ).withTag('debug-xfed')
-                                                    #)
-                                                )
+    printTime('finished clustered')
+
+@codeDeps(ConstantFn, StandardizeAlignment, align.AlignmentToPhoneticSeq,
+    convertToStudentResiduals, convertToTransformedGaussianResiduals,
+    d.AutoregressiveSequenceDist, d.DebugDist, d.LinearGaussian,
+    d.MappedInputDist, d.OracleDist, d.TransformedInputDist,
+    d.TransformedOutputDist, d.createDiscreteDist, d.getByTagParamSpec,
+    d.getDefaultParamSpec, draw.drawFor1DInput, draw.drawLogPdf,
+    draw.drawWarping, evaluateLogProb, evaluateMgcArOutError,
+    evaluateMgcOutError, evaluateSynthesize, getBmiForCorpus,
+    getCorpusWithSubLabels, getDrawMgc, getElem, getInitialFrame,
+    nodetree.findTaggedNode, nodetree.findTaggedNodes, printTime,
+    stdCepDistIncZero, timed, trn.trainCG, trn.trainCGandEM, trn.trainEM,
+    xf.AddBias, xf.IdentityTransform, xf.MinusPrev, xf.ShiftOutputTransform,
+    xf.SimpleOutputTransform, xf.SumTransform1D, xf.TanhTransform1D,
+    xf.VectorizeTransform
+)
+def doTransformSystem(synthOutDir, figOutDir, globalPhone = True, studentResiduals = True, numTanhTransforms = 3):
+    print
+    print 'TRAINING TRANSFORM SYSTEM'
+    printTime('started xf')
+
+    corpus = getCorpusWithSubLabels()
+    bmi = getBmiForCorpus(corpus, subLabels = corpus.subLabels)
+
+    print 'globalPhone =', globalPhone
+    print 'studentResiduals =', studentResiduals
+    # mgcDepth affects what pictures we can draw
+    print 'mgcDepth =', bmi.mgcDepth
+    print 'numTanhTransforms =', numTanhTransforms
+
+    # N.B. would be perverse to have globalPhone == True with numSubLabels != 1, but not disallowed
+    phoneList = ['global'] if globalPhone else bmi.phoneset.phoneList
+
+    print 'numSubLabels =', len(bmi.subLabels)
+
+    alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
+        mapAlignment = StandardizeAlignment(corpus.subLabels, bmi.subLabels),
+        mapLabel = (ConstantFn('global') if globalPhone
+                    else operator.attrgetter('phone'))
+    )
+
+    initialFrame = getInitialFrame(corpus, bmi)
+
+    # FIXME : only works if no cross-stream stuff happening. Make more robust somehow.
+    shiftToPrevTransform = xf.ShiftOutputTransform(xf.MinusPrev())
+
+    mgcOutputTransform = dict()
+    mgcInputTransform = dict()
+    for outIndex in bmi.mgcSummarizer.outIndices:
+        xmin, xmax = corpus.mgcLims[outIndex]
+        bins = np.linspace(xmin, xmax, numTanhTransforms + 1)
+        binCentres = bins[:-1] + 0.5 * np.diff(bins)
+        width = (xmax - xmin) / numTanhTransforms / 2.0
+        tanhOutputTransforms = [ xf.TanhTransform1D(np.array([0.0, width, binCentre])) for binCentre in binCentres ]
+        outputWarp = xf.SumTransform1D([xf.IdentityTransform()] + tanhOutputTransforms).withTag(('mgcOutputWarp', outIndex))
+        mgcOutputTransform[outIndex] = xf.SimpleOutputTransform(outputWarp, checkDerivPositive1D = True).withTag(('mgcOutputTransform', outIndex))
+        tanhInputTransforms = [ xf.TanhTransform1D(np.array([0.0, width, binCentre])) for binCentre in binCentres ]
+        inputWarp = xf.SumTransform1D([xf.IdentityTransform()] + tanhInputTransforms).withTag(('mgcInputWarp', outIndex))
+        mgcInputTransform[outIndex] = xf.VectorizeTransform(inputWarp).withTag(('mgcInputTransform', outIndex))
+
+    dist = d.AutoregressiveSequenceDist(
+        bmi.maxDepth,
+        alignmentToPhoneticSeq,
+        [ initialFrame for i in range(bmi.maxDepth) ],
+        bmi.frameSummarizer.createDist(True, lambda streamIndex:
+            {
+                0:
+                    d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
+                        d.createDiscreteDist(bmi.subLabels, lambda subLabel:
+                            d.createDiscreteDist(phoneList, lambda phone:
+                                bmi.mgcSummarizer.createDist(False, lambda outIndex:
+                                    d.DebugDist(None,
+                                        d.TransformedOutputDist(mgcOutputTransform[outIndex],
+                                            d.TransformedInputDist(mgcInputTransform[outIndex],
+                                                #d.MappedOutputDist(shiftToPrevTransform,
+                                                    d.DebugDist(None,
+                                                        d.MappedInputDist(xf.AddBias(),
+                                                            # arbitrary dist to get things rolling
+                                                            d.LinearGaussian(np.zeros((bmi.mgcSummarizer.vectorLength(outIndex) + 1,)), 1.0, varianceFloor = 0.0)
+                                                        )
+                                                    ).withTag('debug-xfed')
+                                                #)
                                             )
-                                        ).withTag(('debug-orig', phone, subLabel, streamIndex, outIndex))
-                                    )
+                                        )
+                                    ).withTag(('debug-orig', phone, subLabel, streamIndex, outIndex))
                                 )
                             )
                         )
-                ,   1:
-                        d.OracleDist()
-                ,   2:
-                        d.OracleDist()
-                }[streamIndex]
-            )
+                    )
+            ,   1:
+                    d.OracleDist()
+            ,   2:
+                    d.OracleDist()
+            }[streamIndex]
         )
+    )
 
-        def drawVarious(dist, id, simpleResiduals = False, debugResiduals = False):
-            assert not (simpleResiduals and debugResiduals)
-            acc = d.getDefaultParamSpec().createAccG(dist)
-            corpus.accumulate(acc)
-            streamIndex = 0
-            for outIndex in bmi.mgcSummarizer.outIndices:
-                lims = corpus.mgcLims[outIndex]
-                streamId = corpus.streams[streamIndex].name+str(outIndex)
-                outputTransform = nodetree.findTaggedNode(dist, lambda tag: tag == ('mgcOutputTransform', outIndex))
-                inputTransform = nodetree.findTaggedNode(dist, lambda tag: tag == ('mgcInputTransform', outIndex))
-                # (FIXME : replace with looking up warp (=sub-transform) directly once tree structure for transforms is done)
-                outputWarp = outputTransform.transform
-                inputWarp = inputTransform.transform1D
+    def drawVarious(dist, id, simpleResiduals = False, debugResiduals = False):
+        assert not (simpleResiduals and debugResiduals)
+        acc = d.getDefaultParamSpec().createAccG(dist)
+        corpus.accumulate(acc)
+        streamIndex = 0
+        for outIndex in bmi.mgcSummarizer.outIndices:
+            lims = corpus.mgcLims[outIndex]
+            streamId = corpus.streams[streamIndex].name+str(outIndex)
+            outputTransform = nodetree.findTaggedNode(dist, lambda tag: tag == ('mgcOutputTransform', outIndex))
+            inputTransform = nodetree.findTaggedNode(dist, lambda tag: tag == ('mgcInputTransform', outIndex))
+            # (FIXME : replace with looking up warp (=sub-transform) directly once tree structure for transforms is done)
+            outputWarp = outputTransform.transform
+            inputWarp = inputTransform.transform1D
 
-                outPdf = os.path.join(figOutDir, 'warping-'+id+'-'+streamId+'.pdf')
-                draw.drawWarping([outputWarp, inputWarp], outPdf = outPdf, xlims = lims, title = outPdf)
+            outPdf = os.path.join(figOutDir, 'warping-'+id+'-'+streamId+'.pdf')
+            draw.drawWarping([outputWarp, inputWarp], outPdf = outPdf, xlims = lims, title = outPdf)
 
-                for phone in phoneList:
-                    for subLabel in bmi.subLabels:
-                        accOrig = nodetree.findTaggedNode(acc, lambda tag: tag == ('debug-orig', phone, subLabel, streamIndex, outIndex))
-                        distOrig = nodetree.findTaggedNode(dist, lambda tag: tag == ('debug-orig', phone, subLabel, streamIndex, outIndex))
+            for phone in phoneList:
+                for subLabel in bmi.subLabels:
+                    accOrig = nodetree.findTaggedNode(acc, lambda tag: tag == ('debug-orig', phone, subLabel, streamIndex, outIndex))
+                    distOrig = nodetree.findTaggedNode(dist, lambda tag: tag == ('debug-orig', phone, subLabel, streamIndex, outIndex))
 
-                        debugAcc = accOrig
-                        subDist = distOrig.dist
-                        if bmi.mgcDepth == 1:
-                            outPdf = os.path.join(figOutDir, 'scatter-'+id+'-orig-'+str(phone)+'-state'+str(subLabel)+'-'+streamId+'.pdf')
-                            draw.drawFor1DInput(debugAcc, subDist, outPdf = outPdf, xlims = lims, ylims = lims, title = outPdf)
+                    debugAcc = accOrig
+                    subDist = distOrig.dist
+                    if bmi.mgcDepth == 1:
+                        outPdf = os.path.join(figOutDir, 'scatter-'+id+'-orig-'+str(phone)+'-state'+str(subLabel)+'-'+streamId+'.pdf')
+                        draw.drawFor1DInput(debugAcc, subDist, outPdf = outPdf, xlims = lims, ylims = lims, title = outPdf)
 
+                    debugAcc = nodetree.findTaggedNode(accOrig, lambda tag: tag == 'debug-xfed')
+                    subDist = nodetree.findTaggedNode(distOrig, lambda tag: tag == 'debug-xfed').dist
+                    if bmi.mgcDepth == 1:
+                        outPdf = os.path.join(figOutDir, 'scatter-'+id+'-xfed-'+str(phone)+'-state'+str(subLabel)+'-'+streamId+'.pdf')
+                        draw.drawFor1DInput(debugAcc, subDist, outPdf = outPdf, xlims = map(inputWarp, lims), ylims = map(outputWarp, lims), title = outPdf)
+
+                    if simpleResiduals:
                         debugAcc = nodetree.findTaggedNode(accOrig, lambda tag: tag == 'debug-xfed')
                         subDist = nodetree.findTaggedNode(distOrig, lambda tag: tag == 'debug-xfed').dist
-                        if bmi.mgcDepth == 1:
-                            outPdf = os.path.join(figOutDir, 'scatter-'+id+'-xfed-'+str(phone)+'-state'+str(subLabel)+'-'+streamId+'.pdf')
-                            draw.drawFor1DInput(debugAcc, subDist, outPdf = outPdf, xlims = map(inputWarp, lims), ylims = map(outputWarp, lims), title = outPdf)
+                        residuals = np.array([ subDist.dist.residual(xf.AddBias()(input), output) for input, output in zip(debugAcc.memo.inputs, debugAcc.memo.outputs) ])
+                        f = lambda x: -0.5 * math.log(2.0 * math.pi) - 0.5 * x * x
+                        outPdf = os.path.join(figOutDir, 'residualLogPdf-'+id+'-'+str(phone)+'-state'+str(subLabel)+'-'+streamId+'.pdf')
+                        if len(residuals) > 0:
+                            draw.drawLogPdf(residuals, bins = 20, fns = [f], outPdf = outPdf, title = outPdf)
 
-                        if simpleResiduals:
-                            debugAcc = nodetree.findTaggedNode(accOrig, lambda tag: tag == 'debug-xfed')
-                            subDist = nodetree.findTaggedNode(distOrig, lambda tag: tag == 'debug-xfed').dist
-                            residuals = np.array([ subDist.dist.residual(xf.AddBias()(input), output) for input, output in zip(debugAcc.memo.inputs, debugAcc.memo.outputs) ])
-                            f = lambda x: -0.5 * math.log(2.0 * math.pi) - 0.5 * x * x
-                            outPdf = os.path.join(figOutDir, 'residualLogPdf-'+id+'-'+str(phone)+'-state'+str(subLabel)+'-'+streamId+'.pdf')
-                            if len(residuals) > 0:
-                                draw.drawLogPdf(residuals, bins = 20, fns = [f], outPdf = outPdf, title = outPdf)
+                    if debugResiduals:
+                        debugAcc = nodetree.findTaggedNode(accOrig, lambda tag: tag == 'debug-residual')
+                        subDist = nodetree.findTaggedNode(distOrig, lambda tag: tag == 'debug-residual').dist
+                        f = lambda output: subDist.logProb([], output)
+                        outPdf = os.path.join(figOutDir, 'residualLogPdf-'+id+'-'+str(phone)+'-state'+str(subLabel)+'-'+streamId+'.pdf')
+                        if len(debugAcc.memo.outputs) > 0:
+                            draw.drawLogPdf(debugAcc.memo.outputs, bins = 20, fns = [f], outPdf = outPdf, title = outPdf)
 
-                        if debugResiduals:
-                            debugAcc = nodetree.findTaggedNode(accOrig, lambda tag: tag == 'debug-residual')
-                            subDist = nodetree.findTaggedNode(distOrig, lambda tag: tag == 'debug-residual').dist
-                            f = lambda output: subDist.logProb([], output)
-                            outPdf = os.path.join(figOutDir, 'residualLogPdf-'+id+'-'+str(phone)+'-state'+str(subLabel)+'-'+streamId+'.pdf')
-                            if len(debugAcc.memo.outputs) > 0:
-                                draw.drawLogPdf(debugAcc.memo.outputs, bins = 20, fns = [f], outPdf = outPdf, title = outPdf)
+                    # (FIXME : replace with looking up sub-transform directly once tree structure for transforms is done)
+                    residualTransforms = nodetree.findTaggedNodes(distOrig, lambda tag: tag == 'residualTransform')
+                    assert len(residualTransforms) <= 1
+                    for residualTransform in residualTransforms:
+                        outPdf = os.path.join(figOutDir, 'residualTransform-'+id+'-'+str(phone)+'-state'+str(subLabel)+'-'+streamId+'.pdf')
+                        draw.drawWarping([residualTransform.transform], outPdf = outPdf, xlims = [-2.5, 2.5], title = outPdf)
 
-                        # (FIXME : replace with looking up sub-transform directly once tree structure for transforms is done)
-                        residualTransforms = nodetree.findTaggedNodes(distOrig, lambda tag: tag == 'residualTransform')
-                        assert len(residualTransforms) <= 1
-                        for residualTransform in residualTransforms:
-                            outPdf = os.path.join(figOutDir, 'residualTransform-'+id+'-'+str(phone)+'-state'+str(subLabel)+'-'+streamId+'.pdf')
-                            draw.drawWarping([residualTransform.transform], outPdf = outPdf, xlims = [-2.5, 2.5], title = outPdf)
+    dist = timed(trn.trainEM)(dist, corpus.accumulate, minIterations = 2, maxIterations = 2)
+    timed(drawVarious)(dist, id = 'xf_init', simpleResiduals = True)
+    evaluateLogProb(dist, corpus)
+    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateSynthesize(dist, corpus, synthOutDir, 'xf_init', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
 
-        dist = timed(trn.trainEM)(dist, corpus.accumulate, minIterations = 2, maxIterations = 2)
-        timed(drawVarious)(dist, id = 'xf_init', simpleResiduals = True)
-        evaluateLogProb(dist, corpus)
-        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, synthOutDir, 'xf_init', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    print
+    print 'ESTIMATING "GAUSSIANIZATION" TRANSFORMS'
+    def afterEst(dist, it):
+        #timed(drawVarious)(dist, id = 'xf-it'+str(it))
+        pass
+    # (FIXME : change mgcInputTransform to mgcInputWarp and mgcOutputTransform to mgcOutputWarp once tree structure for transforms is done)
+    mgcWarpParamSpec = d.getByTagParamSpec(lambda tag: getElem(tag, 0, 2) == 'mgcInputTransform' or getElem(tag, 0, 2) == 'mgcOutputTransform')
+    dist = timed(trn.trainCGandEM)(dist, corpus.accumulate, ps = mgcWarpParamSpec, iterations = 5, length = -25, afterEst = afterEst, verbosity = 2)
+    timed(drawVarious)(dist, id = 'xf', simpleResiduals = True)
+    evaluateLogProb(dist, corpus)
+    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateSynthesize(dist, corpus, synthOutDir, 'xf', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
 
+    if studentResiduals:
         print
-        print 'ESTIMATING "GAUSSIANIZATION" TRANSFORMS'
-        def afterEst(dist, it):
-            #timed(drawVarious)(dist, id = 'xf-it'+str(it))
-            pass
-        # (FIXME : change mgcInputTransform to mgcInputWarp and mgcOutputTransform to mgcOutputWarp once tree structure for transforms is done)
-        mgcWarpParamSpec = d.getByTagParamSpec(lambda tag: getElem(tag, 0, 2) == 'mgcInputTransform' or getElem(tag, 0, 2) == 'mgcOutputTransform')
-        dist = timed(trn.trainCGandEM)(dist, corpus.accumulate, ps = mgcWarpParamSpec, iterations = 5, length = -25, afterEst = afterEst, verbosity = 2)
-        timed(drawVarious)(dist, id = 'xf', simpleResiduals = True)
-        evaluateLogProb(dist, corpus)
-        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, synthOutDir, 'xf', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
-
-        if studentResiduals:
-            print
-            print 'USING STUDENT RESIDUALS'
-            dist = convertToStudentResiduals(dist, studentTag = 'student', debugTag = 'debug-residual', subtractMeanTag = 'subtractMean')
-            residualParamSpec = d.getByTagParamSpec(lambda tag: tag == 'student')
-            subtractMeanParamSpec = d.getByTagParamSpec(lambda tag: tag == 'subtractMean')
-        else:
-            print
-            print 'USING TRANSFORMED-GAUSSIAN RESIDUALS'
-            dist = convertToTransformedGaussianResiduals(dist, residualTransformTag = 'residualTransform', debugTag = 'debug-residual', subtractMeanTag = 'subtractMean')
-            residualParamSpec = d.getByTagParamSpec(lambda tag: tag == 'residualTransform')
-            subtractMeanParamSpec = d.getByTagParamSpec(lambda tag: tag == 'subtractMean')
-        timed(drawVarious)(dist, id = 'xf.res_init', debugResiduals = True)
-        dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = residualParamSpec, length = -50, verbosity = 2)
-        dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = subtractMeanParamSpec, length = -50, verbosity = 2)
-        timed(drawVarious)(dist, id = 'xf.res', debugResiduals = True)
-        evaluateLogProb(dist, corpus)
-        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, synthOutDir, 'xf.res', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
-
+        print 'USING STUDENT RESIDUALS'
+        dist = convertToStudentResiduals(dist, studentTag = 'student', debugTag = 'debug-residual', subtractMeanTag = 'subtractMean')
+        residualParamSpec = d.getByTagParamSpec(lambda tag: tag == 'student')
+        subtractMeanParamSpec = d.getByTagParamSpec(lambda tag: tag == 'subtractMean')
+    else:
         print
-        print 'ESTIMATING ALL PARAMETERS'
-        dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = d.getDefaultParamSpec(), length = -200, verbosity = 2)
-        timed(drawVarious)(dist, id = 'xf.res.xf', debugResiduals = True)
-        evaluateLogProb(dist, corpus)
-        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, synthOutDir, 'xf.res.xf', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+        print 'USING TRANSFORMED-GAUSSIAN RESIDUALS'
+        dist = convertToTransformedGaussianResiduals(dist, residualTransformTag = 'residualTransform', debugTag = 'debug-residual', subtractMeanTag = 'subtractMean')
+        residualParamSpec = d.getByTagParamSpec(lambda tag: tag == 'residualTransform')
+        subtractMeanParamSpec = d.getByTagParamSpec(lambda tag: tag == 'subtractMean')
+    timed(drawVarious)(dist, id = 'xf.res_init', debugResiduals = True)
+    dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = residualParamSpec, length = -50, verbosity = 2)
+    dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = subtractMeanParamSpec, length = -50, verbosity = 2)
+    timed(drawVarious)(dist, id = 'xf.res', debugResiduals = True)
+    evaluateLogProb(dist, corpus)
+    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateSynthesize(dist, corpus, synthOutDir, 'xf.res', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
 
-        printTime('finished xf')
+    print
+    print 'ESTIMATING ALL PARAMETERS'
+    dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = d.getDefaultParamSpec(), length = -200, verbosity = 2)
+    timed(drawVarious)(dist, id = 'xf.res.xf', debugResiduals = True)
+    evaluateLogProb(dist, corpus)
+    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateSynthesize(dist, corpus, synthOutDir, 'xf.res.xf', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
 
-    def doFlatStartSystem(numSubLabels = 5):
-        print
-        print 'TRAINING FLAT-START SYSTEM'
-        printTime('started flatStart')
+    printTime('finished xf')
 
-        corpus = getCorpus()
-        bmi = getBmiForCorpus(corpus, subLabels = list(range(numSubLabels)))
+@codeDeps(StandardizeAlignment, align.AlignmentToPhoneticSeq,
+    createLinearGaussianVectorAcc, d.AutoregressiveNetDist,
+    d.ConstantClassifier, d.MappedInputDist, d.OracleAcc, d.SimplePruneSpec,
+    d.createDiscreteDist, d.isolateDist, evaluateLogProb, evaluateMgcArOutError,
+    evaluateMgcOutError, evaluateSynthesize, getBmiForCorpus, getCorpus,
+    getDrawMgc, getElem, getInitialFrame, nodetree.defaultMapPartial,
+    nodetree.getDagMap, printTime, reportFlooredPerStream, stdCepDistIncZero,
+    timed, trainGlobalDist, trn.trainEM, wnet.FlatMappedNet, wnet.SequenceNet,
+    wnet.probLeftToRightZeroNet
+)
+def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
+    print
+    print 'TRAINING FLAT-START SYSTEM'
+    printTime('started flatStart')
 
-        assert corpus.subLabels is None
-        assert bmi.subLabels is not None
-        print 'numSubLabels =', len(bmi.subLabels)
+    corpus = getCorpus()
+    bmi = getBmiForCorpus(corpus, subLabels = list(range(numSubLabels)))
 
-        lgVarianceFloorMult = 1e-3
-        ccProbFloor = 3e-5
-        print 'lgVarianceFloorMult =', lgVarianceFloorMult
-        print 'ccProbFloor =', ccProbFloor
+    assert corpus.subLabels is None
+    assert bmi.subLabels is not None
+    print 'numSubLabels =', len(bmi.subLabels)
 
-        alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
-            mapAlignment = StandardizeAlignment(corpus.subLabels, [0]),
+    lgVarianceFloorMult = 1e-3
+    ccProbFloor = 3e-5
+    print 'lgVarianceFloorMult =', lgVarianceFloorMult
+    print 'ccProbFloor =', ccProbFloor
+
+    alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
+        mapAlignment = StandardizeAlignment(corpus.subLabels, [0]),
+    )
+    initialFrame = getInitialFrame(corpus, bmi)
+    createLeafAccs = [
+        lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer, lgTag = 'setFloor'),
+        d.OracleAcc,
+        d.OracleAcc,
+    ]
+    globalDist = trainGlobalDist(corpus, bmi.maxDepth, alignmentToPhoneticSeq,
+                                 initialFrame, bmi.frameSummarizer,
+                                 createLeafAccs, lgVarianceFloorMult)
+
+    print 'DEBUG: converting global dist to monophone net dist'
+    def netFor(alignment):
+        labelSeq = [ label for startTime, endTime, label, subAlignment in alignment ]
+        net = wnet.FlatMappedNet(
+            lambda label: wnet.probLeftToRightZeroNet(
+                [ (label, subLabel) for subLabel in bmi.subLabels ],
+                [ [ ((label, subLabel), adv) for adv in [0, 1] ] for subLabel in bmi.subLabels ]
+            ),
+            wnet.SequenceNet(labelSeq, None)
         )
-        initialFrame = getInitialFrame(corpus, bmi)
-        createLeafAccs = [
-            lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer, lgTag = 'setFloor'),
-            d.OracleAcc,
-            d.OracleAcc,
-        ]
-        globalDist = trainGlobalDist(corpus, bmi.maxDepth, alignmentToPhoneticSeq,
-                                     initialFrame, bmi.frameSummarizer,
-                                     createLeafAccs, lgVarianceFloorMult)
-
-        print 'DEBUG: converting global dist to monophone net dist'
-        def netFor(alignment):
-            labelSeq = [ label for startTime, endTime, label, subAlignment in alignment ]
-            net = wnet.FlatMappedNet(
-                lambda label: wnet.probLeftToRightZeroNet(
-                    [ (label, subLabel) for subLabel in bmi.subLabels ],
-                    [ [ ((label, subLabel), adv) for adv in [0, 1] ] for subLabel in bmi.subLabels ]
-                ),
-                wnet.SequenceNet(labelSeq, None)
-            )
-            return net
-        def globalToMonophoneMapPartial(dist, mapChild):
-            if isinstance(dist, d.MappedInputDist) and getElem(dist.tag, 0, 2) == 'stream':
-                subDist = dist.dist
-                return d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label.phone, acInput)),
-                    d.createDiscreteDist(bmi.subLabels, lambda subLabel:
-                        d.createDiscreteDist(bmi.phoneset.phoneList, lambda phone:
-                            d.isolateDist(subDist)
-                        )
+        return net
+    def globalToMonophoneMapPartial(dist, mapChild):
+        if isinstance(dist, d.MappedInputDist) and getElem(dist.tag, 0, 2) == 'stream':
+            subDist = dist.dist
+            return d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label.phone, acInput)),
+                d.createDiscreteDist(bmi.subLabels, lambda subLabel:
+                    d.createDiscreteDist(bmi.phoneset.phoneList, lambda phone:
+                        d.isolateDist(subDist)
                     )
-                ).withTag(dist.tag)
-        acDist = nodetree.getDagMap([globalToMonophoneMapPartial, nodetree.defaultMapPartial])(globalDist.dist)
-        durDist = d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label.phone, acInput)),
-            d.createDiscreteDist(bmi.subLabels, lambda subLabel:
-                d.createDiscreteDist(bmi.phoneset.phoneList, lambda phone:
-                    d.ConstantClassifier(probs = np.array([0.5, 0.5]), probFloors = np.array([ccProbFloor, ccProbFloor]))
                 )
+            ).withTag(dist.tag)
+    acDist = nodetree.getDagMap([globalToMonophoneMapPartial, nodetree.defaultMapPartial])(globalDist.dist)
+    durDist = d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label.phone, acInput)),
+        d.createDiscreteDist(bmi.subLabels, lambda subLabel:
+            d.createDiscreteDist(bmi.phoneset.phoneList, lambda phone:
+                d.ConstantClassifier(probs = np.array([0.5, 0.5]), probFloors = np.array([ccProbFloor, ccProbFloor]))
             )
-        ).withTag(('stream', 'dur'))
-        pruneSpec = d.SimplePruneSpec(betaThresh = 500.0, logOccThresh = 20.0)
-        dist = d.AutoregressiveNetDist(bmi.maxDepth, netFor, [ initialFrame for i in range(bmi.maxDepth) ], durDist, acDist, pruneSpec)
+        )
+    ).withTag(('stream', 'dur'))
+    pruneSpec = d.SimplePruneSpec(betaThresh = 500.0, logOccThresh = 20.0)
+    dist = d.AutoregressiveNetDist(bmi.maxDepth, netFor, [ initialFrame for i in range(bmi.maxDepth) ], durDist, acDist, pruneSpec)
 
-        print 'DEBUG: estimating monophone net dist'
-        dist = trn.trainEM(dist, timed(corpus.accumulate), deltaThresh = 1e-4, minIterations = 4, maxIterations = 10, verbosity = 2)
-        reportFlooredPerStream(dist)
-        evaluateLogProb(dist, corpus)
-        evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, synthOutDir, 'flatStart.mono', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    print 'DEBUG: estimating monophone net dist'
+    dist = trn.trainEM(dist, timed(corpus.accumulate), deltaThresh = 1e-4, minIterations = 4, maxIterations = 10, verbosity = 2)
+    reportFlooredPerStream(dist)
+    evaluateLogProb(dist, corpus)
+    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
+    evaluateSynthesize(dist, corpus, synthOutDir, 'flatStart.mono', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
 
-        printTime('finished flatStart')
+    printTime('finished flatStart')
 
-    doDumpCorpus()
+@codeDeps(doDecisionTreeClusteredSystem, doDumpCorpus, doFlatStartSystem,
+    doGlobalSystem, doMonophoneSystem, doTimingInfoSystem, doTransformSystem
+)
+def run(outDir):
+    synthOutDir = os.path.join(outDir, 'synth')
+    figOutDir = os.path.join(outDir, 'fig')
+    os.makedirs(synthOutDir)
+    os.makedirs(figOutDir)
+    print 'CONFIG: outDir =', outDir
 
-    doGlobalSystem()
+    doDumpCorpus(outDir)
 
-    doMonophoneSystem()
+    doGlobalSystem(synthOutDir, figOutDir)
 
-    doTimingInfoSystem()
+    doMonophoneSystem(synthOutDir, figOutDir)
 
-    doDecisionTreeClusteredSystem()
+    doTimingInfoSystem(synthOutDir, figOutDir)
 
-    doTransformSystem()
+    doDecisionTreeClusteredSystem(synthOutDir, figOutDir)
 
-    doFlatStartSystem()
+    doTransformSystem(synthOutDir, figOutDir)
+
+    doFlatStartSystem(synthOutDir, figOutDir)
