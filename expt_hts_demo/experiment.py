@@ -938,6 +938,7 @@ def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
         mapAlignment = StandardizeAlignment(corpus.subLabels, [0]),
     )
     initialFrame = getInitialFrame(corpus, bmi)
+    # FIXME : setFloor shouldn't need to be specified here
     createLeafAccs = [
         lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer, lgTag = 'setFloor'),
         d.OracleAcc,
