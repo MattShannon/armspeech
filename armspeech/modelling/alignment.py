@@ -51,13 +51,13 @@ def checkAlignment(alignment, startTimeReq = None, endTimeReq = None,
                            endTimeReq = endTime, allowZeroDur = allowZeroDur)
 
 @codeDeps()
-def alignment2to1(alignment):
-    """Converts a two-level alignment to one-level by ignoring lower level."""
+def alignmentTo1(alignment):
+    """Converts an alignment to one-level by ignoring lower level."""
     return [ (startTime, endTime, label, None)
              for startTime, endTime, label, subAlignment in alignment ]
 
 @codeDeps()
-def alignment1to2(alignment):
+def alignmentTo2(alignment):
     """Converts an alignment to two-level with one sub-label."""
     return [ (startTime, endTime, label, [(startTime, endTime, 0, None)])
              for startTime, endTime, label, subAlignment in alignment ]
@@ -80,7 +80,7 @@ def uniformSegmentAlignment(alignment, subLabelsOut):
         )
     return alignmentOut
 
-@codeDeps(alignment1to2, alignment2to1, uniformSegmentAlignment)
+@codeDeps(alignmentTo1, alignmentTo2, uniformSegmentAlignment)
 class StandardizeAlignment(object):
     def __init__(self, subLabelsBefore, subLabelsAfter):
         if subLabelsBefore is None:
@@ -107,13 +107,13 @@ class StandardizeAlignment(object):
             return alignment
         elif self.numSubLabelsAfter in (None, 1):
             if self.numSubLabelsBefore is not None:
-                alignment = alignment2to1(alignment)
+                alignment = alignmentTo1(alignment)
             if self.numSubLabelsAfter == 1:
-                alignment = alignment1to2(alignment)
+                alignment = alignmentTo2(alignment)
             return alignment
         else:
             if self.numSubLabelsBefore is not None:
-                alignment = alignment2to1(alignment)
+                alignment = alignmentTo1(alignment)
             return uniformSegmentAlignment(alignment,
                                            list(range(self.numSubLabelsAfter)))
 
