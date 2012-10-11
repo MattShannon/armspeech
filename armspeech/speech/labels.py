@@ -48,37 +48,6 @@ def readTwoLevelHtkLabFile(labFile, framePeriod, decodeHigh = lambda labelString
     alignment = [ (subAlignment[0][0], subAlignment[-1][1], label, subAlignment) for label, subAlignment in groupedLabels ]
     return alignment
 
-# (FIXME : this should probably be moved into modelling subpackage)
-@codeDeps()
-def checkAlignment(alignment, startTimeReq = None, endTimeReq = None, allowZeroDur = True):
-    """Checks an alignment for various possible inconsistencies.
-
-    Checks alignment is in order, contiguous and non-overlapping. Recursively
-    checks any sub-alignments, and checks that start and end times of
-    sub-alignments agree with their parents.
-    """
-    if alignment:
-        for (startTimePrev, endTimePrev, labelPrev, subAlignmentPrev), (startTime, endTime, label, subAlignment) in zip(alignment, alignment[1:]):
-            if startTime < endTimePrev:
-                raise RuntimeError('alignment has overlaps')
-            elif startTime > endTimePrev:
-                raise RuntimeError('alignment is not contiguous')
-    if startTimeReq is not None:
-        startTime, endTime, label, subAlignment = alignment[0]
-        if startTime != startTimeReq:
-            raise RuntimeError('alignment start time is incorrect ('+str(startTimeReq)+' desired, '+str(startTime)+' actual)')
-    if endTimeReq is not None:
-        startTime, endTime, label, subAlignment = alignment[-1]
-        if endTime != endTimeReq:
-            raise RuntimeError('alignment end time is incorrect ('+str(endTimeReq)+' desired, '+str(endTime)+' actual)')
-    for startTime, endTime, label, subAlignment in alignment:
-        if endTime < startTime:
-            raise RuntimeError('alignment has segment of negative duration')
-        if endTime == startTime and not allowZeroDur:
-            raise RuntimeError('alignment has zero duration segment')
-        if subAlignment is not None:
-            checkAlignment(subAlignment, startTimeReq = startTime, endTimeReq = endTime, allowZeroDur = allowZeroDur)
-
 @codeDeps()
 def getParseLabel(labelFormat, createLabel):
     labelReStrings = []

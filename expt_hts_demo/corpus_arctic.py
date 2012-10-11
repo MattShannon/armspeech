@@ -13,6 +13,7 @@ that is produced by the HTS demo with STRAIGHT.
 from __future__ import division
 
 import armspeech.modelling.corpus as cps
+import armspeech.modelling.alignment as align
 import armspeech.speech.labels as lab
 import armspeech.speech.features as feat
 from armspeech.util import iterhelp
@@ -21,9 +22,10 @@ from armspeech.util.timing import timed
 
 import os
 
-@codeDeps(ForwardRef(lambda: cleanAlignment), cps.Corpus, feat.Msd01Encoder,
-    feat.Stream, feat.doHtsDemoWaveformGeneration, feat.readAcousticGen,
-    feat.writeAcousticSeq, ForwardRef(lambda: getMgcLims40), lab.checkAlignment,
+@codeDeps(align.checkAlignment, ForwardRef(lambda: cleanAlignment), cps.Corpus,
+    feat.Msd01Encoder, feat.Stream, feat.doHtsDemoWaveformGeneration,
+    feat.readAcousticGen, feat.writeAcousticSeq,
+    ForwardRef(lambda: getMgcLims40), lab.readHtkLabFile,
     lab.readTwoLevelHtkLabFile, timed
 )
 class ArcticCorpus(cps.Corpus):
@@ -81,7 +83,7 @@ class ArcticCorpus(cps.Corpus):
         alignment = self.rawAlignment(uttId)
         acousticSeq = self.rawAcousticSeq(uttId)
         alignment = cleanAlignment(alignment, acousticSeq, verbose = False)
-        lab.checkAlignment(alignment)
+        align.checkAlignment(alignment)
         assert alignment[0][0] == 0
         labEndTime = alignment[-1][1]
         assert labEndTime <= len(acousticSeq)
