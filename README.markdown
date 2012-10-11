@@ -41,9 +41,16 @@ armspeech has the following dependencies:
 
 To set-up this directory:
 
-- add appropriate directories or symlinks for `expt_hts_demo/data/mgc`,
-  `expt_hts_demo/data/lf0`, `expt_hts_demo/data/bap` and
-  `expt_hts_demo/data/labels/full` (e.g. copied from the HTS demo)
+- add paths to an appropriate data directory and label directory in
+  `expt_hts_demo/experiment.py` (by editing the strings starting '## TBA').
+  The data directory should contain `.mgc`, `.lf0` and `.bap` files.
+  The label directory should contain `.lab` files, each of which is an
+  alignment with full-context labels.
+  Either phone-level or state-level alignments may be used (but note that some
+  of the example experiments require state-level alignments).
+- update `mgcOrder` (two places) and `subLabels` (one place) in
+  `expt_hts_demo/experiment.py` (where the corpus objects are created) to have
+  values appropriate for your corpus.
 - if you want to generate audio, add an appropriate `scripts/Config.pm` file
   (e.g. copied from the HTS demo)
 - if necessary make `print_pickle.py`, `run_expt_hts_demo.sh` and `run_tests.sh`

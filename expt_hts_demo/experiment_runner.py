@@ -30,13 +30,7 @@ def main(rawArgs):
     outDir = tempfile.mkdtemp(dir = 'expt_hts_demo', prefix = 'out.')
 
     try:
-        experiment.run(
-            dataDir = 'expt_hts_demo/data',
-            labDir = 'expt_hts_demo/data/labels/full',
-            corpusSubLabels = None,
-            scriptsDir = 'scripts',
-            outDir = outDir,
-        )
+        experiment.run(outDir)
     except:
         traceback.print_exc()
         print

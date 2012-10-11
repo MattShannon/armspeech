@@ -43,10 +43,11 @@ class ArcticCorpus(cps.Corpus):
 
         if self.subLabels is not None:
             self.subLabelSet = frozenset(self.subLabels)
+        self.bapOrder = 5
         lf0Encoder = feat.Msd01Encoder(specialValue = -1e10)
-        mgcStream = feat.Stream('mgc', mgcOrder)
+        mgcStream = feat.Stream('mgc', self.mgcOrder)
         lf0Stream = feat.Stream('lf0', 1, lf0Encoder)
-        bapStream = feat.Stream('bap', 5)
+        bapStream = feat.Stream('bap', self.bapOrder)
         self.streams = [mgcStream, lf0Stream, bapStream]
 
         self.mgcLims = getMgcLims40()
@@ -76,7 +77,7 @@ class ArcticCorpus(cps.Corpus):
     def rawAcousticSeq(self, uttId):
         return list(feat.readAcousticGen(
             self.streams,
-            lambda stream: os.path.join(self.dataDir, stream.name, uttId+'.'+stream.name)
+            lambda stream: os.path.join(self.dataDir, uttId+'.'+stream.name)
         ))
 
     def data(self, uttId):

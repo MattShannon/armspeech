@@ -13,10 +13,45 @@ third streams non-"multispace" vectors and second stream a 0/1-dimensional
 
 from __future__ import division
 
+from armspeech.modelling import summarizer
 from codedep import codeDeps
 
 import numpy as np
 import armspeech.numpy_settings
+
+@codeDeps(summarizer.IndexSpecSummarizer, summarizer.VectorSeqSummarizer)
+class BasicArModelInfo(object):
+    def __init__(self, phoneset, subLabels,
+                 mgcOrder, bapOrder,
+                 mgcDepth, lf0Depth, bapDepth,
+                 mgcIndices, bapIndices):
+        self.phoneset = phoneset
+        self.subLabels = subLabels
+        self.mgcOrder = mgcOrder
+        self.bapOrder = bapOrder
+        self.mgcDepth = mgcDepth
+        self.lf0Depth = lf0Depth
+        self.bapDepth = bapDepth
+        self.mgcIndices = mgcIndices
+        self.bapIndices = bapIndices
+
+        self.maxDepth = max(self.mgcDepth, self.lf0Depth, self.bapDepth)
+        self.streamDepths = {0: self.mgcDepth,
+                             1: self.lf0Depth,
+                             2: self.bapDepth}
+        self.frameSummarizer = summarizer.VectorSeqSummarizer(
+            order = 3,
+            depths = self.streamDepths
+        )
+
+        self.mgcSummarizer = summarizer.IndexSpecSummarizer(
+            self.mgcIndices, fromOffset = 0, toOffset = 0,
+            order = self.mgcOrder, depth = self.mgcDepth
+        )
+        self.bapSummarizer = summarizer.IndexSpecSummarizer(
+            self.bapIndices, fromOffset = 0, toOffset = 0,
+            order = self.bapOrder, depth = self.bapDepth
+        )
 
 @codeDeps()
 def getZeroFrame(mgcOrder, bapOrder):
