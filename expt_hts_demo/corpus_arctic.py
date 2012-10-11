@@ -57,18 +57,26 @@ class ArcticCorpus(cps.Corpus):
         return subLabel
 
     def rawAlignment(self, uttId):
-        return lab.readTwoLevelHtkLabFile(
-            os.path.join(self.labDir, uttId+'.lab'),
-            self.framePeriod,
-            decodeHigh = self.parseLabel,
-            decodeLow = self.parseSubLabel,
-            fallbackToOneLevel = True
-        )
+        if self.subLabels is not None:
+            return lab.readTwoLevelHtkLabFile(
+                os.path.join(self.labDir, uttId+'.lab'),
+                self.framePeriod,
+                decodeHigh = self.parseLabel,
+                decodeLow = self.parseSubLabel,
+            )
+        else:
+            return lab.readHtkLabFile(
+                os.path.join(self.labDir, uttId+'.lab'),
+                self.framePeriod,
+                decode = self.parseLabel,
+            )
+
     def rawAcousticSeq(self, uttId):
         return list(feat.readAcousticGen(
             self.streams,
             lambda stream: os.path.join(self.dataDir, stream.name, uttId+'.'+stream.name)
         ))
+
     def data(self, uttId):
         alignment = self.rawAlignment(uttId)
         acousticSeq = self.rawAcousticSeq(uttId)
