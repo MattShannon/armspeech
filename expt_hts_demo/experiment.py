@@ -40,10 +40,14 @@ def getFirst(x, default = None):
         return t
 
 @codeDeps()
-def getStandardizeAlignment(subLabels):
-    numSubLabels = len(subLabels)
-    haveWarned = [False]
-    def standardizeAlignment(alignment):
+class StandardizeAlignment(object):
+    def __init__(self, subLabels):
+        self.subLabels = subLabels
+
+        self.numSubLabels = len(self.subLabels)
+        self.haveWarned = False
+
+    def __call__(self, alignment):
         """Returns a standardized, state-level alignment.
 
         If numSubLabels is 1, outputs 1-state state-level alignment (whether
@@ -56,28 +60,27 @@ def getStandardizeAlignment(subLabels):
         """
         alignmentOut = []
         for phoneStartTime, phoneEndTime, label, subAlignment in alignment:
-            if numSubLabels == 1:
+            if self.numSubLabels == 1:
                 alignmentOut.append((phoneStartTime, phoneEndTime, label, [(phoneStartTime, phoneEndTime, 0, None)]))
             else:
                 if subAlignment is None:
-                    if not haveWarned[0]:
+                    if not self.haveWarned:
                         print 'NOTE: only phone-level alignment specified, so will use uniform segmentation to obtain a state-level alignment (not ideal)'
-                        haveWarned[0] = True
+                        self.haveWarned = True
                     phoneDur = (phoneEndTime - phoneStartTime) * 1.0
                     subAlignmentOut = []
-                    for subLabelIndex, subLabel in enumerate(subLabels):
-                        startTime = int(phoneDur * subLabelIndex / numSubLabels + 0.5) + phoneStartTime
-                        endTime = int(phoneDur * (subLabelIndex + 1) / numSubLabels + 0.5) + phoneStartTime
+                    for subLabelIndex, subLabel in enumerate(self.subLabels):
+                        startTime = int(phoneDur * subLabelIndex / self.numSubLabels + 0.5) + phoneStartTime
+                        endTime = int(phoneDur * (subLabelIndex + 1) / self.numSubLabels + 0.5) + phoneStartTime
                         subAlignmentOut.append((startTime, endTime, subLabel, None))
                     alignmentOut.append((phoneStartTime, phoneEndTime, label, subAlignmentOut))
                     assert endTime == phoneEndTime
                 else:
                     subLabelsFromAlignment = [ subLabel for _, _, subLabel, _ in subAlignment ]
-                    if subLabelsFromAlignment != subLabels:
-                        raise RuntimeError('mismatched subLabels ('+repr(subLabels)+' desired, '+repr(subLabelsFromAlignment)+' actual)')
+                    if subLabelsFromAlignment != self.subLabels:
+                        raise RuntimeError('mismatched subLabels ('+repr(self.subLabels)+' desired, '+repr(subLabelsFromAlignment)+' actual)')
                     alignmentOut.append((phoneStartTime, phoneEndTime, label, subAlignment))
         return alignmentOut
-    return standardizeAlignment
 
 @codeDeps(d.BinaryLogisticClassifier, d.ConstantClassifier, d.LinearGaussian,
     d.distNodeList
@@ -297,7 +300,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         print 'numSubLabels =', numSubLabels
         subLabels = list(range(numSubLabels))
 
-        standardizeAlignment = getStandardizeAlignment(subLabels)
+        standardizeAlignment = StandardizeAlignment(subLabels)
 
         def alignmentToPhoneticSeq(alignment):
             for phoneStartTime, phoneEndTime, label, subAlignment in standardizeAlignment(alignment):
@@ -444,7 +447,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         lgVarianceFloorMult = 1e-3
         print 'lgVarianceFloorMult =', lgVarianceFloorMult
 
-        dist = trainGlobalSystem(getStandardizeAlignment(subLabels), lgVarianceFloorMult)
+        dist = trainGlobalSystem(StandardizeAlignment(subLabels), lgVarianceFloorMult)
         reportFlooredPerStream(dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -492,7 +495,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
                     )
                 ).withTag(dist.tag)
 
-        globalDist = trainGlobalSystem(getStandardizeAlignment(subLabels), lgVarianceFloorMult)
+        globalDist = trainGlobalSystem(StandardizeAlignment(subLabels), lgVarianceFloorMult)
         dist = globalDist
 
         print 'DEBUG: converting global dist to monophone dist'
@@ -533,7 +536,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         print 'numSubLabels =', numSubLabels
         subLabels = list(range(numSubLabels))
 
-        standardizeAlignment = getStandardizeAlignment(subLabels)
+        standardizeAlignment = StandardizeAlignment(subLabels)
 
         extraLength = 2
 
@@ -615,7 +618,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
                     )
                 ).withTag(dist.tag)
 
-        globalDist = trainGlobalSystem(getStandardizeAlignment(subLabels), lgVarianceFloorMult)
+        globalDist = trainGlobalSystem(StandardizeAlignment(subLabels), lgVarianceFloorMult)
         dist = globalDist
 
         print 'DEBUG: converting global dist to full ctx acc'
@@ -673,7 +676,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         print 'numSubLabels =', numSubLabels
         subLabels = list(range(numSubLabels))
 
-        standardizeAlignment = getStandardizeAlignment(subLabels)
+        standardizeAlignment = StandardizeAlignment(subLabels)
 
         def alignmentToPhoneticSeq(alignment):
             for phoneStartTime, phoneEndTime, label, subAlignment in standardizeAlignment(alignment):
@@ -861,7 +864,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         print 'lgVarianceFloorMult =', lgVarianceFloorMult
         print 'ccProbFloor =', ccProbFloor
 
-        globalDist = trainGlobalSystem(getStandardizeAlignment(subLabels), lgVarianceFloorMult)
+        globalDist = trainGlobalSystem(StandardizeAlignment(subLabels), lgVarianceFloorMult)
 
         print 'DEBUG: converting global dist to monophone net dist'
         def netFor(alignment):
