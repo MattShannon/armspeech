@@ -276,6 +276,35 @@ def getDrawMgc(corpus, mgcIndices, figOutDir, ylims = None, includeGivenLabels =
             draw.drawLabelledSeq([(trueSeqTime, trueSeq), (synthSeqTime, synthSeq)], partitionedLabelSeqs, outPdf = outPdf, figSizeRate = 10.0, ylims = ylims, colors = ['red', 'purple'])
     return drawMgc
 
+def createLinearGaussianVectorAcc(indexSpecSummarizer, lgTag = None):
+    return indexSpecSummarizer.createAcc(False, lambda outIndex:
+        d.MappedInputAcc(xf.AddBias(),
+            d.LinearGaussianAcc(
+                inputLength = indexSpecSummarizer.vectorLength(outIndex) + 1
+            ).withTag(lgTag)
+        )
+    )
+
+def createBlcBasedLf0Acc(lf0StreamDepth, lgTag = None):
+    return d.MappedInputAcc(xf.Msd01ToVector(),
+        d.MappedInputAcc(xf.AddBias(),
+            d.IdentifiableMixtureAcc(
+                d.BinaryLogisticClassifierAcc(
+                    d.BinaryLogisticClassifier(
+                        coeff = np.zeros((2 * lf0StreamDepth + 1,)),
+                        coeffFloor = np.ones((2 * lf0StreamDepth + 1,)) * 5.0
+                    )
+                ),
+                [
+                    d.FixedValueAcc(None),
+                    d.LinearGaussianAcc(
+                        inputLength = 2 * lf0StreamDepth + 1
+                    ).withTag(lgTag)
+                ]
+            )
+        )
+    )
+
 def run(dataDir, labDir, scriptsDir, outDir):
     synthOutDir = os.path.join(outDir, 'synth')
     distOutDir = os.path.join(outDir, 'dist')
@@ -400,25 +429,11 @@ def run(dataDir, labDir, scriptsDir, outDir):
                 {
                     0:
                         d.MappedInputAcc(lambda (phInput, acInput): acInput,
-                            mgcSummarizer.createAcc(False, lambda outIndex:
-                                d.MappedInputAcc(xf.AddBias(),
-                                    d.LinearGaussianAcc(inputLength = mgcSummarizer.vectorLength(outIndex) + 1).withTag('setFloor')
-                                )
-                            )
+                            createLinearGaussianVectorAcc(mgcSummarizer, lgTag = 'setFloor')
                         ).withTag(('stream', corpus.streams[streamIndex].name))
                 ,   1:
                         d.MappedInputAcc(lambda (phInput, acInput): acInput,
-                            #d.MappedInputAcc(xf.Msd01ToVector(),
-                            #    d.MappedInputAcc(xf.AddBias(),
-                            #        d.IdentifiableMixtureAcc(
-                            #            d.BinaryLogisticClassifierAcc(d.BinaryLogisticClassifier(coeff = np.zeros((2 * lf0StreamDepth + 1,)), coeffFloor = np.ones((2 * lf0StreamDepth + 1,)) * 5.0)),
-                            #            [
-                            #                d.FixedValueAcc(None),
-                            #                d.LinearGaussianAcc(inputLength = 2 * lf0StreamDepth + 1).withTag('setFloor')
-                            #            ]
-                            #        )
-                            #    )
-                            #)
+                            #createBlcBasedLf0Acc(lf0StreamDepth, lgTag = 'setFloor')
                             d.OracleAcc()
                         ).withTag(('stream', corpus.streams[streamIndex].name))
                 ,   2:
