@@ -41,6 +41,15 @@ def getFirst(x, default = None):
         return t
 
 @codeDeps()
+def getElem(xs, index, length, default = None):
+    try:
+        assert len(xs) == length
+    except TypeError:
+        # not a sequence type
+        return default
+    return xs[index]
+
+@codeDeps()
 class StandardizeAlignment(object):
     def __init__(self, subLabels):
         self.subLabels = subLabels
@@ -98,6 +107,150 @@ def reportFloored(distRoot, rootTag):
     if summary:
         print 'flooring: %s: %s' % (rootTag, summary)
 
+@codeDeps(getElem, nodetree.findTaggedNodes, reportFloored)
+def reportFlooredPerStream(dist):
+    def isStreamRoot(tag):
+        return getElem(tag, 0, 2) == 'stream'
+    for streamRoot in nodetree.findTaggedNodes(dist, isStreamRoot):
+        streamName = streamRoot.tag[1]
+        reportFloored(streamRoot, rootTag = streamName)
+
+@codeDeps(d.Rat)
+def reportTrainAux((trainAux, trainAuxRat), trainFrames):
+    print 'training aux = %s (%s) (%s frames)' % (trainAux / trainFrames, d.Rat.toString(trainAuxRat), trainFrames)
+
+@codeDeps()
+def evaluateLogProb(dist, corpus):
+    trainLogProb = corpus.logProb(dist, corpus.trainUttIds)
+    trainFrames = corpus.frames(corpus.trainUttIds)
+    print 'train set log prob = %s (%s frames)' % (trainLogProb / trainFrames, trainFrames)
+    testLogProb = corpus.logProb(dist, corpus.testUttIds)
+    testFrames = corpus.frames(corpus.testUttIds)
+    print 'test set log prob = %s (%s frames)' % (testLogProb / testFrames, testFrames)
+    print
+
+@codeDeps(d.SynthMethod, stdCepDist)
+def evaluateMgcArOutError(dist, corpus, vecError = stdCepDist, desc = 'MARCD'):
+    def frameToVec(frame):
+        mgcFrame, lf0Frame, bapFrame = frame
+        return mgcFrame
+    def distError(dist, input, actualFrame):
+        synthFrame = dist.synth(input, d.SynthMethod.Meanish, actualFrame)
+        return vecError(frameToVec(synthFrame), frameToVec(actualFrame))
+    def computeValue(inputUtt, outputUtt):
+        return dist.sum(inputUtt, outputUtt, distError)
+    trainError = corpus.sum(corpus.trainUttIds, computeValue)
+    trainFrames = corpus.frames(corpus.trainUttIds)
+    print 'train set %s = %s (%s frames)' % (desc, trainError / trainFrames, trainFrames)
+    testError = corpus.sum(corpus.testUttIds, computeValue)
+    testFrames = corpus.frames(corpus.testUttIds)
+    print 'test set %s = %s (%s frames)' % (desc, testError / testFrames, testFrames)
+    print
+
+@codeDeps(stdCepDist)
+def evaluateMgcOutError(dist, corpus, vecError = stdCepDist, desc = 'MCD'):
+    def frameToVec(frame):
+        mgcFrame, lf0Frame, bapFrame = frame
+        return mgcFrame
+    trainError = corpus.outError(dist, corpus.trainUttIds, vecError, frameToVec)
+    trainFrames = corpus.frames(corpus.trainUttIds)
+    print 'train set %s = %s (%s frames)' % (desc, trainError / trainFrames, trainFrames)
+    testError = corpus.outError(dist, corpus.testUttIds, vecError, frameToVec)
+    testFrames = corpus.frames(corpus.testUttIds)
+    print 'test set %s = %s (%s frames)' % (desc, testError / testFrames, testFrames)
+    print
+
+@codeDeps(d.SynthMethod)
+def evaluateSynthesize(dist, corpus, synthOutDir, exptTag, afterSynth = None):
+    corpus.synthComplete(dist, corpus.synthUttIds, d.SynthMethod.Sample, synthOutDir, exptTag+'.sample', afterSynth = afterSynth)
+    corpus.synthComplete(dist, corpus.synthUttIds, d.SynthMethod.Meanish, synthOutDir, exptTag+'.meanish', afterSynth = afterSynth)
+
+@codeDeps(d.defaultEstimatePartial, d.getDefaultCreateAcc, nodetree.getDagMap,
+    trn.mixupLinearGaussianEstimatePartial, trn.trainEM
+)
+def mixup(dist, accumulate):
+    acc = d.getDefaultCreateAcc()(dist)
+    accumulate(acc)
+    logLikeInit = acc.logLike()
+    framesInit = acc.count()
+    print 'initial training log likelihood = %s (%s frames)' % (logLikeInit / framesInit, framesInit)
+    dist = nodetree.getDagMap([trn.mixupLinearGaussianEstimatePartial, d.defaultEstimatePartial])(acc)
+    dist = trn.trainEM(dist, accumulate, deltaThresh = 1e-4, minIterations = 4, maxIterations = 8, verbosity = 2)
+    return dist
+
+@codeDeps(d.DebugDist, d.LinearGaussian, d.MappedInputDist, d.StudentDist,
+    d.TransformedOutputDist, nodetree.defaultMapPartial, nodetree.getDagMap,
+    xf.ConstantTransform, xf.DotProductTransform, xf.ShiftOutputTransform
+)
+def convertToStudentResiduals(dist, studentTag = None, debugTag = None, subtractMeanTag = None):
+    def studentResidualsMapPartial(dist, mapChild):
+        if isinstance(dist, d.LinearGaussian):
+            subDist = d.StudentDist(df = 10000.0, precision = 1.0 / dist.variance).withTag(studentTag)
+            if debugTag is not None:
+                subDist = d.DebugDist(None, subDist).withTag(debugTag)
+            subtractMeanTransform = xf.ShiftOutputTransform(xf.DotProductTransform(-dist.coeff)).withTag(subtractMeanTag)
+            distNew = d.TransformedOutputDist(subtractMeanTransform,
+                d.MappedInputDist(xf.ConstantTransform(np.array([])),
+                    subDist
+                )
+            )
+            return distNew
+    studentResidualsMap = nodetree.getDagMap([studentResidualsMapPartial, nodetree.defaultMapPartial])
+
+    return studentResidualsMap(dist)
+
+@codeDeps(d.DebugDist, d.LinearGaussian, d.MappedInputDist,
+    d.TransformedOutputDist, nodetree.defaultMapPartial, nodetree.getDagMap,
+    xf.ConstantTransform, xf.DotProductTransform, xf.IdentityTransform,
+    xf.ShiftOutputTransform, xf.SimpleOutputTransform, xf.SumTransform1D,
+    xf.TanhTransform1D
+)
+def convertToTransformedGaussianResiduals(dist, residualTransformTag = None, debugTag = None, subtractMeanTag = None):
+    def transformedGaussianResidualsMapPartial(dist, mapChild):
+        if isinstance(dist, d.LinearGaussian):
+            residualTransform = xf.SimpleOutputTransform(xf.SumTransform1D([
+                xf.IdentityTransform()
+            ,   xf.TanhTransform1D(np.array([0.0, 0.5, -1.0]))
+            ,   xf.TanhTransform1D(np.array([0.0, 0.5, 0.0]))
+            ,   xf.TanhTransform1D(np.array([0.0, 0.5, 1.0]))
+            ]), checkDerivPositive1D = True).withTag(residualTransformTag)
+
+            subDist = d.TransformedOutputDist(residualTransform,
+                d.LinearGaussian(np.array([]), dist.variance, varianceFloor = 0.0)
+            )
+            if debugTag is not None:
+                subDist = d.DebugDist(None, subDist).withTag(debugTag)
+            subtractMeanTransform = xf.ShiftOutputTransform(xf.DotProductTransform(-dist.coeff)).withTag(subtractMeanTag)
+            distNew = d.TransformedOutputDist(subtractMeanTransform,
+                d.MappedInputDist(xf.ConstantTransform(np.array([])),
+                    subDist
+                )
+            )
+            return distNew
+    transformedGaussianResidualsMap = nodetree.getDagMap([transformedGaussianResidualsMapPartial, nodetree.defaultMapPartial])
+
+    return transformedGaussianResidualsMap(dist)
+
+@codeDeps(draw.drawLabelledSeq, draw.partitionSeq)
+def getDrawMgc(corpus, mgcIndices, figOutDir, ylims = None, includeGivenLabels = True, extraLabelSeqs = []):
+    streamIndex = 0
+    def drawMgc(synthOutput, uttId, exptTag):
+        (uttId, alignment), trueOutput = corpus.data(uttId)
+
+        alignmentToDraw = [ (start * corpus.framePeriod, end * corpus.framePeriod, label.phone) for start, end, label, subAlignment in alignment ]
+        partitionedLabelSeqs = (draw.partitionSeq(alignmentToDraw, 2) if includeGivenLabels else []) + [ labelSeqSub for labelSeq in extraLabelSeqs for labelSeqSub in draw.partitionSeq(labelSeq, 2) ]
+
+        trueSeqTime = (np.array(range(len(trueOutput))) + 0.5) * corpus.framePeriod
+        synthSeqTime = (np.array(range(len(synthOutput))) + 0.5) * corpus.framePeriod
+
+        for mgcIndex in mgcIndices:
+            trueSeq = [ frame[streamIndex][mgcIndex] for frame in trueOutput ]
+            synthSeq = [ frame[streamIndex][mgcIndex] for frame in synthOutput ]
+
+            outPdf = os.path.join(figOutDir, uttId+'-mgc'+str(mgcIndex)+'-'+exptTag+'.pdf')
+            draw.drawLabelledSeq([(trueSeqTime, trueSeq), (synthSeqTime, synthSeq)], partitionedLabelSeqs, outPdf = outPdf, figSizeRate = 10.0, ylims = ylims, colors = ['red', 'purple'])
+    return drawMgc
+
 def run(dataDir, labDir, scriptsDir, outDir):
     synthOutDir = os.path.join(outDir, 'synth')
     distOutDir = os.path.join(outDir, 'dist')
@@ -126,128 +279,6 @@ def run(dataDir, labDir, scriptsDir, outDir):
 
     firstFrameAverage = mgc_lf0_bap.computeFirstFrameAverage(corpus, mgcStream.order, bapStream.order)
 
-
-    def reportTrainAux((trainAux, trainAuxRat), trainFrames):
-        print 'training aux = %s (%s) (%s frames)' % (trainAux / trainFrames, d.Rat.toString(trainAuxRat), trainFrames)
-
-    def evaluateLogProb(dist, corpus):
-        trainLogProb = corpus.logProb(dist, corpus.trainUttIds)
-        trainFrames = corpus.frames(corpus.trainUttIds)
-        print 'train set log prob = %s (%s frames)' % (trainLogProb / trainFrames, trainFrames)
-        testLogProb = corpus.logProb(dist, corpus.testUttIds)
-        testFrames = corpus.frames(corpus.testUttIds)
-        print 'test set log prob = %s (%s frames)' % (testLogProb / testFrames, testFrames)
-        print
-
-    def evaluateMgcArOutError(dist, corpus, vecError = stdCepDist, desc = 'MARCD'):
-        def frameToVec(frame):
-            mgcFrame, lf0Frame, bapFrame = frame
-            return mgcFrame
-        def distError(dist, input, actualFrame):
-            synthFrame = dist.synth(input, d.SynthMethod.Meanish, actualFrame)
-            return vecError(frameToVec(synthFrame), frameToVec(actualFrame))
-        def computeValue(inputUtt, outputUtt):
-            return dist.sum(inputUtt, outputUtt, distError)
-        trainError = corpus.sum(corpus.trainUttIds, computeValue)
-        trainFrames = corpus.frames(corpus.trainUttIds)
-        print 'train set %s = %s (%s frames)' % (desc, trainError / trainFrames, trainFrames)
-        testError = corpus.sum(corpus.testUttIds, computeValue)
-        testFrames = corpus.frames(corpus.testUttIds)
-        print 'test set %s = %s (%s frames)' % (desc, testError / testFrames, testFrames)
-        print
-
-    def evaluateMgcOutError(dist, corpus, vecError = stdCepDist, desc = 'MCD'):
-        def frameToVec(frame):
-            mgcFrame, lf0Frame, bapFrame = frame
-            return mgcFrame
-        trainError = corpus.outError(dist, corpus.trainUttIds, vecError, frameToVec)
-        trainFrames = corpus.frames(corpus.trainUttIds)
-        print 'train set %s = %s (%s frames)' % (desc, trainError / trainFrames, trainFrames)
-        testError = corpus.outError(dist, corpus.testUttIds, vecError, frameToVec)
-        testFrames = corpus.frames(corpus.testUttIds)
-        print 'test set %s = %s (%s frames)' % (desc, testError / testFrames, testFrames)
-        print
-
-    def evaluateSynthesize(dist, corpus, exptTag, afterSynth = None):
-        corpus.synthComplete(dist, corpus.synthUttIds, d.SynthMethod.Sample, synthOutDir, exptTag+'.sample', afterSynth = afterSynth)
-        corpus.synthComplete(dist, corpus.synthUttIds, d.SynthMethod.Meanish, synthOutDir, exptTag+'.meanish', afterSynth = afterSynth)
-
-    def mixup(dist, accumulate):
-        acc = d.getDefaultCreateAcc()(dist)
-        accumulate(acc)
-        logLikeInit = acc.logLike()
-        framesInit = acc.count()
-        print 'initial training log likelihood = %s (%s frames)' % (logLikeInit / framesInit, framesInit)
-        dist = nodetree.getDagMap([trn.mixupLinearGaussianEstimatePartial, d.defaultEstimatePartial])(acc)
-        dist = trn.trainEM(dist, accumulate, deltaThresh = 1e-4, minIterations = 4, maxIterations = 8, verbosity = 2)
-        return dist
-
-    def convertToStudentResiduals(dist, studentTag = None, debugTag = None, subtractMeanTag = None):
-        def studentResidualsMapPartial(dist, mapChild):
-            if isinstance(dist, d.LinearGaussian):
-                subDist = d.StudentDist(df = 10000.0, precision = 1.0 / dist.variance).withTag(studentTag)
-                if debugTag is not None:
-                    subDist = d.DebugDist(None, subDist).withTag(debugTag)
-                subtractMeanTransform = xf.ShiftOutputTransform(xf.DotProductTransform(-dist.coeff)).withTag(subtractMeanTag)
-                distNew = d.TransformedOutputDist(subtractMeanTransform,
-                    d.MappedInputDist(xf.ConstantTransform(np.array([])),
-                        subDist
-                    )
-                )
-                return distNew
-        studentResidualsMap = nodetree.getDagMap([studentResidualsMapPartial, nodetree.defaultMapPartial])
-
-        return studentResidualsMap(dist)
-
-    def convertToTransformedGaussianResiduals(dist, residualTransformTag = None, debugTag = None, subtractMeanTag = None):
-        def transformedGaussianResidualsMapPartial(dist, mapChild):
-            if isinstance(dist, d.LinearGaussian):
-                residualTransform = xf.SimpleOutputTransform(xf.SumTransform1D([
-                    xf.IdentityTransform()
-                ,   xf.TanhTransform1D(np.array([0.0, 0.5, -1.0]))
-                ,   xf.TanhTransform1D(np.array([0.0, 0.5, 0.0]))
-                ,   xf.TanhTransform1D(np.array([0.0, 0.5, 1.0]))
-                ]), checkDerivPositive1D = True).withTag(residualTransformTag)
-
-                subDist = d.TransformedOutputDist(residualTransform,
-                    d.LinearGaussian(np.array([]), dist.variance, varianceFloor = 0.0)
-                )
-                if debugTag is not None:
-                    subDist = d.DebugDist(None, subDist).withTag(debugTag)
-                subtractMeanTransform = xf.ShiftOutputTransform(xf.DotProductTransform(-dist.coeff)).withTag(subtractMeanTag)
-                distNew = d.TransformedOutputDist(subtractMeanTransform,
-                    d.MappedInputDist(xf.ConstantTransform(np.array([])),
-                        subDist
-                    )
-                )
-                return distNew
-        transformedGaussianResidualsMap = nodetree.getDagMap([transformedGaussianResidualsMapPartial, nodetree.defaultMapPartial])
-
-        return transformedGaussianResidualsMap(dist)
-
-    def reportFlooredPerStream(dist):
-        for stream in corpus.streams:
-            distRoot = nodetree.findTaggedNode(dist, lambda tag: tag == ('stream', stream.name))
-            reportFloored(distRoot, rootTag = stream.name)
-
-    def getDrawMgc(ylims = None, includeGivenLabels = True, extraLabelSeqs = []):
-        streamIndex = 0
-        def drawMgc(synthOutput, uttId, exptTag):
-            (uttId, alignment), trueOutput = corpus.data(uttId)
-
-            alignmentToDraw = [ (start * corpus.framePeriod, end * corpus.framePeriod, label.phone) for start, end, label, subAlignment in alignment ]
-            partitionedLabelSeqs = (draw.partitionSeq(alignmentToDraw, 2) if includeGivenLabels else []) + [ labelSeqSub for labelSeq in extraLabelSeqs for labelSeqSub in draw.partitionSeq(labelSeq, 2) ]
-
-            trueSeqTime = (np.array(range(len(trueOutput))) + 0.5) * corpus.framePeriod
-            synthSeqTime = (np.array(range(len(synthOutput))) + 0.5) * corpus.framePeriod
-
-            for mgcIndex in mgcSummarizer.outIndices:
-                trueSeq = [ frame[streamIndex][mgcIndex] for frame in trueOutput ]
-                synthSeq = [ frame[streamIndex][mgcIndex] for frame in synthOutput ]
-
-                outPdf = os.path.join(figOutDir, uttId+'-mgc'+str(mgcIndex)+'-'+exptTag+'.pdf')
-                draw.drawLabelledSeq([(trueSeqTime, trueSeq), (synthSeqTime, synthSeq)], partitionedLabelSeqs, outPdf = outPdf, figSizeRate = 10.0, ylims = ylims, colors = ['red', 'purple'])
-        return drawMgc
 
     # (FIXME : this somewhat unnecessarily uses lots of memory)
     def doDumpCorpus(numSubLabels = 1):
@@ -410,7 +441,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, 'global', afterSynth = getDrawMgc())
+        evaluateSynthesize(dist, corpus, synthOutDir, 'global', afterSynth = getDrawMgc(corpus, mgcSummarizer.outIndices, figOutDir))
 
         print
         print 'MIXING UP (to 2 components)'
@@ -419,7 +450,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, 'global.2mix', afterSynth = getDrawMgc())
+        evaluateSynthesize(dist, corpus, synthOutDir, 'global.2mix', afterSynth = getDrawMgc(corpus, mgcSummarizer.outIndices, figOutDir))
         print
         print 'MIXING UP (to 4 components)'
         dist = mixup(dist, corpus.accumulate)
@@ -427,7 +458,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, 'global.4mix', afterSynth = getDrawMgc())
+        evaluateSynthesize(dist, corpus, synthOutDir, 'global.4mix', afterSynth = getDrawMgc(corpus, mgcSummarizer.outIndices, figOutDir))
 
         printTime('finished global')
 
@@ -465,7 +496,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, 'mono', afterSynth = getDrawMgc())
+        evaluateSynthesize(dist, corpus, synthOutDir, 'mono', afterSynth = getDrawMgc(corpus, mgcSummarizer.outIndices, figOutDir))
 
         print
         print 'MIXING UP (to 2 components)'
@@ -474,7 +505,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, 'mono.2mix', afterSynth = getDrawMgc())
+        evaluateSynthesize(dist, corpus, synthOutDir, 'mono.2mix', afterSynth = getDrawMgc(corpus, mgcSummarizer.outIndices, figOutDir))
         print
         print 'MIXING UP (to 4 components)'
         dist = mixup(dist, corpus.accumulate)
@@ -482,7 +513,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, 'mono.4mix', afterSynth = getDrawMgc())
+        evaluateSynthesize(dist, corpus, synthOutDir, 'mono.4mix', afterSynth = getDrawMgc(corpus, mgcSummarizer.outIndices, figOutDir))
 
         printTime('finished mono')
 
@@ -547,7 +578,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, 'timingInfo', afterSynth = getDrawMgc())
+        evaluateSynthesize(dist, corpus, synthOutDir, 'timingInfo', afterSynth = getDrawMgc(corpus, mgcSummarizer.outIndices, figOutDir))
 
         printTime('finished timingInfo')
 
@@ -596,7 +627,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, 'clustered', afterSynth = getDrawMgc())
+        evaluateSynthesize(dist, corpus, synthOutDir, 'clustered', afterSynth = getDrawMgc(corpus, mgcSummarizer.outIndices, figOutDir))
 
         print
         print 'MIXING UP (to 2 components)'
@@ -605,7 +636,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, 'clustered.2mix', afterSynth = getDrawMgc())
+        evaluateSynthesize(dist, corpus, synthOutDir, 'clustered.2mix', afterSynth = getDrawMgc(corpus, mgcSummarizer.outIndices, figOutDir))
         print
         print 'MIXING UP (to 4 components)'
         dist = mixup(dist, corpus.accumulate)
@@ -613,7 +644,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, 'clustered.4mix', afterSynth = getDrawMgc())
+        evaluateSynthesize(dist, corpus, synthOutDir, 'clustered.4mix', afterSynth = getDrawMgc(corpus, mgcSummarizer.outIndices, figOutDir))
 
         printTime('finished clustered')
 
@@ -761,7 +792,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, 'xf_init', afterSynth = getDrawMgc())
+        evaluateSynthesize(dist, corpus, synthOutDir, 'xf_init', afterSynth = getDrawMgc(corpus, mgcSummarizer.outIndices, figOutDir))
 
         print
         print 'ESTIMATING "GAUSSIANIZATION" TRANSFORMS'
@@ -775,7 +806,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, 'xf', afterSynth = getDrawMgc())
+        evaluateSynthesize(dist, corpus, synthOutDir, 'xf', afterSynth = getDrawMgc(corpus, mgcSummarizer.outIndices, figOutDir))
 
         if studentResiduals:
             print
@@ -796,7 +827,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, 'xf.res', afterSynth = getDrawMgc())
+        evaluateSynthesize(dist, corpus, synthOutDir, 'xf.res', afterSynth = getDrawMgc(corpus, mgcSummarizer.outIndices, figOutDir))
 
         print
         print 'ESTIMATING ALL PARAMETERS'
@@ -805,7 +836,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, 'xf.res.xf', afterSynth = getDrawMgc())
+        evaluateSynthesize(dist, corpus, synthOutDir, 'xf.res.xf', afterSynth = getDrawMgc(corpus, mgcSummarizer.outIndices, figOutDir))
 
         printTime('finished xf')
 
@@ -862,7 +893,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-        evaluateSynthesize(dist, corpus, 'flatStart.mono', afterSynth = getDrawMgc())
+        evaluateSynthesize(dist, corpus, synthOutDir, 'flatStart.mono', afterSynth = getDrawMgc(corpus, mgcSummarizer.outIndices, figOutDir))
 
         printTime('finished flatStart')
 
