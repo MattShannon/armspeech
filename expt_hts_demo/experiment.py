@@ -31,19 +31,6 @@ import numpy as np
 import armspeech.numpy_settings
 
 @codeDeps()
-def writeDistFile(distFile, dist):
-    """Writes repr of a dist to a file.
-
-    N.B. Just for logging (actual serialization and deserialization of dists
-    should use pickle instead).
-    """
-    distString = repr(dist)
-    with open(distFile, 'w') as f:
-        f.write(distString)
-        f.write('\n')
-    print 'DEBUG: wrote dist to file', distFile
-
-@codeDeps()
 def getFirst(x, default = None):
     try:
         t = x[0]
@@ -459,7 +446,6 @@ def run(dataDir, labDir, scriptsDir, outDir):
 
         dist = trainGlobalSystem(getStandardizeAlignment(subLabels), lgVarianceFloorMult)
         reportFlooredPerStream(dist)
-        writeDistFile(os.path.join(distOutDir, 'global.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -469,7 +455,6 @@ def run(dataDir, labDir, scriptsDir, outDir):
         print 'MIXING UP (to 2 components)'
         dist = mixup(dist, corpus.accumulate)
         reportFlooredPerStream(dist)
-        writeDistFile(os.path.join(distOutDir, 'global.2mix.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -478,7 +463,6 @@ def run(dataDir, labDir, scriptsDir, outDir):
         print 'MIXING UP (to 4 components)'
         dist = mixup(dist, corpus.accumulate)
         reportFlooredPerStream(dist)
-        writeDistFile(os.path.join(distOutDir, 'global.4mix.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -517,7 +501,6 @@ def run(dataDir, labDir, scriptsDir, outDir):
         print 'DEBUG: estimating monophone dist'
         dist, trainLogLike, (trainAux, trainAuxRat), trainFrames = trn.expectationMaximization(dist, timed(corpus.accumulate), verbosity = 3)
         reportFlooredPerStream(dist)
-        writeDistFile(os.path.join(distOutDir, 'mono.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -527,7 +510,6 @@ def run(dataDir, labDir, scriptsDir, outDir):
         print 'MIXING UP (to 2 components)'
         dist = mixup(dist, corpus.accumulate)
         reportFlooredPerStream(dist)
-        writeDistFile(os.path.join(distOutDir, 'mono.2mix.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -536,7 +518,6 @@ def run(dataDir, labDir, scriptsDir, outDir):
         print 'MIXING UP (to 4 components)'
         dist = mixup(dist, corpus.accumulate)
         reportFlooredPerStream(dist)
-        writeDistFile(os.path.join(distOutDir, 'mono.4mix.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -602,7 +583,6 @@ def run(dataDir, labDir, scriptsDir, outDir):
         dist, (trainAux, trainAuxRat) = d.getDefaultEstimateTotAux()(acc)
         reportTrainAux((trainAux, trainAuxRat), acc.count())
 
-        writeDistFile(os.path.join(distOutDir, 'timingInfo.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -652,7 +632,6 @@ def run(dataDir, labDir, scriptsDir, outDir):
         dist = decisionTreeClusterEstimate(acc)
         print
         reportFlooredPerStream(dist)
-        writeDistFile(os.path.join(distOutDir, 'clustered.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -662,7 +641,6 @@ def run(dataDir, labDir, scriptsDir, outDir):
         print 'MIXING UP (to 2 components)'
         dist = mixup(dist, corpus.accumulate)
         reportFlooredPerStream(dist)
-        writeDistFile(os.path.join(distOutDir, 'clustered.2mix.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -671,7 +649,6 @@ def run(dataDir, labDir, scriptsDir, outDir):
         print 'MIXING UP (to 4 components)'
         dist = mixup(dist, corpus.accumulate)
         reportFlooredPerStream(dist)
-        writeDistFile(os.path.join(distOutDir, 'clustered.4mix.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -819,7 +796,6 @@ def run(dataDir, labDir, scriptsDir, outDir):
                             draw.drawWarping([residualTransform.transform], outPdf = outPdf, xlims = [-2.5, 2.5], title = outPdf)
 
         dist = timed(trn.trainEM)(dist, corpus.accumulate, minIterations = 2, maxIterations = 2)
-        writeDistFile(os.path.join(distOutDir, 'xf_init.dist'), dist)
         timed(drawVarious)(dist, id = 'xf_init', simpleResiduals = True)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -834,7 +810,6 @@ def run(dataDir, labDir, scriptsDir, outDir):
         # (FIXME : change mgcInputTransform to mgcInputWarp and mgcOutputTransform to mgcOutputWarp once tree structure for transforms is done)
         mgcWarpParamSpec = d.getByTagParamSpec(lambda tag: getFirst(tag) == 'mgcInputTransform' or getFirst(tag) == 'mgcOutputTransform')
         dist = timed(trn.trainCGandEM)(dist, corpus.accumulate, ps = mgcWarpParamSpec, iterations = 5, length = -25, afterEst = afterEst, verbosity = 2)
-        writeDistFile(os.path.join(distOutDir, 'xf.dist'), dist)
         timed(drawVarious)(dist, id = 'xf', simpleResiduals = True)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -856,7 +831,6 @@ def run(dataDir, labDir, scriptsDir, outDir):
         timed(drawVarious)(dist, id = 'xf.res_init', debugResiduals = True)
         dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = residualParamSpec, length = -50, verbosity = 2)
         dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = subtractMeanParamSpec, length = -50, verbosity = 2)
-        writeDistFile(os.path.join(distOutDir, 'xf.res.dist'), dist)
         timed(drawVarious)(dist, id = 'xf.res', debugResiduals = True)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -866,7 +840,6 @@ def run(dataDir, labDir, scriptsDir, outDir):
         print
         print 'ESTIMATING ALL PARAMETERS'
         dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = d.getDefaultParamSpec(), length = -200, verbosity = 2)
-        writeDistFile(os.path.join(distOutDir, 'xf.res.xf.dist'), dist)
         timed(drawVarious)(dist, id = 'xf.res.xf', debugResiduals = True)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -925,7 +898,6 @@ def run(dataDir, labDir, scriptsDir, outDir):
         print 'DEBUG: estimating monophone net dist'
         dist = trn.trainEM(dist, timed(corpus.accumulate), deltaThresh = 1e-4, minIterations = 4, maxIterations = 10, verbosity = 2)
         reportFlooredPerStream(dist)
-        writeDistFile(os.path.join(distOutDir, 'flatStart.mono.dist'), dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
         evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
