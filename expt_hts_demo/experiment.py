@@ -318,7 +318,9 @@ def run(dataDir, labDir, scriptsDir, outDir):
     parseLabel = labels_hts_demo.getParseLabel()
     corpus = corpus_arctic.getCorpusSynthFewer(
         trainUttIds = corpus_arctic.getTrainUttIds(),
-        parseLabel = parseLabel, mgcOrder = 40,
+        parseLabel = parseLabel,
+        subLabels = None,
+        mgcOrder = 40,
         dataDir = dataDir, labDir = labDir, scriptsDir = scriptsDir
     )
 

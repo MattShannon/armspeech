@@ -21,19 +21,13 @@ from armspeech.util.timing import timed
 
 import os
 
-@codeDeps()
-def parseState(stateString):
-    assert stateString[:6] == 'state['
-    assert stateString[-1] == ']'
-    return int(stateString[6:-1]) - 2
-
 @codeDeps(ForwardRef(lambda: cleanAlignment), cps.Corpus, feat.Msd01Encoder,
     feat.Stream, feat.doHtsDemoWaveformGeneration, feat.readAcousticGen,
     feat.writeAcousticSeq, ForwardRef(lambda: getMgcLims40), lab.checkAlignment,
-    lab.readTwoLevelHtkLabFile, parseState, timed
+    lab.readTwoLevelHtkLabFile, timed
 )
 class ArcticCorpus(cps.Corpus):
-    def __init__(self, trainUttIds, testUttIds, synthUttIds, dataDir, labDir, scriptsDir, parseLabel, mgcOrder, framePeriod):
+    def __init__(self, trainUttIds, testUttIds, synthUttIds, dataDir, labDir, scriptsDir, parseLabel, subLabels, mgcOrder, framePeriod):
         self.trainUttIds = trainUttIds
         self.testUttIds = testUttIds
         self.synthUttIds = synthUttIds
@@ -41,9 +35,12 @@ class ArcticCorpus(cps.Corpus):
         self.labDir = labDir
         self.scriptsDir = scriptsDir
         self.parseLabel = parseLabel
+        self.subLabels = subLabels
         self.mgcOrder = mgcOrder
         self.framePeriod = framePeriod
 
+        if self.subLabels is not None:
+            self.subLabelSet = frozenset(self.subLabels)
         lf0Encoder = feat.Msd01Encoder(specialValue = -1e10)
         mgcStream = feat.Stream('mgc', mgcOrder)
         lf0Stream = feat.Stream('lf0', 1, lf0Encoder)
@@ -52,12 +49,19 @@ class ArcticCorpus(cps.Corpus):
 
         self.mgcLims = getMgcLims40()
 
+    def parseSubLabel(self, stateString):
+        assert stateString[:6] == 'state['
+        assert stateString[-1] == ']'
+        subLabel = int(stateString[6:-1]) - 2
+        assert subLabel in self.subLabelSet
+        return subLabel
+
     def rawAlignment(self, uttId):
         return lab.readTwoLevelHtkLabFile(
             os.path.join(self.labDir, uttId+'.lab'),
             self.framePeriod,
             decodeHigh = self.parseLabel,
-            decodeLow = parseState,
+            decodeLow = self.parseSubLabel,
             fallbackToOneLevel = True
         )
     def rawAcousticSeq(self, uttId):
@@ -119,13 +123,13 @@ def cleanAlignment(alignment, acousticSeq, verbose = True):
     return alignmentNew
 
 @codeDeps(ArcticCorpus, ForwardRef(lambda: getTestUttIds))
-def getCorpus(trainUttIds, dataDir, labDir, scriptsDir, parseLabel, mgcOrder):
+def getCorpus(trainUttIds, dataDir, labDir, scriptsDir, parseLabel, subLabels, mgcOrder):
     testUttIds = getTestUttIds()
-    return ArcticCorpus(trainUttIds, testUttIds, testUttIds, dataDir, labDir, scriptsDir, parseLabel = parseLabel, mgcOrder = mgcOrder, framePeriod = 0.005)
+    return ArcticCorpus(trainUttIds, testUttIds, testUttIds, dataDir, labDir, scriptsDir, parseLabel = parseLabel, subLabels = subLabels, mgcOrder = mgcOrder, framePeriod = 0.005)
 @codeDeps(ArcticCorpus, ForwardRef(lambda: getTestUttIds))
-def getCorpusSynthFewer(trainUttIds, dataDir, labDir, scriptsDir, parseLabel, mgcOrder):
+def getCorpusSynthFewer(trainUttIds, dataDir, labDir, scriptsDir, parseLabel, subLabels, mgcOrder):
     testUttIds = getTestUttIds()
-    return ArcticCorpus(trainUttIds, testUttIds, testUttIds[2:4], dataDir, labDir, scriptsDir, parseLabel = parseLabel, mgcOrder = mgcOrder, framePeriod = 0.005)
+    return ArcticCorpus(trainUttIds, testUttIds, testUttIds[2:4], dataDir, labDir, scriptsDir, parseLabel = parseLabel, subLabels = subLabels, mgcOrder = mgcOrder, framePeriod = 0.005)
 
 @codeDeps()
 def getTrainUttIds():
