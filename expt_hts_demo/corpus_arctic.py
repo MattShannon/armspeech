@@ -29,7 +29,7 @@ def parseState(stateString):
 
 @codeDeps(ForwardRef(lambda: cleanAlignment), cps.Corpus, feat.Msd01Encoder,
     feat.Stream, feat.doHtsDemoWaveformGeneration, feat.readAcousticGen,
-    feat.writeAcousticSeq, ForwardRef(lambda: getMgcLims40), iterhelp.chunkList,
+    feat.writeAcousticSeq, ForwardRef(lambda: getMgcLims40),
     lab.checkAlignment, lab.readTwoLevelHtkLabFile, parseState, timed
 )
 class ArcticCorpus(cps.Corpus):

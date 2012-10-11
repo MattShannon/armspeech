@@ -23,7 +23,15 @@ def contextualizeIter(contextLength, iter, fillFrames = []):
             context.popleft()
 
 @codeDeps()
+def getChunk(xs, chunkIndex, numChunks):
+    assert numChunks >= 1
+    n = len(xs)
+    chunkStart = (n * chunkIndex) // numChunks
+    chunkEnd = (n * (chunkIndex + 1)) // numChunks
+    return xs[chunkStart:chunkEnd]
+
+@codeDeps(getChunk)
 def chunkList(xs, numChunks):
     """Splits list into roughly evenly-sized chunks."""
-    n = len(xs)
-    return [ xs[((n * chunkIndex) // numChunks):((n * (chunkIndex + 1)) // numChunks)] for chunkIndex in range(numChunks) ]
+    assert numChunks >= 1
+    return [ getChunk(xs, chunkIndex, numChunks) for chunkIndex in range(numChunks) ]
