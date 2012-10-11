@@ -8,6 +8,7 @@
 
 from __future__ import division
 
+from armspeech.util.util import identityFn
 from codedep import codeDeps
 
 import sys
@@ -115,3 +116,44 @@ class StandardizeAlignment(object):
                 alignment = alignment2to1(alignment)
             return uniformSegmentAlignment(alignment,
                                            list(range(self.numSubLabelsAfter)))
+
+@codeDeps(identityFn)
+class AlignmentToPhoneticSeq(object):
+    def __init__(self, mapAlignment = identityFn, mapLabel = identityFn):
+        self.mapAlignment = mapAlignment
+        self.mapLabel = mapLabel
+
+    def toPhoneticIter(self, alignment):
+        mapLabel = self.mapLabel
+        for labelStartTime, labelEndTime, label, subAlignment in self.mapAlignment(alignment):
+            labelOut = mapLabel(label)
+            for startTime, endTime, subLabel, subSubAlignment in subAlignment:
+                assert subSubAlignment is None
+                for time in range(startTime, endTime):
+                    yield labelOut, subLabel
+
+    def __call__(self, alignment):
+        return list(self.toPhoneticIter(alignment))
+
+@codeDeps(identityFn)
+class AlignmentToPhoneticSeqWithTiming(object):
+    def __init__(self, mapAlignment = identityFn, mapLabel = identityFn,
+                 mapTiming = identityFn):
+        self.mapAlignment = mapAlignment
+        self.mapLabel = mapLabel
+        self.mapTiming = mapTiming
+
+    def toPhoneticIter(self, alignment):
+        mapLabel = self.mapLabel
+        mapTiming = self.mapTiming
+        for labelStartTime, labelEndTime, label, subAlignment in self.mapAlignment(alignment):
+            labelOut = mapLabel(label)
+            for startTime, endTime, subLabel, subSubAlignment in subAlignment:
+                assert subSubAlignment is None
+                for time in range(startTime, endTime):
+                    framesBefore = time - startTime
+                    framesAfter = endTime - time - 1
+                    yield labelOut, subLabel, mapTiming((framesBefore, framesAfter))
+
+    def __call__(self, alignment):
+        return list(self.toPhoneticIter(alignment))

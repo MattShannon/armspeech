@@ -8,6 +8,7 @@
 
 from __future__ import division
 
+import armspeech.modelling.alignment as align
 from armspeech.modelling.alignment import StandardizeAlignment
 from armspeech.modelling import nodetree
 import armspeech.modelling.dist as d
@@ -33,47 +34,6 @@ import operator
 import math
 import numpy as np
 import armspeech.numpy_settings
-
-@codeDeps(identityFn)
-class AlignmentToPhoneticSeq(object):
-    def __init__(self, mapAlignment = identityFn, mapLabel = identityFn):
-        self.mapAlignment = mapAlignment
-        self.mapLabel = mapLabel
-
-    def toPhoneticIter(self, alignment):
-        mapLabel = self.mapLabel
-        for labelStartTime, labelEndTime, label, subAlignment in self.mapAlignment(alignment):
-            labelOut = mapLabel(label)
-            for startTime, endTime, subLabel, subSubAlignment in subAlignment:
-                assert subSubAlignment is None
-                for time in range(startTime, endTime):
-                    yield labelOut, subLabel
-
-    def __call__(self, alignment):
-        return list(self.toPhoneticIter(alignment))
-
-@codeDeps(identityFn)
-class AlignmentToPhoneticSeqWithTiming(object):
-    def __init__(self, mapAlignment = identityFn, mapLabel = identityFn,
-                 mapTiming = identityFn):
-        self.mapAlignment = mapAlignment
-        self.mapLabel = mapLabel
-        self.mapTiming = mapTiming
-
-    def toPhoneticIter(self, alignment):
-        mapLabel = self.mapLabel
-        mapTiming = self.mapTiming
-        for labelStartTime, labelEndTime, label, subAlignment in self.mapAlignment(alignment):
-            labelOut = mapLabel(label)
-            for startTime, endTime, subLabel, subSubAlignment in subAlignment:
-                assert subSubAlignment is None
-                for time in range(startTime, endTime):
-                    framesBefore = time - startTime
-                    framesAfter = endTime - time - 1
-                    yield labelOut, subLabel, mapTiming((framesBefore, framesAfter))
-
-    def __call__(self, alignment):
-        return list(self.toPhoneticIter(alignment))
 
 @codeDeps(d.BinaryLogisticClassifier, d.ConstantClassifier, d.LinearGaussian,
     d.distNodeList
@@ -318,7 +278,7 @@ def run(dataDir, labDir, corpusSubLabels, scriptsDir, outDir):
                     questionAnswers.append(question(labelValue))
             return questionAnswers
 
-        alignmentToPhoneticSeq = AlignmentToPhoneticSeq(
+        alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
             mapAlignment = StandardizeAlignment(corpus.subLabels, subLabels),
             mapLabel = getQuestionAnswers
         )
@@ -382,7 +342,7 @@ def run(dataDir, labDir, corpusSubLabels, scriptsDir, outDir):
         printTime('finished dumpCorpus')
 
     def trainGlobalSystem(standardizeAlignment, lgVarianceFloorMult):
-        alignmentToPhoneticSeq = AlignmentToPhoneticSeq(
+        alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
             mapAlignment = standardizeAlignment
         )
 
@@ -530,7 +490,7 @@ def run(dataDir, labDir, corpusSubLabels, scriptsDir, outDir):
         def mapTiming((framesBefore, framesAfter)):
             return framesBefore, framesAfter
 
-        alignmentToPhoneticSeq = AlignmentToPhoneticSeqWithTiming(
+        alignmentToPhoneticSeq = align.AlignmentToPhoneticSeqWithTiming(
             mapAlignment = StandardizeAlignment(corpus.subLabels, subLabels),
             mapLabel = operator.attrgetter('phone'),
             mapTiming = mapTiming
@@ -663,7 +623,7 @@ def run(dataDir, labDir, corpusSubLabels, scriptsDir, outDir):
         print 'numSubLabels =', numSubLabels
         subLabels = list(range(numSubLabels))
 
-        alignmentToPhoneticSeq = AlignmentToPhoneticSeq(
+        alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
             mapAlignment = StandardizeAlignment(corpus.subLabels, subLabels),
             mapLabel = (ConstantFn('global') if globalPhone
                         else operator.attrgetter('phone'))
