@@ -29,8 +29,8 @@ def parseState(stateString):
 
 @codeDeps(ForwardRef(lambda: cleanAlignment), cps.Corpus, feat.Msd01Encoder,
     feat.Stream, feat.doHtsDemoWaveformGeneration, feat.readAcousticGen,
-    feat.writeAcousticSeq, ForwardRef(lambda: getMgcLims40),
-    lab.checkAlignment, lab.readTwoLevelHtkLabFile, parseState, timed
+    feat.writeAcousticSeq, ForwardRef(lambda: getMgcLims40), lab.checkAlignment,
+    lab.readTwoLevelHtkLabFile, parseState, timed
 )
 class ArcticCorpus(cps.Corpus):
     def __init__(self, trainUttIds, testUttIds, synthUttIds, dataDir, labDir, scriptsDir, parseLabel, mgcOrder, framePeriod):
@@ -51,10 +51,6 @@ class ArcticCorpus(cps.Corpus):
         self.streams = [mgcStream, lf0Stream, bapStream]
 
         self.mgcLims = getMgcLims40()
-
-    def chunk(self, numChunks):
-        trainUttIdsList = iterhelp.chunkList(self.trainUttIds, numChunks = numChunks)
-        return [ ArcticCorpus(trainUttIds, self.testUttIds, self.synthUttIds, self.dataDir, self.labDir, self.scriptsDir, self.parseLabel, self.mgcOrder, self.framePeriod) for trainUttIds in trainUttIdsList ]
 
     def rawAlignment(self, uttId):
         return lab.readTwoLevelHtkLabFile(
