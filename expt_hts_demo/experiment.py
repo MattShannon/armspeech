@@ -305,7 +305,7 @@ def createBlcBasedLf0Acc(lf0StreamDepth, lgTag = None):
         )
     )
 
-def run(dataDir, labDir, scriptsDir, outDir):
+def run(dataDir, labDir, corpusSubLabels, scriptsDir, outDir):
     synthOutDir = os.path.join(outDir, 'synth')
     distOutDir = os.path.join(outDir, 'dist')
     figOutDir = os.path.join(outDir, 'fig')
@@ -319,7 +319,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
     corpus = corpus_arctic.getCorpusSynthFewer(
         trainUttIds = corpus_arctic.getTrainUttIds(),
         parseLabel = parseLabel,
-        subLabels = None,
+        subLabels = corpusSubLabels,
         mgcOrder = 40,
         dataDir = dataDir, labDir = labDir, scriptsDir = scriptsDir
     )
