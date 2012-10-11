@@ -23,6 +23,7 @@ from codedep import codeDeps
 import phoneset_cmu
 import labels_hts_demo
 import questions_hts_demo
+import mgc_lf0_bap
 import corpus_arctic
 
 import os
@@ -123,50 +124,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
     mgcSummarizer = summarizer.IndexSpecSummarizer([0], fromOffset = 0, toOffset = 0, order = mgcStream.order, depth = mgcStreamDepth)
     bapSummarizer = summarizer.IndexSpecSummarizer([], fromOffset = 0, toOffset = 0, order = bapStream.order, depth = bapStreamDepth)
 
-    zeroFrame = np.zeros((mgcStream.order,)), None, np.zeros((bapStream.order,))
-    def computeFirstFrameAverages():
-        mgcFirstFrameAverage = np.zeros((mgcStream.order,))
-        lf0FirstFrameProportionUnvoiced = 0.0
-        bapFirstFrameAverage = np.zeros((bapStream.order,))
-        numUtts = 0
-        for uttId in corpus.trainUttIds:
-            (uttId, alignment), acousticSeq = corpus.data(uttId)
-            mgcFrame, lf0Frame, bapFrame = acousticSeq[0]
-            mgcFirstFrameAverage += mgcFrame
-            lf0FirstFrameProportionUnvoiced += (1.0 if lf0Frame == (0, None) else 0.0)
-            bapFirstFrameAverage += bapFrame
-            numUtts += 1
-        mgcFirstFrameAverage /= numUtts
-        lf0FirstFrameProportionUnvoiced /= numUtts
-        bapFirstFrameAverage /= numUtts
-        return mgcFirstFrameAverage, lf0FirstFrameProportionUnvoiced, bapFirstFrameAverage
-    mgcFirstFrameAverage, lf0FirstFrameProportionUnvoiced, bapFirstFrameAverage = computeFirstFrameAverages()
-    # not crucial that this is true
-    # (FIXME : perhaps shouldn't be an assert)
-    assert lf0FirstFrameProportionUnvoiced >= 0.5
-    firstFrameAverage = mgcFirstFrameAverage, None, bapFirstFrameAverage
-
-    def computeFrameMeanAndVariance():
-        mgcSum = np.zeros((mgcStream.order,))
-        mgcSumSqr = np.zeros((mgcStream.order,))
-        bapSum = np.zeros((bapStream.order,))
-        bapSumSqr = np.zeros((bapStream.order,))
-        numFrames = 0
-        for uttId in corpus.trainUttIds:
-            (uttId, alignment), acousticSeq = corpus.data(uttId)
-            for mgcFrame, lf0Frame, bapFrame in acousticSeq:
-                mgcFrame = np.asarray(mgcFrame)
-                bapFrame = np.asarray(bapFrame)
-                mgcSum += mgcFrame
-                mgcSumSqr += mgcFrame * mgcFrame
-                bapSum += bapFrame
-                bapSumSqr += bapFrame * bapFrame
-            numFrames += len(acousticSeq)
-        mgcMean = mgcSum / numFrames
-        bapMean = bapSum / numFrames
-        mgcVariance = mgcSumSqr / numFrames - mgcMean * mgcMean
-        bapVariance = bapSumSqr / numFrames - bapMean * bapMean
-        return (mgcMean, bapMean), (mgcVariance, bapVariance)
+    firstFrameAverage = mgc_lf0_bap.computeFirstFrameAverage(corpus, mgcStream.order, bapStream.order)
 
 
     def reportTrainAux((trainAux, trainAuxRat), trainFrames):
