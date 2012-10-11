@@ -10,6 +10,8 @@ from __future__ import division
 
 from codedep import codeDeps
 
+import sys
+
 @codeDeps()
 def checkAlignment(alignment, startTimeReq = None, endTimeReq = None,
                    allowZeroDur = True):
@@ -46,3 +48,70 @@ def checkAlignment(alignment, startTimeReq = None, endTimeReq = None,
         if subAlignment is not None:
             checkAlignment(subAlignment, startTimeReq = startTime,
                            endTimeReq = endTime, allowZeroDur = allowZeroDur)
+
+@codeDeps()
+def alignment2to1(alignment):
+    """Converts a two-level alignment to one-level by ignoring lower level."""
+    return [ (startTime, endTime, label, None)
+             for startTime, endTime, label, subAlignment in alignment ]
+
+@codeDeps()
+def alignment1to2(alignment):
+    """Converts an alignment to two-level with one sub-label."""
+    return [ (startTime, endTime, label, [(startTime, endTime, 0, None)])
+             for startTime, endTime, label, subAlignment in alignment ]
+
+@codeDeps()
+def uniformSegmentAlignment(alignment, subLabelsOut):
+    """Converts a one-level alignment to two-level by uniform segmentation."""
+    alignmentOut = []
+    numSubLabels = len(subLabelsOut)
+    for labelStartTime, labelEndTime, label, subAlignment in alignment:
+        assert subAlignment is None
+        durMult = (labelEndTime - labelStartTime) * 1.0 / numSubLabels
+        subAlignmentOut = []
+        for subLabelIndex, subLabel in enumerate(subLabelsOut):
+            startTime = int(durMult * subLabelIndex + 0.5) + labelStartTime
+            endTime = int(durMult * (subLabelIndex + 1) + 0.5) + labelStartTime
+            subAlignmentOut.append((startTime, endTime, subLabel, None))
+        alignmentOut.append(
+            (labelStartTime, labelEndTime, label, subAlignmentOut)
+        )
+    return alignmentOut
+
+@codeDeps(alignment1to2, alignment2to1, uniformSegmentAlignment)
+class StandardizeAlignment(object):
+    def __init__(self, subLabelsBefore, subLabelsAfter):
+        if subLabelsBefore is None:
+            self.numSubLabelsBefore = None
+        else:
+            assert subLabelsBefore == list(range(len(subLabelsBefore)))
+            self.numSubLabelsBefore = len(subLabelsBefore)
+        if subLabelsAfter is None:
+            self.numSubLabelsAfter = None
+        else:
+            assert subLabelsAfter == list(range(len(subLabelsAfter)))
+            self.numSubLabelsAfter = len(subLabelsAfter)
+
+        if not (self.numSubLabelsBefore == self.numSubLabelsAfter or
+                self.numSubLabelsAfter in (None, 1)):
+            sys.stderr.write('WARNING: cannot convert alignment with %s'
+                             ' sub-labels to alignment with %s sub-labels'
+                             ' exactly -- using uniform segmentation\n' %
+                             (self.numSubLabelsBefore, self.numSubLabelsAfter))
+
+    def __call__(self, alignment):
+        """Returns a standardized, state-level alignment."""
+        if self.numSubLabelsBefore == self.numSubLabelsAfter:
+            return alignment
+        elif self.numSubLabelsAfter in (None, 1):
+            if self.numSubLabelsBefore is not None:
+                alignment = alignment2to1(alignment)
+            if self.numSubLabelsAfter == 1:
+                alignment = alignment1to2(alignment)
+            return alignment
+        else:
+            if self.numSubLabelsBefore is not None:
+                alignment = alignment2to1(alignment)
+            return uniformSegmentAlignment(alignment,
+                                           list(range(self.numSubLabelsAfter)))
