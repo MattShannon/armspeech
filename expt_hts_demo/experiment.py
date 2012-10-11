@@ -807,7 +807,7 @@ def run(dataDir, labDir, corpusSubLabels, scriptsDir, outDir):
         print 'lgVarianceFloorMult =', lgVarianceFloorMult
         print 'ccProbFloor =', ccProbFloor
 
-        globalDist = trainGlobalSystem(StandardizeAlignment(corpus.subLabels, subLabels), lgVarianceFloorMult)
+        globaldist = trainglobalsystem(standardizealignment(corpus.sublabels, sublabels), lgvariancefloormult)
 
         print 'DEBUG: converting global dist to monophone net dist'
         def netFor(alignment):
