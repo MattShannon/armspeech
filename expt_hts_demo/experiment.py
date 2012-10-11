@@ -228,6 +228,38 @@ def createBlcBasedLf0Acc(lf0StreamDepth, lgTag = None):
         )
     )
 
+@codeDeps(d.AutoregressiveSequenceAcc, d.LinearGaussian, d.MappedInputAcc,
+    d.getDefaultEstimateTotAux, nodetree.defaultMapPartial, nodetree.getDagMap,
+    reportTrainAux, timed
+)
+def trainGlobalDist(corpus, depth, alignmentToPhoneticSeq, initialFrame, frameSummarizer, createLeafAccs, lgVarianceFloorMult):
+    acc = d.AutoregressiveSequenceAcc(
+        depth,
+        alignmentToPhoneticSeq,
+        [ initialFrame for i in range(depth) ],
+        frameSummarizer.createAcc(True, lambda streamIndex:
+            d.MappedInputAcc(lambda (phInput, acInput): acInput,
+                createLeafAccs[streamIndex]()
+            ).withTag(('stream', corpus.streams[streamIndex].name))
+        )
+    )
+
+    print 'DEBUG: estimating global dist'
+    timed(corpus.accumulate)(acc)
+    dist, (trainAux, trainAuxRat) = d.getDefaultEstimateTotAux()(acc)
+    reportTrainAux((trainAux, trainAuxRat), acc.count())
+
+    print 'lgVarianceFloorMult =', lgVarianceFloorMult
+
+    def setFloorMapPartial(dist, mapChild):
+        if isinstance(dist, d.LinearGaussian) and dist.tag == 'setFloor':
+            return d.LinearGaussian(dist.coeff, dist.variance, dist.variance * lgVarianceFloorMult)
+
+    print 'DEBUG: setting floors'
+    dist = nodetree.getDagMap([setFloorMapPartial, nodetree.defaultMapPartial])(dist)
+
+    return dist
+
 def run(dataDir, labDir, corpusSubLabels, scriptsDir, outDir):
     synthOutDir = os.path.join(outDir, 'synth')
     distOutDir = os.path.join(outDir, 'dist')
@@ -341,50 +373,6 @@ def run(dataDir, labDir, corpusSubLabels, scriptsDir, outDir):
 
         printTime('finished dumpCorpus')
 
-    def trainGlobalSystem(standardizeAlignment, lgVarianceFloorMult):
-        alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
-            mapAlignment = standardizeAlignment
-        )
-
-        acc = d.AutoregressiveSequenceAcc(
-            maxDepth,
-            alignmentToPhoneticSeq,
-            [ firstFrameAverage for i in range(maxDepth) ],
-            frameSummarizer.createAcc(True, lambda streamIndex:
-                {
-                    0:
-                        d.MappedInputAcc(lambda (phInput, acInput): acInput,
-                            createLinearGaussianVectorAcc(mgcSummarizer, lgTag = 'setFloor')
-                        ).withTag(('stream', corpus.streams[streamIndex].name))
-                ,   1:
-                        d.MappedInputAcc(lambda (phInput, acInput): acInput,
-                            #createBlcBasedLf0Acc(lf0StreamDepth, lgTag = 'setFloor')
-                            d.OracleAcc()
-                        ).withTag(('stream', corpus.streams[streamIndex].name))
-                ,   2:
-                        d.MappedInputAcc(lambda (phInput, acInput): acInput,
-                            d.OracleAcc()
-                        ).withTag(('stream', corpus.streams[streamIndex].name))
-                }[streamIndex]
-            )
-        )
-
-        print 'DEBUG: estimating global dist'
-        timed(corpus.accumulate)(acc)
-        dist, (trainAux, trainAuxRat) = d.getDefaultEstimateTotAux()(acc)
-        reportTrainAux((trainAux, trainAuxRat), acc.count())
-
-        print 'lgVarianceFloorMult =', lgVarianceFloorMult
-
-        def setFloorMapPartial(dist, mapChild):
-            if isinstance(dist, d.LinearGaussian) and dist.tag == 'setFloor':
-                return d.LinearGaussian(dist.coeff, dist.variance, dist.variance * lgVarianceFloorMult)
-
-        print 'DEBUG: setting floors'
-        dist = nodetree.getDagMap([setFloorMapPartial, nodetree.defaultMapPartial])(dist)
-
-        return dist
-
     def doGlobalSystem(numSubLabels = 1):
         print
         print 'TRAINING GLOBAL SYSTEM'
@@ -396,7 +384,18 @@ def run(dataDir, labDir, corpusSubLabels, scriptsDir, outDir):
         lgVarianceFloorMult = 1e-3
         print 'lgVarianceFloorMult =', lgVarianceFloorMult
 
-        dist = trainGlobalSystem(StandardizeAlignment(corpus.subLabels, subLabels), lgVarianceFloorMult)
+        alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
+            mapAlignment = align.StandardizeAlignment(corpus.subLabels, subLabels)
+        )
+        # FIXME : setFloor shouldn't need to be specified here
+        createLeafAccs = [
+            lambda: createLinearGaussianVectorAcc(mgcSummarizer, lgTag = 'setFloor'),
+            d.OracleAcc,
+            d.OracleAcc,
+        ]
+        dist = trainGlobalDist(corpus, maxDepth, alignmentToPhoneticSeq,
+                               firstFrameAverage, frameSummarizer,
+                               createLeafAccs, lgVarianceFloorMult)
         reportFlooredPerStream(dist)
         evaluateLogProb(dist, corpus)
         evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
@@ -444,7 +443,18 @@ def run(dataDir, labDir, corpusSubLabels, scriptsDir, outDir):
                     )
                 ).withTag(dist.tag)
 
-        globalDist = trainGlobalSystem(StandardizeAlignment(corpus.subLabels, subLabels), lgVarianceFloorMult)
+        alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
+            mapAlignment = align.StandardizeAlignment(corpus.subLabels, subLabels)
+        )
+        # FIXME : setFloor shouldn't need to be specified here
+        createLeafAccs = [
+            lambda: createLinearGaussianVectorAcc(mgcSummarizer, lgTag = 'setFloor'),
+            d.OracleAcc,
+            d.OracleAcc,
+        ]
+        globalDist = trainGlobalDist(corpus, maxDepth, alignmentToPhoneticSeq,
+                                     firstFrameAverage, frameSummarizer,
+                                     createLeafAccs, lgVarianceFloorMult)
         dist = globalDist
 
         print 'DEBUG: converting global dist to monophone dist'
@@ -565,7 +575,18 @@ def run(dataDir, labDir, corpusSubLabels, scriptsDir, outDir):
                     )
                 ).withTag(dist.tag)
 
-        globalDist = trainGlobalSystem(StandardizeAlignment(corpus.subLabels, subLabels), lgVarianceFloorMult)
+        alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
+            mapAlignment = align.StandardizeAlignment(corpus.subLabels, subLabels)
+        )
+        # FIXME : setFloor shouldn't need to be specified here
+        createLeafAccs = [
+            lambda: createLinearGaussianVectorAcc(mgcSummarizer, lgTag = 'setFloor'),
+            d.OracleAcc,
+            d.OracleAcc,
+        ]
+        globalDist = trainGlobalDist(corpus, maxDepth, alignmentToPhoneticSeq,
+                                     firstFrameAverage, frameSummarizer,
+                                     createLeafAccs, lgVarianceFloorMult)
         dist = globalDist
 
         print 'DEBUG: converting global dist to full ctx acc'
@@ -807,7 +828,17 @@ def run(dataDir, labDir, corpusSubLabels, scriptsDir, outDir):
         print 'lgVarianceFloorMult =', lgVarianceFloorMult
         print 'ccProbFloor =', ccProbFloor
 
-        globaldist = trainglobalsystem(standardizealignment(corpus.sublabels, sublabels), lgvariancefloormult)
+        alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
+            mapAlignment = align.StandardizeAlignment(corpus.subLabels, [0])
+        )
+        createLeafAccs = [
+            lambda: createLinearGaussianVectorAcc(mgcSummarizer, lgTag = 'setFloor'),
+            d.OracleAcc,
+            d.OracleAcc,
+        ]
+        globalDist = trainGlobalDist(corpus, maxDepth, alignmentToPhoneticSeq,
+                                     firstFrameAverage, frameSummarizer,
+                                     createLeafAccs, lgVarianceFloorMult)
 
         print 'DEBUG: converting global dist to monophone net dist'
         def netFor(alignment):
