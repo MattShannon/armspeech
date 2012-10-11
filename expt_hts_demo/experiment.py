@@ -276,6 +276,7 @@ def getDrawMgc(corpus, mgcIndices, figOutDir, ylims = None, includeGivenLabels =
             draw.drawLabelledSeq([(trueSeqTime, trueSeq), (synthSeqTime, synthSeq)], partitionedLabelSeqs, outPdf = outPdf, figSizeRate = 10.0, ylims = ylims, colors = ['red', 'purple'])
     return drawMgc
 
+@codeDeps(d.LinearGaussianAcc, d.MappedInputAcc, xf.AddBias)
 def createLinearGaussianVectorAcc(indexSpecSummarizer, lgTag = None):
     return indexSpecSummarizer.createAcc(False, lambda outIndex:
         d.MappedInputAcc(xf.AddBias(),
@@ -285,6 +286,10 @@ def createLinearGaussianVectorAcc(indexSpecSummarizer, lgTag = None):
         )
     )
 
+@codeDeps(d.BinaryLogisticClassifier, d.BinaryLogisticClassifierAcc,
+    d.FixedValueAcc, d.IdentifiableMixtureAcc, d.LinearGaussianAcc,
+    d.MappedInputAcc, xf.AddBias, xf.Msd01ToVector
+)
 def createBlcBasedLf0Acc(lf0StreamDepth, lgTag = None):
     return d.MappedInputAcc(xf.Msd01ToVector(),
         d.MappedInputAcc(xf.AddBias(),
