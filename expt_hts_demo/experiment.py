@@ -17,6 +17,7 @@ from armspeech.modelling import cluster
 from armspeech.modelling import wnet
 from armspeech.speech.features import stdCepDist, stdCepDistIncZero
 from armspeech.speech import draw
+from armspeech.util.util import identityFn, ConstantFn, getElem
 from armspeech.util.timing import timed, printTime
 from codedep import codeDeps
 
@@ -27,27 +28,51 @@ import mgc_lf0_bap
 import corpus_arctic
 
 import os
+import operator
 import math
 import numpy as np
 import armspeech.numpy_settings
 
-@codeDeps()
-def getFirst(x, default = None):
-    try:
-        t = x[0]
-    except TypeError, AttributeError:
-        return default
-    else:
-        return t
+@codeDeps(identityFn)
+class AlignmentToPhoneticSeq(object):
+    def __init__(self, mapAlignment = identityFn, mapLabel = identityFn):
+        self.mapAlignment = mapAlignment
+        self.mapLabel = mapLabel
 
-@codeDeps()
-def getElem(xs, index, length, default = None):
-    try:
-        assert len(xs) == length
-    except TypeError:
-        # not a sequence type
-        return default
-    return xs[index]
+    def toPhoneticIter(self, alignment):
+        mapLabel = self.mapLabel
+        for labelStartTime, labelEndTime, label, subAlignment in self.mapAlignment(alignment):
+            labelOut = mapLabel(label)
+            for startTime, endTime, subLabel, subSubAlignment in subAlignment:
+                assert subSubAlignment is None
+                for time in range(startTime, endTime):
+                    yield labelOut, subLabel
+
+    def __call__(self, alignment):
+        return list(self.toPhoneticIter(alignment))
+
+@codeDeps(identityFn)
+class AlignmentToPhoneticSeqWithTiming(object):
+    def __init__(self, mapAlignment = identityFn, mapLabel = identityFn,
+                 mapTiming = identityFn):
+        self.mapAlignment = mapAlignment
+        self.mapLabel = mapLabel
+        self.mapTiming = mapTiming
+
+    def toPhoneticIter(self, alignment):
+        mapLabel = self.mapLabel
+        mapTiming = self.mapTiming
+        for labelStartTime, labelEndTime, label, subAlignment in self.mapAlignment(alignment):
+            labelOut = mapLabel(label)
+            for startTime, endTime, subLabel, subSubAlignment in subAlignment:
+                assert subSubAlignment is None
+                for time in range(startTime, endTime):
+                    framesBefore = time - startTime
+                    framesAfter = endTime - time - 1
+                    yield labelOut, subLabel, mapTiming((framesBefore, framesAfter))
+
+    def __call__(self, alignment):
+        return list(self.toPhoneticIter(alignment))
 
 @codeDeps()
 class StandardizeAlignment(object):
@@ -289,28 +314,27 @@ def run(dataDir, labDir, scriptsDir, outDir):
         print 'numSubLabels =', numSubLabels
         subLabels = list(range(numSubLabels))
 
-        standardizeAlignment = StandardizeAlignment(subLabels)
-
-        def alignmentToPhoneticSeq(alignment):
-            for phoneStartTime, phoneEndTime, label, subAlignment in standardizeAlignment(alignment):
-                questionAnswers = []
-                for labelValuer, questions in questionGroups:
-                    labelValue = labelValuer(label)
-                    for question in questions:
-                        questionAnswers.append(question(labelValue))
-                for startTime, endTime, subLabel, subSubAlignment in subAlignment:
-                    assert subSubAlignment is None
-                    for time in range(startTime, endTime):
-                        yield questionAnswers, subLabel
-
         questionGroups = questions_hts_demo.getTriphoneQuestionGroups(phoneset)
+
+        def getQuestionAnswers(label):
+            questionAnswers = []
+            for labelValuer, questions in questionGroups:
+                labelValue = labelValuer(label)
+                for question in questions:
+                    questionAnswers.append(question(labelValue))
+            return questionAnswers
+
+        alignmentToPhoneticSeq = AlignmentToPhoneticSeq(
+            mapAlignment = StandardizeAlignment(subLabels),
+            mapLabel = getQuestionAnswers
+        )
 
         # FIXME : only works if no cross-stream stuff happening. Make more robust somehow.
         shiftToPrevTransform = xf.ShiftOutputTransform(lambda x: -x[1][-1])
 
         dist = d.AutoregressiveSequenceDist(
             maxDepth,
-            lambda alignment: list(alignmentToPhoneticSeq(alignment)),
+            alignmentToPhoneticSeq,
             [ firstFrameAverage for i in range(maxDepth) ],
             frameSummarizer.createDist(True, lambda streamIndex:
                 {
@@ -364,13 +388,9 @@ def run(dataDir, labDir, scriptsDir, outDir):
         printTime('finished dumpCorpus')
 
     def trainGlobalSystem(standardizeAlignment, lgVarianceFloorMult):
-        def alignmentToPhoneticIter(alignment):
-            for phoneStartTime, phoneEndTime, label, subAlignment in standardizeAlignment(alignment):
-                for startTime, endTime, subLabel, subSubAlignment in subAlignment:
-                    assert subSubAlignment is None
-                    for time in range(startTime, endTime):
-                        yield label, subLabel
-        alignmentToPhoneticSeq = lambda alignment: list(alignmentToPhoneticIter(alignment))
+        alignmentToPhoneticSeq = AlignmentToPhoneticSeq(
+            mapAlignment = standardizeAlignment
+        )
 
         acc = d.AutoregressiveSequenceAcc(
             maxDepth,
@@ -474,7 +494,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         print 'lgVarianceFloorMult =', lgVarianceFloorMult
 
         def globalToMonophoneMapPartial(dist, mapChild):
-            if isinstance(dist, d.MappedInputDist) and getFirst(dist.tag) == 'stream':
+            if isinstance(dist, d.MappedInputDist) and getElem(dist.tag, 0, 2) == 'stream':
                 subDist = dist.dist
                 return d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label.phone, acInput)),
                     d.createDiscreteDist(subLabels, lambda subLabel:
@@ -525,19 +545,17 @@ def run(dataDir, labDir, scriptsDir, outDir):
         print 'numSubLabels =', numSubLabels
         subLabels = list(range(numSubLabels))
 
-        standardizeAlignment = StandardizeAlignment(subLabels)
 
         extraLength = 2
+        def mapTiming((framesBefore, framesAfter)):
+            return framesBefore, framesAfter
 
-        def alignmentToPhoneticSeq(alignment):
-            for startTime, endTime, label, subAlignment in standardizeAlignment(alignment):
-                phone = label.phone
-                for startTime, endTime, subLabel, subSubAlignment in subAlignment:
-                    assert subSubAlignment is None
-                    for time in range(startTime, endTime):
-                        framesBefore = time - startTime
-                        framesAfter = endTime - time - 1
-                        yield phone, subLabel, [framesBefore, framesAfter]
+        alignmentToPhoneticSeq = AlignmentToPhoneticSeqWithTiming(
+            mapAlignment = StandardizeAlignment(subLabels),
+            mapLabel = operator.attrgetter('phone'),
+            mapTiming = mapTiming
+        )
+
         def convertTimingInfo(input):
             (phone, subLabel, extra), acousticContext = input
             assert len(extra) == extraLength
@@ -545,7 +563,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
 
         acc = d.AutoregressiveSequenceAcc(
             maxDepth,
-            lambda alignment: list(alignmentToPhoneticSeq(alignment)),
+            alignmentToPhoneticSeq,
             [ firstFrameAverage for i in range(maxDepth) ],
             frameSummarizer.createAcc(True, lambda streamIndex:
                 {
@@ -596,7 +614,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
         questionGroups = questions_hts_demo.getFullContextQuestionGroups(phoneset)
 
         def globalToFullCtxCreateAccPartial(dist, createAccChild):
-            if isinstance(dist, d.MappedInputDist) and getFirst(dist.tag) == 'stream':
+            if isinstance(dist, d.MappedInputDist) and getElem(dist.tag, 0, 2) == 'stream':
                 rootDist = dist.dist
                 def createAcc():
                     leafAcc = d.getDefaultCreateAcc()(rootDist)
@@ -665,15 +683,11 @@ def run(dataDir, labDir, scriptsDir, outDir):
         print 'numSubLabels =', numSubLabels
         subLabels = list(range(numSubLabels))
 
-        standardizeAlignment = StandardizeAlignment(subLabels)
-
-        def alignmentToPhoneticSeq(alignment):
-            for phoneStartTime, phoneEndTime, label, subAlignment in standardizeAlignment(alignment):
-                phone = label.phone
-                for startTime, endTime, subLabel, subSubAlignment in subAlignment:
-                    assert subSubAlignment is None
-                    for time in range(startTime, endTime):
-                        yield 'global' if globalPhone else phone, subLabel
+        alignmentToPhoneticSeq = AlignmentToPhoneticSeq(
+            mapAlignment = StandardizeAlignment(subLabels),
+            mapLabel = (ConstantFn('global') if globalPhone
+                        else operator.attrgetter('phone'))
+        )
 
         # FIXME : only works if no cross-stream stuff happening. Make more robust somehow.
         shiftToPrevTransform = xf.ShiftOutputTransform(xf.MinusPrev())
@@ -694,7 +708,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
 
         dist = d.AutoregressiveSequenceDist(
             maxDepth,
-            lambda alignment: list(alignmentToPhoneticSeq(alignment)),
+            alignmentToPhoneticSeq,
             [ firstFrameAverage for i in range(maxDepth) ],
             frameSummarizer.createDist(True, lambda streamIndex:
                 {
@@ -800,7 +814,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
             #timed(drawVarious)(dist, id = 'xf-it'+str(it))
             pass
         # (FIXME : change mgcInputTransform to mgcInputWarp and mgcOutputTransform to mgcOutputWarp once tree structure for transforms is done)
-        mgcWarpParamSpec = d.getByTagParamSpec(lambda tag: getFirst(tag) == 'mgcInputTransform' or getFirst(tag) == 'mgcOutputTransform')
+        mgcWarpParamSpec = d.getByTagParamSpec(lambda tag: getElem(tag, 0, 2) == 'mgcInputTransform' or getElem(tag, 0, 2) == 'mgcOutputTransform')
         dist = timed(trn.trainCGandEM)(dist, corpus.accumulate, ps = mgcWarpParamSpec, iterations = 5, length = -25, afterEst = afterEst, verbosity = 2)
         timed(drawVarious)(dist, id = 'xf', simpleResiduals = True)
         evaluateLogProb(dist, corpus)
@@ -867,7 +881,7 @@ def run(dataDir, labDir, scriptsDir, outDir):
             )
             return net
         def globalToMonophoneMapPartial(dist, mapChild):
-            if isinstance(dist, d.MappedInputDist) and getFirst(dist.tag) == 'stream':
+            if isinstance(dist, d.MappedInputDist) and getElem(dist.tag, 0, 2) == 'stream':
                 subDist = dist.dist
                 return d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label.phone, acInput)),
                     d.createDiscreteDist(subLabels, lambda subLabel:
