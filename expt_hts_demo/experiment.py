@@ -71,6 +71,8 @@ def evaluateLogProb(dist, corpus):
     testFrames = corpus.frames(corpus.testUttIds)
     print 'test set log prob = %s (%s frames)' % (testLogProb / testFrames, testFrames)
     print
+    return [('train log prob', (trainLogProb, trainFrames)),
+            ('test log prob', (testLogProb, testFrames))]
 
 @codeDeps(d.SynthMethod, stdCepDist)
 def evaluateMgcArOutError(dist, corpus, vecError = stdCepDist, desc = 'MARCD'):
@@ -89,6 +91,8 @@ def evaluateMgcArOutError(dist, corpus, vecError = stdCepDist, desc = 'MARCD'):
     testFrames = corpus.frames(corpus.testUttIds)
     print 'test set %s = %s (%s frames)' % (desc, testError / testFrames, testFrames)
     print
+    return [('train %s' % desc, (trainError, trainFrames)),
+            ('test %s' % desc, (testError, testFrames))]
 
 @codeDeps(stdCepDist)
 def evaluateMgcOutError(dist, corpus, vecError = stdCepDist, desc = 'MCD'):
@@ -102,6 +106,8 @@ def evaluateMgcOutError(dist, corpus, vecError = stdCepDist, desc = 'MCD'):
     testFrames = corpus.frames(corpus.testUttIds)
     print 'test set %s = %s (%s frames)' % (desc, testError / testFrames, testFrames)
     print
+    return [('train %s' % desc, (trainError, trainFrames)),
+            ('test %s' % desc, (testError, testFrames))]
 
 @codeDeps(d.SynthMethod)
 def evaluateSynthesize(dist, corpus, synthOutDir, exptTag, afterSynth = None):
@@ -127,6 +133,18 @@ def getDrawMgc(corpus, mgcIndices, figOutDir, ylims = None, includeGivenLabels =
             outPdf = os.path.join(figOutDir, uttId+'-mgc'+str(mgcIndex)+'-'+exptTag+'.pdf')
             draw.drawLabelledSeq([(trueSeqTime, trueSeq), (synthSeqTime, synthSeq)], partitionedLabelSeqs, outPdf = outPdf, figSizeRate = 10.0, ylims = ylims, colors = ['red', 'purple'])
     return drawMgc
+
+@codeDeps(evaluateLogProb, evaluateMgcArOutError, evaluateMgcOutError,
+    evaluateSynthesize, getDrawMgc, reportFlooredPerStream, stdCepDistIncZero
+)
+def evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag, vecError = stdCepDistIncZero):
+    # FIXME : vecError default should probably be changed to stdCepDist eventually
+    reportFlooredPerStream(dist)
+    logProbResults = evaluateLogProb(dist, corpus)
+    marcdResults = evaluateMgcOutError(dist, corpus, vecError = vecError)
+    mcdResults = evaluateMgcArOutError(dist, corpus, vecError = vecError)
+    evaluateSynthesize(dist, corpus, synthOutDir, exptTag, afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    return logProbResults + marcdResults + mcdResults
 
 @codeDeps(d.defaultEstimatePartial, d.getDefaultCreateAcc, nodetree.getDagMap,
     trn.mixupLinearGaussianEstimatePartial, trn.trainEM
@@ -401,10 +419,9 @@ def doDumpCorpus(outDir):
     printTime('finished dumpCorpus')
 
 @codeDeps(align.AlignmentToPhoneticSeq, align.StandardizeAlignment,
-    createLinearGaussianVectorAcc, d.OracleAcc, evaluateLogProb,
-    evaluateMgcArOutError, evaluateMgcOutError, evaluateSynthesize,
-    getBmiForCorpus, getCorpusWithSubLabels, getDrawMgc, getInitialFrame, mixup,
-    printTime, reportFlooredPerStream, stdCepDistIncZero, trainGlobalDist
+    createLinearGaussianVectorAcc, d.OracleAcc, evaluateVarious,
+    getBmiForCorpus, getCorpusWithSubLabels, getInitialFrame, mixup, printTime,
+    trainGlobalDist
 )
 def doGlobalSystem(synthOutDir, figOutDir):
     print
@@ -432,39 +449,26 @@ def doGlobalSystem(synthOutDir, figOutDir):
     dist = trainGlobalDist(corpus, bmi.maxDepth, alignmentToPhoneticSeq,
                            initialFrame, bmi.frameSummarizer,
                            createLeafAccs, lgVarianceFloorMult)
-    reportFlooredPerStream(dist)
-    evaluateLogProb(dist, corpus)
-    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateSynthesize(dist, corpus, synthOutDir, 'global', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'global')
 
     print
     print 'MIXING UP (to 2 components)'
     dist = mixup(dist, corpus.accumulate)
-    reportFlooredPerStream(dist)
-    evaluateLogProb(dist, corpus)
-    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateSynthesize(dist, corpus, synthOutDir, 'global.2mix', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'global.2mix')
+
     print
     print 'MIXING UP (to 4 components)'
     dist = mixup(dist, corpus.accumulate)
-    reportFlooredPerStream(dist)
-    evaluateLogProb(dist, corpus)
-    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateSynthesize(dist, corpus, synthOutDir, 'global.4mix', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'global.4mix')
 
     printTime('finished global')
 
 @codeDeps(align.AlignmentToPhoneticSeq, align.StandardizeAlignment,
     createLinearGaussianVectorAcc, d.MappedInputDist, d.OracleAcc,
-    d.createDiscreteDist, d.isolateDist, evaluateLogProb, evaluateMgcArOutError,
-    evaluateMgcOutError, evaluateSynthesize, getBmiForCorpus,
-    getCorpusWithSubLabels, getDrawMgc, getElem, getInitialFrame, mixup,
-    nodetree.defaultMapPartial, nodetree.getDagMap, printTime,
-    reportFlooredPerStream, stdCepDistIncZero, timed, trainGlobalDist,
-    trn.expectationMaximization
+    d.createDiscreteDist, d.isolateDist, evaluateVarious, getBmiForCorpus,
+    getCorpusWithSubLabels, getElem, getInitialFrame, mixup,
+    nodetree.defaultMapPartial, nodetree.getDagMap, printTime, timed,
+    trainGlobalDist, trn.expectationMaximization
 )
 def doMonophoneSystem(synthOutDir, figOutDir):
     print
@@ -510,38 +514,25 @@ def doMonophoneSystem(synthOutDir, figOutDir):
 
     print 'DEBUG: estimating monophone dist'
     dist, trainLogLike, (trainAux, trainAuxRat), trainFrames = trn.expectationMaximization(dist, timed(corpus.accumulate), verbosity = 3)
-    reportFlooredPerStream(dist)
-    evaluateLogProb(dist, corpus)
-    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateSynthesize(dist, corpus, synthOutDir, 'mono', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono')
 
     print
     print 'MIXING UP (to 2 components)'
     dist = mixup(dist, corpus.accumulate)
-    reportFlooredPerStream(dist)
-    evaluateLogProb(dist, corpus)
-    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateSynthesize(dist, corpus, synthOutDir, 'mono.2mix', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono.2mix')
+
     print
     print 'MIXING UP (to 4 components)'
     dist = mixup(dist, corpus.accumulate)
-    reportFlooredPerStream(dist)
-    evaluateLogProb(dist, corpus)
-    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateSynthesize(dist, corpus, synthOutDir, 'mono.4mix', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono.4mix')
 
     printTime('finished mono')
 
 @codeDeps(StandardizeAlignment, align.AlignmentToPhoneticSeqWithTiming,
     d.AutoregressiveSequenceAcc, d.LinearGaussianAcc, d.MappedInputAcc,
     d.OracleAcc, d.createDiscreteAcc, d.getDefaultEstimateTotAux,
-    evaluateLogProb, evaluateMgcArOutError, evaluateMgcOutError,
-    evaluateSynthesize, getBmiForCorpus, getCorpusWithSubLabels, getDrawMgc,
-    getInitialFrame, printTime, reportTrainAux, stdCepDistIncZero, timed,
-    xf.AddBias
+    evaluateVarious, getBmiForCorpus, getCorpusWithSubLabels, getInitialFrame,
+    printTime, reportTrainAux, timed, xf.AddBias
 )
 def doTimingInfoSystem(synthOutDir, figOutDir):
     print
@@ -602,10 +593,7 @@ def doTimingInfoSystem(synthOutDir, figOutDir):
     dist, (trainAux, trainAuxRat) = d.getDefaultEstimateTotAux()(acc)
     reportTrainAux((trainAux, trainAuxRat), acc.count())
 
-    evaluateLogProb(dist, corpus)
-    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateSynthesize(dist, corpus, synthOutDir, 'timingInfo', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'timingInfo')
 
     printTime('finished timingInfo')
 
@@ -613,12 +601,10 @@ def doTimingInfoSystem(synthOutDir, figOutDir):
     cluster.decisionTreeCluster, createLinearGaussianVectorAcc,
     d.AutoGrowingDiscreteAcc, d.MappedInputAcc, d.MappedInputDist, d.OracleAcc,
     d.createDiscreteAcc, d.defaultCreateAccPartial, d.defaultEstimatePartial,
-    d.getDefaultCreateAcc, evaluateLogProb, evaluateMgcArOutError,
-    evaluateMgcOutError, evaluateSynthesize, getBmiForCorpus,
-    getCorpusWithSubLabels, getDrawMgc, getElem, getInitialFrame, mixup,
-    nodetree.getDagMap, printTime,
-    questions_hts_demo.getFullContextQuestionGroups, reportFlooredPerStream,
-    stdCepDistIncZero, timed, trainGlobalDist
+    d.getDefaultCreateAcc, evaluateVarious, getBmiForCorpus,
+    getCorpusWithSubLabels, getElem, getInitialFrame, mixup, nodetree.getDagMap,
+    printTime, questions_hts_demo.getFullContextQuestionGroups, timed,
+    trainGlobalDist
 )
 def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
     print
@@ -675,28 +661,17 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
 
     dist = decisionTreeClusterEstimate(acc)
     print
-    reportFlooredPerStream(dist)
-    evaluateLogProb(dist, corpus)
-    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateSynthesize(dist, corpus, synthOutDir, 'clustered', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'clustered')
 
     print
     print 'MIXING UP (to 2 components)'
     dist = mixup(dist, corpus.accumulate)
-    reportFlooredPerStream(dist)
-    evaluateLogProb(dist, corpus)
-    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateSynthesize(dist, corpus, synthOutDir, 'clustered.2mix', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'clustered.2mix')
+
     print
     print 'MIXING UP (to 4 components)'
     dist = mixup(dist, corpus.accumulate)
-    reportFlooredPerStream(dist)
-    evaluateLogProb(dist, corpus)
-    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateSynthesize(dist, corpus, synthOutDir, 'clustered.4mix', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'clustered.4mix')
 
     printTime('finished clustered')
 
@@ -706,12 +681,10 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
     d.MappedInputDist, d.OracleDist, d.TransformedInputDist,
     d.TransformedOutputDist, d.createDiscreteDist, d.getByTagParamSpec,
     d.getDefaultParamSpec, draw.drawFor1DInput, draw.drawLogPdf,
-    draw.drawWarping, evaluateLogProb, evaluateMgcArOutError,
-    evaluateMgcOutError, evaluateSynthesize, getBmiForCorpus,
-    getCorpusWithSubLabels, getDrawMgc, getElem, getInitialFrame,
-    nodetree.findTaggedNode, nodetree.findTaggedNodes, printTime,
-    stdCepDistIncZero, timed, trn.trainCG, trn.trainCGandEM, trn.trainEM,
-    xf.AddBias, xf.IdentityTransform, xf.MinusPrev, xf.ShiftOutputTransform,
+    draw.drawWarping, evaluateVarious, getBmiForCorpus, getCorpusWithSubLabels,
+    getElem, getInitialFrame, nodetree.findTaggedNode, nodetree.findTaggedNodes,
+    printTime, timed, trn.trainCG, trn.trainCGandEM, trn.trainEM, xf.AddBias,
+    xf.IdentityTransform, xf.MinusPrev, xf.ShiftOutputTransform,
     xf.SimpleOutputTransform, xf.SumTransform1D, xf.TanhTransform1D,
     xf.VectorizeTransform
 )
@@ -856,10 +829,7 @@ def doTransformSystem(synthOutDir, figOutDir, globalPhone = True, studentResidua
 
     dist = timed(trn.trainEM)(dist, corpus.accumulate, minIterations = 2, maxIterations = 2)
     timed(drawVarious)(dist, id = 'xf_init', simpleResiduals = True)
-    evaluateLogProb(dist, corpus)
-    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateSynthesize(dist, corpus, synthOutDir, 'xf_init', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'xf_init')
 
     print
     print 'ESTIMATING "GAUSSIANIZATION" TRANSFORMS'
@@ -870,10 +840,7 @@ def doTransformSystem(synthOutDir, figOutDir, globalPhone = True, studentResidua
     mgcWarpParamSpec = d.getByTagParamSpec(lambda tag: getElem(tag, 0, 2) == 'mgcInputTransform' or getElem(tag, 0, 2) == 'mgcOutputTransform')
     dist = timed(trn.trainCGandEM)(dist, corpus.accumulate, ps = mgcWarpParamSpec, iterations = 5, length = -25, afterEst = afterEst, verbosity = 2)
     timed(drawVarious)(dist, id = 'xf', simpleResiduals = True)
-    evaluateLogProb(dist, corpus)
-    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateSynthesize(dist, corpus, synthOutDir, 'xf', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'xf')
 
     if studentResiduals:
         print
@@ -891,31 +858,23 @@ def doTransformSystem(synthOutDir, figOutDir, globalPhone = True, studentResidua
     dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = residualParamSpec, length = -50, verbosity = 2)
     dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = subtractMeanParamSpec, length = -50, verbosity = 2)
     timed(drawVarious)(dist, id = 'xf.res', debugResiduals = True)
-    evaluateLogProb(dist, corpus)
-    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateSynthesize(dist, corpus, synthOutDir, 'xf.res', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'xf.res')
 
     print
     print 'ESTIMATING ALL PARAMETERS'
     dist = timed(trn.trainCG)(dist, corpus.accumulate, ps = d.getDefaultParamSpec(), length = -200, verbosity = 2)
     timed(drawVarious)(dist, id = 'xf.res.xf', debugResiduals = True)
-    evaluateLogProb(dist, corpus)
-    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateSynthesize(dist, corpus, synthOutDir, 'xf.res.xf', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'xf.res.xf')
 
     printTime('finished xf')
 
 @codeDeps(StandardizeAlignment, align.AlignmentToPhoneticSeq,
     createLinearGaussianVectorAcc, d.AutoregressiveNetDist,
     d.ConstantClassifier, d.MappedInputDist, d.OracleAcc, d.SimplePruneSpec,
-    d.createDiscreteDist, d.isolateDist, evaluateLogProb, evaluateMgcArOutError,
-    evaluateMgcOutError, evaluateSynthesize, getBmiForCorpus, getCorpus,
-    getDrawMgc, getElem, getInitialFrame, nodetree.defaultMapPartial,
-    nodetree.getDagMap, printTime, reportFlooredPerStream, stdCepDistIncZero,
-    timed, trainGlobalDist, trn.trainEM, wnet.FlatMappedNet, wnet.SequenceNet,
-    wnet.probLeftToRightZeroNet
+    d.createDiscreteDist, d.isolateDist, evaluateVarious, getBmiForCorpus,
+    getCorpus, getElem, getInitialFrame, nodetree.defaultMapPartial,
+    nodetree.getDagMap, printTime, timed, trainGlobalDist, trn.trainEM,
+    wnet.FlatMappedNet, wnet.SequenceNet, wnet.probLeftToRightZeroNet
 )
 def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
     print
@@ -982,11 +941,7 @@ def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
 
     print 'DEBUG: estimating monophone net dist'
     dist = trn.trainEM(dist, timed(corpus.accumulate), deltaThresh = 1e-4, minIterations = 4, maxIterations = 10, verbosity = 2)
-    reportFlooredPerStream(dist)
-    evaluateLogProb(dist, corpus)
-    evaluateMgcOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateMgcArOutError(dist, corpus, vecError = stdCepDistIncZero)
-    evaluateSynthesize(dist, corpus, synthOutDir, 'flatStart.mono', afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'flatStart.mono')
 
     printTime('finished flatStart')
 
