@@ -264,8 +264,8 @@ def trainGlobalDist(corpus, depth, alignmentToPhoneticSeq, initialFrame, frameSu
 
     return dist
 
-@codeDeps(corpus_arctic.getCorpusSynthFewer,
-    corpus_arctic.getTrainUttIdsMinimal, labels_hts_demo.getParseLabel
+@codeDeps(corpus_arctic.getCorpusSynthFewer, corpus_arctic.getTrainUttIds,
+    labels_hts_demo.getParseLabel
 )
 def getCorpus():
     return corpus_arctic.getCorpusSynthFewer(
@@ -278,8 +278,8 @@ def getCorpus():
         scriptsDir = 'scripts',
     )
 
-@codeDeps(corpus_arctic.getCorpusSynthFewer,
-    corpus_arctic.getTrainUttIdsMinimal, labels_hts_demo.getParseLabel
+@codeDeps(corpus_arctic.getCorpusSynthFewer, corpus_arctic.getTrainUttIds,
+    labels_hts_demo.getParseLabel
 )
 def getCorpusWithSubLabels():
     return corpus_arctic.getCorpusSynthFewer(
