@@ -362,7 +362,9 @@ def getCorpusWithSubLabels():
     )
 
 @codeDeps(mgc_lf0_bap.BasicArModelInfo, phoneset_cmu.CmuPhoneset)
-def getBmiForCorpus(corpus, subLabels):
+def getBmiForCorpus(corpus, subLabels = 'sameAsCorpus'):
+    if subLabels == 'sameAsCorpus':
+        subLabels = corpus.subLabels
     return mgc_lf0_bap.BasicArModelInfo(
         phoneset = phoneset_cmu.CmuPhoneset(),
         subLabels = subLabels,
@@ -390,7 +392,7 @@ def doDumpCorpus(outDir):
     printTime('started dumpCorpus')
 
     corpus = getCorpusWithSubLabels()
-    bmi = getBmiForCorpus(corpus, subLabels = corpus.subLabels)
+    bmi = getBmiForCorpus(corpus)
 
     print 'numSubLabels =', len(bmi.subLabels)
 
@@ -480,7 +482,7 @@ def doGlobalSystem(synthOutDir, figOutDir):
     printTime('started global')
 
     corpus = getCorpusWithSubLabels()
-    bmi = getBmiForCorpus(corpus, subLabels = corpus.subLabels)
+    bmi = getBmiForCorpus(corpus)
 
     print 'numSubLabels =', len(bmi.subLabels)
 
@@ -515,7 +517,7 @@ def doGlobalSystem(synthOutDir, figOutDir):
 )
 def doMonophoneSystem(synthOutDir, figOutDir):
     corpus = getCorpusWithSubLabels()
-    bmi = getBmiForCorpus(corpus, subLabels = corpus.subLabels)
+    bmi = getBmiForCorpus(corpus)
 
     dist = trainMonophoneDist(bmi, corpus)
     results1 = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono')
@@ -540,7 +542,7 @@ def doTimingInfoSystem(synthOutDir, figOutDir):
     printTime('started timingInfo')
 
     corpus = getCorpusWithSubLabels()
-    bmi = getBmiForCorpus(corpus, subLabels = corpus.subLabels)
+    bmi = getBmiForCorpus(corpus)
 
     print 'numSubLabels =', len(bmi.subLabels)
 
@@ -612,7 +614,7 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
     printTime('started clustered')
 
     corpus = getCorpusWithSubLabels()
-    bmi = getBmiForCorpus(corpus, subLabels = corpus.subLabels)
+    bmi = getBmiForCorpus(corpus)
 
     print 'numSubLabels =', len(bmi.subLabels)
 
@@ -690,7 +692,7 @@ def doTransformSystem(synthOutDir, figOutDir, globalPhone = True, studentResidua
     printTime('started xf')
 
     corpus = getCorpusWithSubLabels()
-    bmi = getBmiForCorpus(corpus, subLabels = corpus.subLabels)
+    bmi = getBmiForCorpus(corpus)
 
     print 'globalPhone =', globalPhone
     print 'studentResiduals =', studentResiduals
