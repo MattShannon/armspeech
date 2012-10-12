@@ -19,7 +19,9 @@ from armspeech.modelling import cluster
 from armspeech.modelling import wnet
 from armspeech.speech.features import stdCepDist, stdCepDistIncZero
 from armspeech.speech import draw
-from armspeech.util.util import identityFn, ConstantFn, getElem
+from armspeech.util.util import identityFn, ConstantFn
+from armspeech.util.util import getElem, ElemGetter, AttrGetter
+from armspeech.util import persist
 from armspeech.util.timing import timed, printTime
 from codedep import codeDeps
 
@@ -30,7 +32,6 @@ import mgc_lf0_bap
 import corpus_arctic
 
 import os
-import operator
 import math
 import numpy as np
 import armspeech.numpy_settings
@@ -135,11 +136,15 @@ def getDrawMgc(corpus, mgcIndices, figOutDir, ylims = None, includeGivenLabels =
     return drawMgc
 
 @codeDeps(evaluateLogProb, evaluateMgcArOutError, evaluateMgcOutError,
-    evaluateSynthesize, getDrawMgc, reportFlooredPerStream, stdCepDistIncZero
+    evaluateSynthesize, getDrawMgc, persist.savePickle, reportFlooredPerStream,
+    stdCepDistIncZero
 )
 def evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag, vecError = stdCepDistIncZero):
     # FIXME : vecError default should probably be changed to stdCepDist eventually
     reportFlooredPerStream(dist)
+    # (FIXME : perhaps this shouldn't really go in synthOutDir)
+    persist.savePickle(os.path.join(synthOutDir, 'dist-%s.pkl' % exptTag),
+                       dist)
     logProbResults = evaluateLogProb(dist, corpus)
     marcdResults = evaluateMgcOutError(dist, corpus, vecError = vecError)
     mcdResults = evaluateMgcArOutError(dist, corpus, vecError = vecError)
@@ -248,21 +253,30 @@ def createBlcBasedLf0Acc(lf0Depth, lgTag = None):
         )
     )
 
+@codeDeps()
+def tupleMap1(((label, subLabel), acInput)):
+    return subLabel, (label, acInput)
+
+@codeDeps()
+def tupleMap1Phone(((label, subLabel), acInput)):
+    return subLabel, (label.phone, acInput)
+
 @codeDeps(mgc_lf0_bap.computeFirstFrameAverage)
 def getInitialFrame(corpus, bmi):
     return mgc_lf0_bap.computeFirstFrameAverage(corpus, bmi.mgcOrder, bmi.bapOrder)
 
-@codeDeps(d.AutoregressiveSequenceAcc, d.LinearGaussian, d.MappedInputAcc,
-    d.getDefaultEstimateTotAux, nodetree.defaultMapPartial, nodetree.getDagMap,
-    reportTrainAux, timed
+@codeDeps(ElemGetter, d.AutoregressiveSequenceAcc, d.LinearGaussian,
+    d.MappedInputAcc, d.getDefaultEstimateTotAux, nodetree.defaultMapPartial,
+    nodetree.getDagMap, reportTrainAux, timed
 )
 def trainGlobalDist(corpus, depth, alignmentToPhoneticSeq, initialFrame, frameSummarizer, createLeafAccs, lgVarianceFloorMult):
+    getAcInput = ElemGetter(1, 2)
     acc = d.AutoregressiveSequenceAcc(
         depth,
         alignmentToPhoneticSeq,
         [ initialFrame for i in range(depth) ],
         frameSummarizer.createAcc(True, lambda streamIndex:
-            d.MappedInputAcc(lambda (phInput, acInput): acInput,
+            d.MappedInputAcc(getAcInput,
                 createLeafAccs[streamIndex]()
             ).withTag(('stream', corpus.streams[streamIndex].name))
         )
@@ -288,7 +302,7 @@ def trainGlobalDist(corpus, depth, alignmentToPhoneticSeq, initialFrame, frameSu
     createLinearGaussianVectorAcc, d.MappedInputDist, d.OracleAcc,
     d.createDiscreteDist, d.isolateDist, getElem, getInitialFrame,
     nodetree.defaultMapPartial, nodetree.getDagMap, timed, trainGlobalDist,
-    trn.expectationMaximization
+    trn.expectationMaximization, tupleMap1Phone
 )
 def trainMonophoneDist(bmi, corpus):
     print
@@ -302,7 +316,7 @@ def trainMonophoneDist(bmi, corpus):
     def globalToMonophoneMapPartial(dist, mapChild):
         if isinstance(dist, d.MappedInputDist) and getElem(dist.tag, 0, 2) == 'stream':
             subDist = dist.dist
-            return d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label.phone, acInput)),
+            return d.MappedInputDist(tupleMap1Phone,
                 d.createDiscreteDist(bmi.subLabels, lambda subLabel:
                     d.createDiscreteDist(bmi.phoneset.phoneList, lambda phone:
                         d.isolateDist(subDist)
@@ -377,12 +391,15 @@ def getBmiForCorpus(corpus, subLabels = 'sameAsCorpus'):
         bapIndices = [],
     )
 
+@codeDeps()
+def minusPrevAc((ph, ac)):
+    return -ac[-1]
 
 # (FIXME : this somewhat unnecessarily uses lots of memory)
 @codeDeps(StandardizeAlignment, align.AlignmentToPhoneticSeq,
     d.AutoregressiveSequenceDist, d.DebugDist, d.MappedOutputDist, d.OracleDist,
     d.getDefaultCreateAcc, getBmiForCorpus, getCorpusWithSubLabels,
-    getInitialFrame, nodetree.findTaggedNode, printTime,
+    getInitialFrame, minusPrevAc, nodetree.findTaggedNode, printTime,
     questions_hts_demo.getTriphoneQuestionGroups, timed,
     xf.ShiftOutputTransform
 )
@@ -414,7 +431,7 @@ def doDumpCorpus(outDir):
     initialFrame = getInitialFrame(corpus, bmi)
 
     # FIXME : only works if no cross-stream stuff happening. Make more robust somehow.
-    shiftToPrevTransform = xf.ShiftOutputTransform(lambda x: -x[1][-1])
+    shiftToPrevTransform = xf.ShiftOutputTransform(minusPrevAc)
 
     dist = d.AutoregressiveSequenceDist(
         bmi.maxDepth,
@@ -530,7 +547,21 @@ def doMonophoneSystem(synthOutDir, figOutDir):
 
     return results1, results2, results4
 
-@codeDeps(StandardizeAlignment, align.AlignmentToPhoneticSeqWithTiming,
+@codeDeps()
+def convertTimingInfo(input):
+    (phone, subLabel, extra), acousticContext = input
+    return subLabel, (phone, (extra, acousticContext))
+
+@codeDeps()
+class MapTiming1(object):
+    def __init__(self):
+        self.extraLength = 2
+
+    def __call__(self, (framesBefore, framesAfter)):
+        return framesBefore, framesAfter
+
+@codeDeps(AttrGetter, MapTiming1, StandardizeAlignment,
+    align.AlignmentToPhoneticSeqWithTiming, convertTimingInfo,
     d.AutoregressiveSequenceAcc, d.LinearGaussianAcc, d.MappedInputAcc,
     d.OracleAcc, d.createDiscreteAcc, d.getDefaultEstimateTotAux,
     evaluateVarious, getBmiForCorpus, getCorpusWithSubLabels, getInitialFrame,
@@ -546,22 +577,14 @@ def doTimingInfoSystem(synthOutDir, figOutDir):
 
     print 'numSubLabels =', len(bmi.subLabels)
 
-    extraLength = 2
-    def mapTiming((framesBefore, framesAfter)):
-        return framesBefore, framesAfter
-
+    mapTiming = MapTiming1()
     alignmentToPhoneticSeq = align.AlignmentToPhoneticSeqWithTiming(
         mapAlignment = StandardizeAlignment(corpus.subLabels, bmi.subLabels),
-        mapLabel = operator.attrgetter('phone'),
+        mapLabel = AttrGetter('phone'),
         mapTiming = mapTiming
     )
 
     initialFrame = getInitialFrame(corpus, bmi)
-
-    def convertTimingInfo(input):
-        (phone, subLabel, extra), acousticContext = input
-        assert len(extra) == extraLength
-        return subLabel, (phone, (extra, acousticContext))
 
     acc = d.AutoregressiveSequenceAcc(
         bmi.maxDepth,
@@ -576,7 +599,7 @@ def doTimingInfoSystem(synthOutDir, figOutDir):
                                 bmi.mgcSummarizer.createAcc(True, lambda outIndex:
                                     d.MappedInputAcc(np.concatenate,
                                         d.MappedInputAcc(xf.AddBias(),
-                                            d.LinearGaussianAcc(inputLength = bmi.mgcSummarizer.vectorLength(outIndex) + extraLength + 1, varianceFloor = 0.0)
+                                            d.LinearGaussianAcc(inputLength = bmi.mgcSummarizer.vectorLength(outIndex) + mapTiming.extraLength + 1, varianceFloor = 0.0)
                                         )
                                     )
                                 )
@@ -606,7 +629,7 @@ def doTimingInfoSystem(synthOutDir, figOutDir):
     d.getDefaultCreateAcc, evaluateVarious, getBmiForCorpus,
     getCorpusWithSubLabels, getElem, getInitialFrame, mixup, nodetree.getDagMap,
     printTime, questions_hts_demo.getFullContextQuestionGroups, timed,
-    trainGlobalDist
+    trainGlobalDist, tupleMap1
 )
 def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
     print
@@ -629,7 +652,7 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
             def createAcc():
                 leafAcc = d.getDefaultCreateAcc()(rootDist)
                 return leafAcc
-            return d.MappedInputAcc(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
+            return d.MappedInputAcc(tupleMap1,
                 d.createDiscreteAcc(bmi.subLabels, lambda subLabel:
                     d.AutoGrowingDiscreteAcc(createAcc)
                 )
@@ -673,18 +696,18 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
 
     printTime('finished clustered')
 
-@codeDeps(ConstantFn, StandardizeAlignment, align.AlignmentToPhoneticSeq,
-    convertToStudentResiduals, convertToTransformedGaussianResiduals,
-    d.AutoregressiveSequenceDist, d.DebugDist, d.LinearGaussian,
-    d.MappedInputDist, d.OracleDist, d.TransformedInputDist,
-    d.TransformedOutputDist, d.createDiscreteDist, d.getByTagParamSpec,
-    d.getDefaultParamSpec, draw.drawFor1DInput, draw.drawLogPdf,
-    draw.drawWarping, evaluateVarious, getBmiForCorpus, getCorpusWithSubLabels,
-    getElem, getInitialFrame, nodetree.findTaggedNode, nodetree.findTaggedNodes,
-    printTime, timed, trn.trainCG, trn.trainCGandEM, trn.trainEM, xf.AddBias,
-    xf.IdentityTransform, xf.MinusPrev, xf.ShiftOutputTransform,
-    xf.SimpleOutputTransform, xf.SumTransform1D, xf.TanhTransform1D,
-    xf.VectorizeTransform
+@codeDeps(AttrGetter, ConstantFn, StandardizeAlignment,
+    align.AlignmentToPhoneticSeq, convertToStudentResiduals,
+    convertToTransformedGaussianResiduals, d.AutoregressiveSequenceDist,
+    d.DebugDist, d.LinearGaussian, d.MappedInputDist, d.OracleDist,
+    d.TransformedInputDist, d.TransformedOutputDist, d.createDiscreteDist,
+    d.getByTagParamSpec, d.getDefaultParamSpec, draw.drawFor1DInput,
+    draw.drawLogPdf, draw.drawWarping, evaluateVarious, getBmiForCorpus,
+    getCorpusWithSubLabels, getElem, getInitialFrame, nodetree.findTaggedNode,
+    nodetree.findTaggedNodes, printTime, timed, trn.trainCG, trn.trainCGandEM,
+    trn.trainEM, tupleMap1, xf.AddBias, xf.IdentityTransform, xf.MinusPrev,
+    xf.ShiftOutputTransform, xf.SimpleOutputTransform, xf.SumTransform1D,
+    xf.TanhTransform1D, xf.VectorizeTransform
 )
 def doTransformSystem(synthOutDir, figOutDir, globalPhone = True, studentResiduals = True, numTanhTransforms = 3):
     print
@@ -708,7 +731,7 @@ def doTransformSystem(synthOutDir, figOutDir, globalPhone = True, studentResidua
     alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
         mapAlignment = StandardizeAlignment(corpus.subLabels, bmi.subLabels),
         mapLabel = (ConstantFn('global') if globalPhone
-                    else operator.attrgetter('phone'))
+                    else AttrGetter('phone'))
     )
 
     initialFrame = getInitialFrame(corpus, bmi)
@@ -737,7 +760,7 @@ def doTransformSystem(synthOutDir, figOutDir, globalPhone = True, studentResidua
         bmi.frameSummarizer.createDist(True, lambda streamIndex:
             {
                 0:
-                    d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label, acInput)),
+                    d.MappedInputDist(tupleMap1,
                         d.createDiscreteDist(bmi.subLabels, lambda subLabel:
                             d.createDiscreteDist(phoneList, lambda phone:
                                 bmi.mgcSummarizer.createDist(False, lambda outIndex:
@@ -866,13 +889,29 @@ def doTransformSystem(synthOutDir, figOutDir, globalPhone = True, studentResidua
 
     printTime('finished xf')
 
-@codeDeps(StandardizeAlignment, align.AlignmentToPhoneticSeq,
+@codeDeps(wnet.FlatMappedNet, wnet.SequenceNet, wnet.probLeftToRightZeroNet)
+class NetFor1(object):
+    def __init__(self, subLabels):
+        self.subLabels = subLabels
+
+    def __call__(self, alignment):
+        labelSeq = [ label for startTime, endTime, label, subAlignment in alignment ]
+        net = wnet.FlatMappedNet(
+            lambda label: wnet.probLeftToRightZeroNet(
+                [ (label, subLabel) for subLabel in self.subLabels ],
+                [ [ ((label, subLabel), adv) for adv in [0, 1] ] for subLabel in self.subLabels ]
+            ),
+            wnet.SequenceNet(labelSeq, None)
+        )
+        return net
+
+@codeDeps(NetFor1, StandardizeAlignment, align.AlignmentToPhoneticSeq,
     createLinearGaussianVectorAcc, d.AutoregressiveNetDist,
     d.ConstantClassifier, d.MappedInputDist, d.OracleAcc, d.SimplePruneSpec,
     d.createDiscreteDist, d.isolateDist, evaluateVarious, getBmiForCorpus,
     getCorpus, getElem, getInitialFrame, nodetree.defaultMapPartial,
     nodetree.getDagMap, printTime, timed, trainGlobalDist, trn.trainEM,
-    wnet.FlatMappedNet, wnet.SequenceNet, wnet.probLeftToRightZeroNet
+    tupleMap1Phone
 )
 def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
     print
@@ -906,20 +945,11 @@ def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
                                  createLeafAccs, lgVarianceFloorMult)
 
     print 'DEBUG: converting global dist to monophone net dist'
-    def netFor(alignment):
-        labelSeq = [ label for startTime, endTime, label, subAlignment in alignment ]
-        net = wnet.FlatMappedNet(
-            lambda label: wnet.probLeftToRightZeroNet(
-                [ (label, subLabel) for subLabel in bmi.subLabels ],
-                [ [ ((label, subLabel), adv) for adv in [0, 1] ] for subLabel in bmi.subLabels ]
-            ),
-            wnet.SequenceNet(labelSeq, None)
-        )
-        return net
+    netFor = NetFor1(bmi.subLabels)
     def globalToMonophoneMapPartial(dist, mapChild):
         if isinstance(dist, d.MappedInputDist) and getElem(dist.tag, 0, 2) == 'stream':
             subDist = dist.dist
-            return d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label.phone, acInput)),
+            return d.MappedInputDist(tupleMap1Phone,
                 d.createDiscreteDist(bmi.subLabels, lambda subLabel:
                     d.createDiscreteDist(bmi.phoneset.phoneList, lambda phone:
                         d.isolateDist(subDist)
@@ -927,7 +957,7 @@ def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
                 )
             ).withTag(dist.tag)
     acDist = nodetree.getDagMap([globalToMonophoneMapPartial, nodetree.defaultMapPartial])(globalDist.dist)
-    durDist = d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label.phone, acInput)),
+    durDist = d.MappedInputDist(tupleMap1Phone,
         d.createDiscreteDist(bmi.subLabels, lambda subLabel:
             d.createDiscreteDist(bmi.phoneset.phoneList, lambda phone:
                 d.ConstantClassifier(probs = np.array([0.5, 0.5]), probFloors = np.array([ccProbFloor, ccProbFloor]))
@@ -935,7 +965,10 @@ def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
         )
     ).withTag(('stream', 'dur'))
     pruneSpec = d.SimplePruneSpec(betaThresh = 500.0, logOccThresh = 20.0)
-    dist = d.AutoregressiveNetDist(bmi.maxDepth, netFor, [ initialFrame for i in range(bmi.maxDepth) ], durDist, acDist, pruneSpec)
+    dist = d.AutoregressiveNetDist(
+        bmi.maxDepth, netFor, [ initialFrame for i in range(bmi.maxDepth) ],
+        durDist, acDist, pruneSpec
+    )
 
     print 'DEBUG: estimating monophone net dist'
     dist = trn.trainEM(dist, timed(corpus.accumulate), deltaThresh = 1e-4, minIterations = 4, maxIterations = 10, verbosity = 2)
