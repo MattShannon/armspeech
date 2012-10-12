@@ -150,6 +150,8 @@ def evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag, vecError
     trn.mixupLinearGaussianEstimatePartial, trn.trainEM
 )
 def mixup(dist, accumulate):
+    print
+    print 'MIXING UP'
     acc = d.getDefaultCreateAcc()(dist)
     accumulate(acc)
     logLikeInit = acc.logLike()
@@ -451,13 +453,9 @@ def doGlobalSystem(synthOutDir, figOutDir):
                            createLeafAccs, lgVarianceFloorMult)
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'global')
 
-    print
-    print 'MIXING UP (to 2 components)'
     dist = mixup(dist, corpus.accumulate)
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'global.2mix')
 
-    print
-    print 'MIXING UP (to 4 components)'
     dist = mixup(dist, corpus.accumulate)
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'global.4mix')
 
@@ -516,13 +514,9 @@ def doMonophoneSystem(synthOutDir, figOutDir):
     dist, trainLogLike, (trainAux, trainAuxRat), trainFrames = trn.expectationMaximization(dist, timed(corpus.accumulate), verbosity = 3)
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono')
 
-    print
-    print 'MIXING UP (to 2 components)'
     dist = mixup(dist, corpus.accumulate)
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono.2mix')
 
-    print
-    print 'MIXING UP (to 4 components)'
     dist = mixup(dist, corpus.accumulate)
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono.4mix')
 
@@ -663,13 +657,9 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
     print
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'clustered')
 
-    print
-    print 'MIXING UP (to 2 components)'
     dist = mixup(dist, corpus.accumulate)
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'clustered.2mix')
 
-    print
-    print 'MIXING UP (to 4 components)'
     dist = mixup(dist, corpus.accumulate)
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'clustered.4mix')
 
