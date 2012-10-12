@@ -108,6 +108,26 @@ def evaluateSynthesize(dist, corpus, synthOutDir, exptTag, afterSynth = None):
     corpus.synthComplete(dist, corpus.synthUttIds, d.SynthMethod.Sample, synthOutDir, exptTag+'.sample', afterSynth = afterSynth)
     corpus.synthComplete(dist, corpus.synthUttIds, d.SynthMethod.Meanish, synthOutDir, exptTag+'.meanish', afterSynth = afterSynth)
 
+@codeDeps(draw.drawLabelledSeq, draw.partitionSeq)
+def getDrawMgc(corpus, mgcIndices, figOutDir, ylims = None, includeGivenLabels = True, extraLabelSeqs = []):
+    streamIndex = 0
+    def drawMgc(synthOutput, uttId, exptTag):
+        (uttId, alignment), trueOutput = corpus.data(uttId)
+
+        alignmentToDraw = [ (start * corpus.framePeriod, end * corpus.framePeriod, label.phone) for start, end, label, subAlignment in alignment ]
+        partitionedLabelSeqs = (draw.partitionSeq(alignmentToDraw, 2) if includeGivenLabels else []) + [ labelSeqSub for labelSeq in extraLabelSeqs for labelSeqSub in draw.partitionSeq(labelSeq, 2) ]
+
+        trueSeqTime = (np.array(range(len(trueOutput))) + 0.5) * corpus.framePeriod
+        synthSeqTime = (np.array(range(len(synthOutput))) + 0.5) * corpus.framePeriod
+
+        for mgcIndex in mgcIndices:
+            trueSeq = [ frame[streamIndex][mgcIndex] for frame in trueOutput ]
+            synthSeq = [ frame[streamIndex][mgcIndex] for frame in synthOutput ]
+
+            outPdf = os.path.join(figOutDir, uttId+'-mgc'+str(mgcIndex)+'-'+exptTag+'.pdf')
+            draw.drawLabelledSeq([(trueSeqTime, trueSeq), (synthSeqTime, synthSeq)], partitionedLabelSeqs, outPdf = outPdf, figSizeRate = 10.0, ylims = ylims, colors = ['red', 'purple'])
+    return drawMgc
+
 @codeDeps(d.defaultEstimatePartial, d.getDefaultCreateAcc, nodetree.getDagMap,
     trn.mixupLinearGaussianEstimatePartial, trn.trainEM
 )
@@ -174,26 +194,6 @@ def convertToTransformedGaussianResiduals(dist, residualTransformTag = None, deb
 
     return transformedGaussianResidualsMap(dist)
 
-@codeDeps(draw.drawLabelledSeq, draw.partitionSeq)
-def getDrawMgc(corpus, mgcIndices, figOutDir, ylims = None, includeGivenLabels = True, extraLabelSeqs = []):
-    streamIndex = 0
-    def drawMgc(synthOutput, uttId, exptTag):
-        (uttId, alignment), trueOutput = corpus.data(uttId)
-
-        alignmentToDraw = [ (start * corpus.framePeriod, end * corpus.framePeriod, label.phone) for start, end, label, subAlignment in alignment ]
-        partitionedLabelSeqs = (draw.partitionSeq(alignmentToDraw, 2) if includeGivenLabels else []) + [ labelSeqSub for labelSeq in extraLabelSeqs for labelSeqSub in draw.partitionSeq(labelSeq, 2) ]
-
-        trueSeqTime = (np.array(range(len(trueOutput))) + 0.5) * corpus.framePeriod
-        synthSeqTime = (np.array(range(len(synthOutput))) + 0.5) * corpus.framePeriod
-
-        for mgcIndex in mgcIndices:
-            trueSeq = [ frame[streamIndex][mgcIndex] for frame in trueOutput ]
-            synthSeq = [ frame[streamIndex][mgcIndex] for frame in synthOutput ]
-
-            outPdf = os.path.join(figOutDir, uttId+'-mgc'+str(mgcIndex)+'-'+exptTag+'.pdf')
-            draw.drawLabelledSeq([(trueSeqTime, trueSeq), (synthSeqTime, synthSeq)], partitionedLabelSeqs, outPdf = outPdf, figSizeRate = 10.0, ylims = ylims, colors = ['red', 'purple'])
-    return drawMgc
-
 @codeDeps(d.LinearGaussianAcc, d.MappedInputAcc, xf.AddBias)
 def createLinearGaussianVectorAcc(indexSpecSummarizer, lgTag = None):
     return indexSpecSummarizer.createAcc(False, lambda outIndex:
@@ -227,6 +227,10 @@ def createBlcBasedLf0Acc(lf0Depth, lgTag = None):
             )
         )
     )
+
+@codeDeps(mgc_lf0_bap.computeFirstFrameAverage)
+def getInitialFrame(corpus, bmi):
+    return mgc_lf0_bap.computeFirstFrameAverage(corpus, bmi.mgcOrder, bmi.bapOrder)
 
 @codeDeps(d.AutoregressiveSequenceAcc, d.LinearGaussian, d.MappedInputAcc,
     d.getDefaultEstimateTotAux, nodetree.defaultMapPartial, nodetree.getDagMap,
@@ -301,10 +305,6 @@ def getBmiForCorpus(corpus, subLabels):
         mgcIndices = [0],
         bapIndices = [],
     )
-
-@codeDeps(mgc_lf0_bap.computeFirstFrameAverage)
-def getInitialFrame(corpus, bmi):
-    return mgc_lf0_bap.computeFirstFrameAverage(corpus, bmi.mgcOrder, bmi.bapOrder)
 
 
 # (FIXME : this somewhat unnecessarily uses lots of memory)
