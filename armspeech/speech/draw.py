@@ -14,6 +14,8 @@ from codedep import codeDeps
 import math
 import numpy as np
 import armspeech.numpy_settings
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.transforms as transforms
 
 @codeDeps()
