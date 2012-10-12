@@ -284,6 +284,55 @@ def trainGlobalDist(corpus, depth, alignmentToPhoneticSeq, initialFrame, frameSu
 
     return dist
 
+@codeDeps(align.AlignmentToPhoneticSeq, align.StandardizeAlignment,
+    createLinearGaussianVectorAcc, d.MappedInputDist, d.OracleAcc,
+    d.createDiscreteDist, d.isolateDist, getElem, getInitialFrame,
+    nodetree.defaultMapPartial, nodetree.getDagMap, timed, trainGlobalDist,
+    trn.expectationMaximization
+)
+def trainMonophoneDist(bmi, corpus):
+    print
+    print 'TRAINING MONOPHONE DIST'
+
+    print 'numSubLabels =', len(bmi.subLabels)
+
+    lgVarianceFloorMult = 1e-3
+    print 'lgVarianceFloorMult =', lgVarianceFloorMult
+
+    def globalToMonophoneMapPartial(dist, mapChild):
+        if isinstance(dist, d.MappedInputDist) and getElem(dist.tag, 0, 2) == 'stream':
+            subDist = dist.dist
+            return d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label.phone, acInput)),
+                d.createDiscreteDist(bmi.subLabels, lambda subLabel:
+                    d.createDiscreteDist(bmi.phoneset.phoneList, lambda phone:
+                        d.isolateDist(subDist)
+                    )
+                )
+            ).withTag(dist.tag)
+
+    alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
+        mapAlignment = align.StandardizeAlignment(corpus.subLabels, bmi.subLabels)
+    )
+    initialFrame = getInitialFrame(corpus, bmi)
+    # FIXME : setFloor shouldn't need to be specified here
+    createLeafAccs = [
+        lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer, lgTag = 'setFloor'),
+        d.OracleAcc,
+        d.OracleAcc,
+    ]
+    globalDist = trainGlobalDist(corpus, bmi.maxDepth, alignmentToPhoneticSeq,
+                                 initialFrame, bmi.frameSummarizer,
+                                 createLeafAccs, lgVarianceFloorMult)
+    dist = globalDist
+
+    print 'DEBUG: converting global dist to monophone dist'
+    dist = nodetree.getDagMap([globalToMonophoneMapPartial, nodetree.defaultMapPartial])(dist)
+
+    print 'DEBUG: estimating monophone dist'
+    dist, trainLogLike, (trainAux, trainAuxRat), trainFrames = trn.expectationMaximization(dist, timed(corpus.accumulate), verbosity = 3)
+
+    return dist
+
 @codeDeps(corpus_arctic.getCorpusSynthFewer, corpus_arctic.getTrainUttIds,
     labels_hts_demo.getParseLabel
 )
@@ -461,66 +510,23 @@ def doGlobalSystem(synthOutDir, figOutDir):
 
     printTime('finished global')
 
-@codeDeps(align.AlignmentToPhoneticSeq, align.StandardizeAlignment,
-    createLinearGaussianVectorAcc, d.MappedInputDist, d.OracleAcc,
-    d.createDiscreteDist, d.isolateDist, evaluateVarious, getBmiForCorpus,
-    getCorpusWithSubLabels, getElem, getInitialFrame, mixup,
-    nodetree.defaultMapPartial, nodetree.getDagMap, printTime, timed,
-    trainGlobalDist, trn.expectationMaximization
+@codeDeps(evaluateVarious, getBmiForCorpus, getCorpusWithSubLabels, mixup,
+    trainMonophoneDist
 )
 def doMonophoneSystem(synthOutDir, figOutDir):
-    print
-    print 'TRAINING MONOPHONE SYSTEM'
-    printTime('started mono')
-
     corpus = getCorpusWithSubLabels()
     bmi = getBmiForCorpus(corpus, subLabels = corpus.subLabels)
 
-    print 'numSubLabels =', len(bmi.subLabels)
-
-    lgVarianceFloorMult = 1e-3
-    print 'lgVarianceFloorMult =', lgVarianceFloorMult
-
-    def globalToMonophoneMapPartial(dist, mapChild):
-        if isinstance(dist, d.MappedInputDist) and getElem(dist.tag, 0, 2) == 'stream':
-            subDist = dist.dist
-            return d.MappedInputDist(lambda ((label, subLabel), acInput): (subLabel, (label.phone, acInput)),
-                d.createDiscreteDist(bmi.subLabels, lambda subLabel:
-                    d.createDiscreteDist(bmi.phoneset.phoneList, lambda phone:
-                        d.isolateDist(subDist)
-                    )
-                )
-            ).withTag(dist.tag)
-
-    alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
-        mapAlignment = align.StandardizeAlignment(corpus.subLabels, bmi.subLabels)
-    )
-    initialFrame = getInitialFrame(corpus, bmi)
-    # FIXME : setFloor shouldn't need to be specified here
-    createLeafAccs = [
-        lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer, lgTag = 'setFloor'),
-        d.OracleAcc,
-        d.OracleAcc,
-    ]
-    globalDist = trainGlobalDist(corpus, bmi.maxDepth, alignmentToPhoneticSeq,
-                                 initialFrame, bmi.frameSummarizer,
-                                 createLeafAccs, lgVarianceFloorMult)
-    dist = globalDist
-
-    print 'DEBUG: converting global dist to monophone dist'
-    dist = nodetree.getDagMap([globalToMonophoneMapPartial, nodetree.defaultMapPartial])(dist)
-
-    print 'DEBUG: estimating monophone dist'
-    dist, trainLogLike, (trainAux, trainAuxRat), trainFrames = trn.expectationMaximization(dist, timed(corpus.accumulate), verbosity = 3)
-    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono')
+    dist = trainMonophoneDist(bmi, corpus)
+    results1 = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono')
 
     dist = mixup(dist, corpus.accumulate)
-    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono.2mix')
+    results2 = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono.2mix')
 
     dist = mixup(dist, corpus.accumulate)
-    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono.4mix')
+    results4 = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono.4mix')
 
-    printTime('finished mono')
+    return results1, results2, results4
 
 @codeDeps(StandardizeAlignment, align.AlignmentToPhoneticSeqWithTiming,
     d.AutoregressiveSequenceAcc, d.LinearGaussianAcc, d.MappedInputAcc,
