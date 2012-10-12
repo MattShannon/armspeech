@@ -87,6 +87,7 @@ class MockSgeQueuer(SgeQueuer):
                 mockEnv = dict()
                 if 'PYTHONPATH' in os.environ:
                     mockEnv['PYTHONPATH'] = os.environ['PYTHONPATH']
+                mockEnv['PYTHONUNBUFFERED'] = 'yes'
                 mockEnv['JOB_ID'] = jid
                 if 'HOSTNAME' in os.environ:
                     mockEnv['HOSTNAME'] = os.environ['HOSTNAME']
@@ -188,6 +189,7 @@ class QsubSgeQueuer(SgeQueuer):
         ) + [
             '-S', self.pythonExec,
             '-v', 'PYTHONPATH='+envPythonPath,
+            '-v', 'PYTHONUNBUFFERED=yes',
             '-cwd'
         ] + (
             ['-hold_jid', ','.join(parentJids)] if parentJids else []
