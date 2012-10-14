@@ -8,6 +8,8 @@
 
 from __future__ import division
 
+from armspeech.util.timing import timed
+
 import os
 import sys
 import traceback
@@ -32,7 +34,7 @@ def main(args):
         print 'sge_runner: build dir =', buildRepo.base
         print 'sge_runner: inputs =', [ inputArt.secHash() for inputArt in job.inputs ]
         job.checkAllSecHash()
-        job.run(buildRepo)
+        timed(job.run)(buildRepo)
         job.checkAllSecHash()
         print 'sge_runner: job', job.secHash(), '(', job.name, ')', '(', liveJob.dir, ') finished at', datetime.now(), 'on', os.environ['HOSTNAME']
     except:
