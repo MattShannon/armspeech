@@ -7,5 +7,7 @@
 
 ^expt_hts_demo/[^/]*\.log$
 
+^expt_hts_demo/repo($|/)
+
 \.pyc$
 

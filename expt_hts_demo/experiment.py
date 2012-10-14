@@ -23,6 +23,8 @@ from armspeech.util.util import identityFn, ConstantFn
 from armspeech.util.util import getElem, ElemGetter, AttrGetter
 from armspeech.util import persist
 from armspeech.util.timing import timed, printTime
+from armspeech.bisque import distribute
+from armspeech.bisque.distribute import liftLocal, lift
 from codedep import codeDeps
 
 import phoneset_cmu
@@ -237,6 +239,10 @@ def createBlcBasedLf0Acc(lf0Depth, lgTag = None):
             )
         )
     )
+
+@codeDeps()
+def getCorpusAccumulate(corpus):
+    return corpus.accumulate
 
 @codeDeps()
 def tupleMap1(((label, subLabel), acInput)):
@@ -531,6 +537,47 @@ def doMonophoneSystem(synthOutDir, figOutDir):
     results4 = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono.4mix')
 
     return results1, results2, results4
+
+@codeDeps()
+def getMonoString():
+    return 'mono'
+
+@codeDeps()
+def getMono2MixString():
+    return 'mono.2mix'
+
+@codeDeps()
+def getMono4MixString():
+    return 'mono.4mix'
+
+@codeDeps(AttrGetter, evaluateVarious, getBmiForCorpus, getCorpusWithSubLabels,
+    getMono2MixString, getMono4MixString, getMonoString, lift, liftLocal, mixup,
+    trainMonophoneDist
+)
+def doMonophoneSystemJobSet(synthOutDirArt, figOutDirArt):
+    corpusArt = liftLocal(getCorpusWithSubLabels)()
+    bmiArt = liftLocal(getBmiForCorpus)(corpusArt)
+    accumulateArt = liftLocal(getCorpusAccumulate)(corpusArt)
+
+    distArt = lift(trainMonophoneDist)(bmiArt, corpusArt)
+    results1Art = lift(evaluateVarious)(
+        distArt, bmiArt, corpusArt, synthOutDirArt, figOutDirArt,
+        exptTag = liftLocal(getMonoString)()
+    )
+
+    distArt = lift(mixup)(distArt, accumulateArt)
+    results2Art = lift(evaluateVarious)(
+        distArt, bmiArt, corpusArt, synthOutDirArt, figOutDirArt,
+        exptTag = liftLocal(getMono2MixString)()
+    )
+
+    distArt = lift(mixup)(distArt, accumulateArt)
+    results4Art = lift(evaluateVarious)(
+        distArt, bmiArt, corpusArt, synthOutDirArt, figOutDirArt,
+        exptTag = liftLocal(getMono4MixString)()
+    )
+
+    return results1Art, results2Art, results4Art
 
 @codeDeps()
 def convertTimingInfo(input):
