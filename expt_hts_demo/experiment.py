@@ -36,28 +36,13 @@ import math
 import numpy as np
 import armspeech.numpy_settings
 
-@codeDeps(d.BinaryLogisticClassifier, d.ConstantClassifier, d.LinearGaussian,
-    d.distNodeList
-)
-def reportFloored(distRoot, rootTag):
-    dists = d.distNodeList(distRoot)
-    taggedDistTypes = [('LG', d.LinearGaussian), ('CC', d.ConstantClassifier), ('BLC', d.BinaryLogisticClassifier)]
-    numFlooreds = [ np.array([0, 0]) for distTypeIndex, (distTypeTag, distType) in enumerate(taggedDistTypes) ]
-    for dist in dists:
-        for distTypeIndex, (distTypeTag, distType) in enumerate(taggedDistTypes):
-            if isinstance(dist, distType):
-                numFlooreds[distTypeIndex] += dist.flooredSingle()
-    summary = ', '.join([ distTypeTag+(': %s of %s' % tuple(numFlooreds[distTypeIndex])) for distTypeIndex, (distTypeTag, distType) in enumerate(taggedDistTypes) if numFlooreds[distTypeIndex][1] > 0 ])
-    if summary:
-        print 'flooring: %s: %s' % (rootTag, summary)
-
-@codeDeps(getElem, nodetree.findTaggedNodes, reportFloored)
+@codeDeps(d.reportFloored, getElem, nodetree.findTaggedNodes)
 def reportFlooredPerStream(dist):
     def isStreamRoot(tag):
         return getElem(tag, 0, 2) == 'stream'
     for streamRoot in nodetree.findTaggedNodes(dist, isStreamRoot):
         streamName = streamRoot.tag[1]
-        reportFloored(streamRoot, rootTag = streamName)
+        d.reportFloored(streamRoot, rootTag = streamName)
 
 @codeDeps(d.Rat)
 def reportTrainAux((trainAux, trainAuxRat), trainFrames):

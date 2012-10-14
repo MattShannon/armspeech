@@ -2828,3 +2828,25 @@ class AutoregressiveNetDist(Dist):
         durDist, paramsLeft = parseChild(self.durDist, paramsLeft)
         acDist, paramsLeft = parseChild(self.acDist, paramsLeft)
         return AutoregressiveNetDist(self.depth, self.netFor, self.fillFrames, durDist, acDist, self.pruneSpec, tag = self.tag), paramsLeft
+
+@codeDeps(BinaryLogisticClassifier, ConstantClassifier, LinearGaussian,
+    distNodeList
+)
+def reportFloored(distRoot, rootTag):
+    dists = distNodeList(distRoot)
+    taggedDistTypes = [('LG', LinearGaussian),
+                       ('CC', ConstantClassifier),
+                       ('BLC', BinaryLogisticClassifier)]
+    numFlooreds = [ np.array([0, 0]) for distTypeIndex, (distTypeTag, distType)
+                                     in enumerate(taggedDistTypes) ]
+    for dist in dists:
+        for distTypeIndex, (distTypeTag, distType) in enumerate(taggedDistTypes):
+            if isinstance(dist, distType):
+                numFlooreds[distTypeIndex] += dist.flooredSingle()
+    parts = [ '%s: %s of %s' % (distTypeTag, numFloored, numTot)
+              for (distTypeTag, distType), (numFloored, numTot)
+              in zip(taggedDistTypes, numFlooreds)
+              if numTot > 0 ]
+    summary = ', '.join(parts)
+    if summary:
+        print 'flooring: %s: %s' % (rootTag, summary)
