@@ -63,6 +63,20 @@ class AttrGetter(object):
         return getattr(obj, self.attr)
 
 @codeDeps()
+class AndThen(object):
+    """Picklable function composition."""
+    def __init__(self, first, second):
+        self.first = first
+        self.second = second
+
+    def __repr__(self):
+        return 'AndThen(%s, %s)' % (repr(self.first), repr(self.second))
+
+    def __call__(self, x):
+        y = self.first(x)
+        return self.second(y)
+
+@codeDeps()
 def orderedDictRepr(orderedKeys, dictIn):
     assert len(orderedKeys) == len(dictIn)
     return '{'+', '.join([ repr(key)+': '+repr(dictIn[key]) for key in orderedKeys ])+'}'
