@@ -83,35 +83,46 @@ class FuncAppliedArtifact(Artifact):
         self.shouldCache = shouldCache
 
         self.inputs = list(argArts) + kwargArts.values()
+
     def parents(self):
         return []
+
     def parentArtifacts(self):
         return []
+
     def computeSecHash(self):
         secHashSource = codedep.getHash(self.__class__)
         secHashFunc = codedep.getHash(self.func)
         secHashInputs = [ art.secHash() for art in self.inputs ]
-        return persist.secHashObject((secHashSource, secHashFunc, secHashInputs, self.shouldCache))
+        return persist.secHashObject((secHashSource, secHashFunc,
+                                      secHashInputs, self.shouldCache))
+
     def isDone(self, buildRepo):
         return all([ art.isDone(buildRepo) for art in self.inputs ])
+
     def loadValue(self, buildRepo):
         if self.shouldCache:
             if not hasattr(self, '_value'):
-                args = [ argArt.loadValue(buildRepo) for argArt in self.argArts ]
-                kwargs = dict([ (argKey, argArt.loadValue(buildRepo)) for argKey, argArt in self.kwargArts.items() ])
+                args = [ argArt.loadValue(buildRepo)
+                         for argArt in self.argArts ]
+                kwargs = dict([ (argKey, argArt.loadValue(buildRepo))
+                                for argKey, argArt in self.kwargArts.items() ])
                 self._value = self.func(*args, **kwargs)
             return self._value
         else:
             args = [ argArt.loadValue(buildRepo) for argArt in self.argArts ]
-            kwargs = dict([ (argKey, argArt.loadValue(buildRepo)) for argKey, argArt in self.kwargArts.items() ])
+            kwargs = dict([ (argKey, argArt.loadValue(buildRepo))
+                            for argKey, argArt in self.kwargArts.items() ])
             return self.func(*args, **kwargs)
+
     def saveValue(self, buildRepo, value):
         raise RuntimeError('a FuncAppliedArtifact cannot be saved')
 
 @codeDeps(FuncAppliedArtifact)
 def liftLocal(func, shouldCache = True):
     def argumentsToArt(*argArts, **kwargArts):
-        return FuncAppliedArtifact(func, argArts, kwargArts, shouldCache = shouldCache)
+        return FuncAppliedArtifact(func, argArts, kwargArts,
+                                   shouldCache = shouldCache)
     return argumentsToArt
 
 @codeDeps(Artifact, codedep.getHash, persist.secHashObject)
@@ -252,14 +263,18 @@ class WrappedFuncJob(Job):
 
         self.inputs = list(argArts) + kwargArts.values()
         self.valueOut = self.newOutput()
+
     def computeSecHash(self):
         secHashSource = codedep.getHash(self.__class__)
         secHashFunc = codedep.getHash(self.func)
         secHashInputs = [ art.secHash() for art in self.inputs ]
-        return persist.secHashObject((secHashSource, secHashFunc, secHashInputs))
+        return persist.secHashObject((secHashSource, secHashFunc,
+                                      secHashInputs))
+
     def run(self, buildRepo):
         args = [ argArt.loadValue(buildRepo) for argArt in self.argArts ]
-        kwargs = dict([ (argKey, argArt.loadValue(buildRepo)) for argKey, argArt in self.kwargArts.items() ])
+        kwargs = dict([ (argKey, argArt.loadValue(buildRepo))
+                        for argKey, argArt in self.kwargArts.items() ])
 
         valueOut = self.func(*args, **kwargs)
 
