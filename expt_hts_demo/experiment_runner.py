@@ -10,7 +10,7 @@
 
 from __future__ import division
 
-import experiment
+from expt_hts_demo import experiment
 
 import sys
 import tempfile
