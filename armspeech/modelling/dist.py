@@ -495,9 +495,8 @@ class OracleAcc(TermAcc):
     def estimateSingleAux(self):
         return OracleDist(tag = self.tag), (0.0, Rat.Exact)
 
-@codeDeps(ForwardRef(lambda: BinaryLogisticClassifier), EstimationError,
-    ForwardRef(lambda: LinearGaussian), ForwardRef(lambda: MixtureDist), Rat,
-    TermAcc, mla.pinv
+@codeDeps(EstimationError, ForwardRef(lambda: LinearGaussian), Rat, TermAcc,
+    mla.pinv
 )
 class LinearGaussianAcc(TermAcc):
     def __init__(self, distPrev = None, inputLength = None, varianceFloor = None, tag = None):
@@ -573,50 +572,6 @@ class LinearGaussianAcc(TermAcc):
                 coeff = self.distPrev.coeff
                 variance = self.distPrev.variance
                 return LinearGaussian(coeff, variance, self.varianceFloor, tag = self.tag), self.auxFn(coeff, variance)
-
-    # N.B. assumes last component of input vector is bias (weakly checked)
-    # (N.B. is geometric -- not invariant with respect to scaling of individual summarizers (at least for depth > 0))
-    def estimateInitialMixtureOfTwoExperts(self):
-        if self.occ == 0.0:
-            logging.warning('not mixing up LinearGaussian with occ == 0.0')
-            return self.estimateSingleAux()[0]
-        sigmoidAbscissaAtOneStdev = 0.5
-        occRecompute = self.sumOuter[-1, -1]
-        S = self.sumOuter[:-1, :-1] / occRecompute
-        mu = self.sumOuter[-1, :-1] / occRecompute
-        if abs(occRecompute - self.occ) > 1e-10:
-            raise RuntimeError('looks like last component of input vector is not bias ('+str(occRecompute)+' vs '+str(self.occ)+')!')
-        # FIXME : completely different behaviour for depth 0 case!
-        #   Can we unify (or improve depth > 0 case with something HTK-like)?
-        # FIXME : what about len(self.sumOuter) == 0 case?
-        # (FIXME : hard-coded flooring of 5.0)
-        if len(self.sumOuter) == 1:
-            # HTK-style mixture incrementing
-            coeff = np.array([0.0])
-            coeffFloor = np.array([float('inf')])
-            blc = BinaryLogisticClassifier(coeff, coeffFloor)
-            dist = self.estimateSingleAux()[0]
-            mean, = dist.coeff
-            variance = dist.variance
-            dist0 = LinearGaussian(np.array([mean - 0.2 * math.sqrt(variance)]), variance, self.varianceFloor)
-            dist1 = LinearGaussian(np.array([mean + 0.2 * math.sqrt(variance)]), variance, self.varianceFloor)
-            return MixtureDist(blc, [dist0, dist1])
-        else:
-            l, U = la.eigh(S - np.outer(mu, mu))
-            eigVal, (index, eigVec) = max(zip(l, enumerate(np.transpose(U))))
-            if eigVal == 0.0:
-                logging.warning('not mixing up LinearGaussian since eigenvalue 0.0')
-                return self.estimateSingleAux()[0]
-            w = eigVec * sigmoidAbscissaAtOneStdev / math.sqrt(eigVal)
-            w0 = -np.dot(w, mu)
-            coeff = np.append(w, w0)
-            coeffFloor = np.append(np.ones((len(w),)) * 5.0, float('inf'))
-            coeff = np.minimum(coeff, coeffFloor)
-            coeff = np.maximum(coeff, -coeffFloor)
-            blc = BinaryLogisticClassifier(coeff, coeffFloor)
-            dist0 = self.estimateSingleAux()[0]
-            dist1 = self.estimateSingleAux()[0]
-            return MixtureDist(blc, [dist0, dist1])
 
 @codeDeps(ForwardRef(lambda: ConstantClassifier), EstimationError, Rat, TermAcc,
     assert_allclose
@@ -2849,3 +2804,59 @@ def reportFloored(distRoot, rootTag):
     summary = ', '.join(parts)
     if summary:
         print 'flooring: %s: %s' % (rootTag, summary)
+
+@codeDeps(BinaryLogisticClassifier, LinearGaussian, LinearGaussianAcc,
+    MixtureDist
+)
+def estimateInitialMixtureOfTwoExperts(acc):
+    """Estimates an initial mixture of two experts from a LinearGaussianAcc.
+
+    N.B. assumes last component of input vector is bias (only weakly checked).
+    (N.B. is geometric -- not invariant with respect to scaling of individual
+    summarizers (at least for depth > 0).)
+    """
+    assert isinstance(acc, LinearGaussianAcc)
+    if acc.occ == 0.0:
+        logging.warning('not mixing up LinearGaussian with occ == 0.0')
+        return acc.estimateSingleAux()[0]
+    sigmoidAbscissaAtOneStdev = 0.5
+    occRecompute = acc.sumOuter[-1, -1]
+    S = acc.sumOuter[:-1, :-1] / occRecompute
+    mu = acc.sumOuter[-1, :-1] / occRecompute
+    if abs(occRecompute - acc.occ) > 1e-10:
+        raise RuntimeError('looks like last component of input vector is not'
+                           ' bias (%s vs %s)' % (occRecompute, acc.occ))
+    # FIXME : completely different behaviour for depth 0 case!
+    #   Can we unify (or improve depth > 0 case with something HTK-like)?
+    # FIXME : what about len(acc.sumOuter) == 0 case?
+    # (FIXME : hard-coded flooring of 5.0)
+    if len(acc.sumOuter) == 1:
+        # HTK-style mixture incrementing
+        coeff = np.array([0.0])
+        coeffFloor = np.array([float('inf')])
+        blc = BinaryLogisticClassifier(coeff, coeffFloor)
+        dist = acc.estimateSingleAux()[0]
+        mean, = dist.coeff
+        variance = dist.variance
+        dist0 = LinearGaussian(np.array([mean - 0.2 * math.sqrt(variance)]),
+                               variance, acc.varianceFloor)
+        dist1 = LinearGaussian(np.array([mean + 0.2 * math.sqrt(variance)]),
+                               variance, acc.varianceFloor)
+        return MixtureDist(blc, [dist0, dist1])
+    else:
+        l, U = la.eigh(S - np.outer(mu, mu))
+        eigVal, (index, eigVec) = max(zip(l, enumerate(np.transpose(U))))
+        if eigVal == 0.0:
+            logging.warning('not mixing up LinearGaussian since eigenvalue'
+                            ' 0.0')
+            return acc.estimateSingleAux()[0]
+        w = eigVec * sigmoidAbscissaAtOneStdev / math.sqrt(eigVal)
+        w0 = -np.dot(w, mu)
+        coeff = np.append(w, w0)
+        coeffFloor = np.append(np.ones((len(w),)) * 5.0, float('inf'))
+        coeff = np.minimum(coeff, coeffFloor)
+        coeff = np.maximum(coeff, -coeffFloor)
+        blc = BinaryLogisticClassifier(coeff, coeffFloor)
+        dist0 = acc.estimateSingleAux()[0]
+        dist1 = acc.estimateSingleAux()[0]
+        return MixtureDist(blc, [dist0, dist1])

@@ -161,7 +161,7 @@ def trainCGandEM(distInit, accumulate, ps = d.getDefaultParamSpec(), createAccEM
 
     return dist
 
-@codeDeps(d.LinearGaussianAcc)
+@codeDeps(d.LinearGaussianAcc, d.estimateInitialMixtureOfTwoExperts)
 def mixupLinearGaussianEstimatePartial(acc, estimateChild):
     if isinstance(acc, d.LinearGaussianAcc):
-        return acc.estimateInitialMixtureOfTwoExperts()
+        return d.estimateInitialMixtureOfTwoExperts(acc)

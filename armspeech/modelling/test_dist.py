@@ -829,7 +829,8 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
 
 @codeDeps(assert_allclose, checkLots, check_est, cluster.decisionTreeCluster,
     d.AutoGrowingDiscreteAcc, d.ConstantClassifierAcc, d.LinearGaussianAcc,
-    d.Memo, gen_AutoregressiveSequenceDist, gen_BinaryLogisticClassifier,
+    d.Memo, d.estimateInitialMixtureOfTwoExperts,
+    gen_AutoregressiveSequenceDist, gen_BinaryLogisticClassifier,
     gen_ConstantClassifier, gen_DebugDist,
     gen_DecisionTree_with_LinearGaussian_leaves, gen_DiscreteDist,
     gen_IdentifiableMixtureDist, gen_LinearGaussian, gen_MappedInputDist,
@@ -919,7 +920,7 @@ class TestDist(unittest.TestCase):
                         acc.add(input, output, occ)
                 acc = d.LinearGaussianAcc(inputLength = dimIn, varianceFloor = 0.0)
                 accumulate(acc)
-                initDist = acc.estimateInitialMixtureOfTwoExperts()
+                initDist = d.estimateInitialMixtureOfTwoExperts(acc)
                 return trn.trainEM(initDist, accumulate, deltaThresh = 1e-9, maxIterations = maxIterations)
             if True:
                 # check estimateInitialMixtureOfTwoExperts runs at all
@@ -1233,7 +1234,7 @@ def testBinaryLogisticClassifierFunGraph():
     pylab.show()
 
 # (N.B. not a unit test. Just draws pictures to help you assess whether results seem reasonable.)
-@codeDeps(d.LinearGaussianAcc)
+@codeDeps(d.LinearGaussianAcc, d.estimateInitialMixtureOfTwoExperts)
 def testMixtureOfTwoExpertsInitialization():
     import pylab
 
@@ -1289,7 +1290,7 @@ def testMixtureOfTwoExpertsInitialization():
 
     acc = d.LinearGaussianAcc(inputLength = dim + 1, varianceFloor = 0.0)
     accumulate(acc)
-    dist = acc.estimateInitialMixtureOfTwoExperts()
+    dist = d.estimateInitialMixtureOfTwoExperts(acc)
     blc = dist.classDist
     plotBdy(blc)
     print 'DEBUG: w estimated final =', blc.coeff
