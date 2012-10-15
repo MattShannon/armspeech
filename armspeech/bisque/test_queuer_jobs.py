@@ -24,13 +24,13 @@ def getOne():
 def add(x, y):
     return x + y
 
-@codeDeps(distribute.Job)
+@codeDeps(distribute.Job, distribute.JobArtifact)
 class OneJob(distribute.Job):
     def __init__(self, name = 'oneJob'):
         self.name = name
 
         self.inputs = []
-        self.valueOut = self.newOutput()
+        self.valueOut = distribute.JobArtifact(parentJob = self)
 
         self.secHash()
 
@@ -39,7 +39,7 @@ class OneJob(distribute.Job):
 
         self.valueOut.saveValue(buildRepo, valueOut)
 
-@codeDeps(distribute.Job)
+@codeDeps(distribute.Job, distribute.JobArtifact)
 class AddJob(distribute.Job):
     def __init__(self, valueLeft, valueRight, name = 'addJob'):
         self.valueLeft = valueLeft
@@ -47,7 +47,7 @@ class AddJob(distribute.Job):
         self.name = name
 
         self.inputs = [valueLeft, valueRight]
-        self.valueOut = self.newOutput()
+        self.valueOut = distribute.JobArtifact(parentJob = self)
 
         self.secHash()
 

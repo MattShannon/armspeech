@@ -246,15 +246,21 @@ class FixedFileArtifact(Artifact):
     persist.secHashObject
 )
 class JobArtifact(Artifact):
-    def __init__(self, parentJob):
+    """An artifact which is the output of a Job.
+
+    The secHash of this artifact depends on indexOut.
+    """
+    def __init__(self, parentJob, indexOut = None):
         self.parentJob = parentJob
+        self.indexOut = indexOut
     def parents(self):
         return [self.parentJob]
     def parentArtifacts(self):
         return self.parentJob.inputs
     def computeSecHash(self):
         secHashSource = codedep.getHash(self.__class__)
-        return persist.secHashObject((secHashSource, self.parentJob.secHash()))
+        return persist.secHashObject((secHashSource, self.parentJob.secHash(),
+                                      self.indexOut))
     def loc(self, buildRepo):
         return os.path.join(buildRepo.cacheDir(), self.secHash())
     def isDone(self, buildRepo):
@@ -278,7 +284,7 @@ def ancestorArtifacts(initialArts):
             agenda.extend(reversed(art.parentArtifacts()))
     return ret
 
-@codeDeps(DagNode, JobArtifact, codedep.getHash, persist.secHashObject)
+@codeDeps(DagNode, codedep.getHash, persist.secHashObject)
 class Job(DagNode):
     """A job specifies a computation to be run on some input.
 
@@ -296,6 +302,10 @@ class Job(DagNode):
     use is to make everything passed to the constructor except the job name
     part of self.inputs.
 
+    Note that if a job has multiple outputs it is important to ensure that each
+    output JobArtifact has a distinct indexOut. This is to ensure that the
+    secHashes of the outputs are distinct.
+
     Also note when subclassing that you should not break __hash__, since some
     of the queuer code calls this method.
     """
@@ -303,8 +313,6 @@ class Job(DagNode):
         return self.inputs
     def parentJobs(self):
         return [ parentJob for input in self.inputs for parentJob in input.parents() ]
-    def newOutput(self):
-        return JobArtifact(parentJob = self)
     def run(self, buildRepo):
         abstract
     def computeSecHash(self):
@@ -315,7 +323,7 @@ class Job(DagNode):
         if self.secHash() != self.computeSecHash():
             raise RuntimeError('secHash of job %s has changed' % self.name)
 
-@codeDeps(Job, codedep.getHash, persist.secHashObject)
+@codeDeps(Job, JobArtifact, codedep.getHash, persist.secHashObject)
 class WrappedFuncJob(Job):
     def __init__(self, func, argArts, kwargArts, numOut = None, name = None):
         if name is None:
@@ -331,9 +339,11 @@ class WrappedFuncJob(Job):
 
         self.inputs = list(argArts) + kwargArts.values()
         if self.numOut is None:
-            self.valueOut = self.newOutput()
+            self.valueOut = JobArtifact(parentJob = self)
         else:
-            self.valuesOut = [ self.newOutput() for _ in range(self.numOut) ]
+            self.valuesOut = [ JobArtifact(parentJob = self,
+                                           indexOut = indexOut)
+                               for indexOut in range(self.numOut) ]
 
     def computeSecHash(self):
         secHashSource = codedep.getHash(self.__class__)
