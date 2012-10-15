@@ -23,8 +23,9 @@ from armspeech.util.util import identityFn, ConstantFn
 from armspeech.util.util import getElem, ElemGetter, AttrGetter
 from armspeech.util import persist
 from armspeech.util.timing import timed, printTime
-from armspeech.bisque import distribute
-from armspeech.bisque.distribute import liftLocal, lift
+from armspeech.modelling.bisque import corpus as corpus_bisque
+from armspeech.modelling.bisque import train as train_bisque
+from armspeech.bisque.distribute import liftLocal, lit, lift
 from codedep import codeDeps
 
 import phoneset_cmu
@@ -138,9 +139,14 @@ def evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag, vecError
     evaluateSynthesize(dist, corpus, synthOutDir, exptTag, afterSynth = getDrawMgc(corpus, bmi.mgcSummarizer.outIndices, figOutDir))
     return logProbResults + marcdResults + mcdResults
 
-@codeDeps(d.defaultEstimatePartial, d.getDefaultCreateAcc, nodetree.getDagMap,
-    trn.mixupLinearGaussianEstimatePartial, trn.trainEM
+@codeDeps(d.defaultEstimatePartial, nodetree.getDagMap,
+    trn.mixupLinearGaussianEstimatePartial
 )
+def getMixupEstimate():
+    return nodetree.getDagMap([trn.mixupLinearGaussianEstimatePartial,
+                               d.defaultEstimatePartial])
+
+@codeDeps(d.getDefaultCreateAcc, getMixupEstimate, trn.trainEM)
 def mixup(dist, accumulate):
     print
     print 'MIXING UP'
@@ -149,9 +155,25 @@ def mixup(dist, accumulate):
     logLikeInit = acc.logLike()
     framesInit = acc.count()
     print 'initial training log likelihood = %s (%s frames)' % (logLikeInit / framesInit, framesInit)
-    dist = nodetree.getDagMap([trn.mixupLinearGaussianEstimatePartial, d.defaultEstimatePartial])(acc)
+    dist = getMixupEstimate()(acc)
     dist = trn.trainEM(dist, accumulate, deltaThresh = 1e-4, minIterations = 4, maxIterations = 8, verbosity = 2)
     return dist
+
+@codeDeps(getMixupEstimate, liftLocal, lit, train_bisque.accumulateJobSet,
+    train_bisque.estimateJobSet, train_bisque.trainEMJobSet
+)
+def mixupJobSet(distArt, corpusArt, uttIdChunkArts):
+    accArts = train_bisque.accumulateJobSet(distArt, corpusArt, uttIdChunkArts)
+    distArt = train_bisque.estimateJobSet(
+        distArt,
+        accArts,
+        estimateArt = liftLocal(getMixupEstimate)(),
+        verbosityArt = lit(2)
+    )
+    distArt = train_bisque.trainEMJobSet(distArt, corpusArt, uttIdChunkArts,
+                                         numIterationsLit = lit(8),
+                                         verbosityArt = lit(2))
+    return distArt
 
 @codeDeps(d.DebugDist, d.LinearGaussian, d.MappedInputDist, d.StudentDist,
     d.TransformedOutputDist, nodetree.defaultMapPartial, nodetree.getDagMap,
@@ -239,10 +261,6 @@ def createBlcBasedLf0Acc(lf0Depth, lgTag = None):
             )
         )
     )
-
-@codeDeps()
-def getCorpusAccumulate(corpus):
-    return corpus.accumulate
 
 @codeDeps()
 def tupleMap1(((label, subLabel), acInput)):
@@ -538,43 +556,33 @@ def doMonophoneSystem(synthOutDir, figOutDir):
 
     return results1, results2, results4
 
-@codeDeps()
-def getMonoString():
-    return 'mono'
-
-@codeDeps()
-def getMono2MixString():
-    return 'mono.2mix'
-
-@codeDeps()
-def getMono4MixString():
-    return 'mono.4mix'
-
-@codeDeps(AttrGetter, evaluateVarious, getBmiForCorpus, getCorpusWithSubLabels,
-    getMono2MixString, getMono4MixString, getMonoString, lift, liftLocal, mixup,
+@codeDeps(corpus_bisque.getUttIdChunkArts, evaluateVarious, getBmiForCorpus,
+    getCorpusWithSubLabels, lift, liftLocal, lit, mixupJobSet,
     trainMonophoneDist
 )
 def doMonophoneSystemJobSet(synthOutDirArt, figOutDirArt):
     corpusArt = liftLocal(getCorpusWithSubLabels)()
     bmiArt = liftLocal(getBmiForCorpus)(corpusArt)
-    accumulateArt = liftLocal(getCorpusAccumulate)(corpusArt)
+
+    uttIdChunkArts = corpus_bisque.getUttIdChunkArts(corpusArt,
+                                                     numChunksLit = lit(2))
 
     distArt = lift(trainMonophoneDist)(bmiArt, corpusArt)
     results1Art = lift(evaluateVarious)(
         distArt, bmiArt, corpusArt, synthOutDirArt, figOutDirArt,
-        exptTag = liftLocal(getMonoString)()
+        exptTag = lit('mono')
     )
 
-    distArt = lift(mixup)(distArt, accumulateArt)
+    distArt = mixupJobSet(distArt, corpusArt, uttIdChunkArts)
     results2Art = lift(evaluateVarious)(
         distArt, bmiArt, corpusArt, synthOutDirArt, figOutDirArt,
-        exptTag = liftLocal(getMono2MixString)()
+        exptTag = lit('mono.2mix')
     )
 
-    distArt = lift(mixup)(distArt, accumulateArt)
+    distArt = mixupJobSet(distArt, corpusArt, uttIdChunkArts)
     results4Art = lift(evaluateVarious)(
         distArt, bmiArt, corpusArt, synthOutDirArt, figOutDirArt,
-        exptTag = liftLocal(getMono4MixString)()
+        exptTag = lit('mono.4mix')
     )
 
     return results1Art, results2Art, results4Art
