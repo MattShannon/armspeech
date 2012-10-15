@@ -100,20 +100,19 @@ class FuncAppliedArtifact(Artifact):
     def isDone(self, buildRepo):
         return all([ art.isDone(buildRepo) for art in self.inputs ])
 
+    def computeValue(self, buildRepo):
+        args = [ argArt.loadValue(buildRepo) for argArt in self.argArts ]
+        kwargs = dict([ (argKey, argArt.loadValue(buildRepo))
+                        for argKey, argArt in self.kwargArts.items() ])
+        return self.func(*args, **kwargs)
+
     def loadValue(self, buildRepo):
         if self.shouldCache:
             if not hasattr(self, '_value'):
-                args = [ argArt.loadValue(buildRepo)
-                         for argArt in self.argArts ]
-                kwargs = dict([ (argKey, argArt.loadValue(buildRepo))
-                                for argKey, argArt in self.kwargArts.items() ])
-                self._value = self.func(*args, **kwargs)
+                self._value = self.computeValue(buildRepo)
             return self._value
         else:
-            args = [ argArt.loadValue(buildRepo) for argArt in self.argArts ]
-            kwargs = dict([ (argKey, argArt.loadValue(buildRepo))
-                            for argKey, argArt in self.kwargArts.items() ])
-            return self.func(*args, **kwargs)
+            return self.computeValue(buildRepo)
 
     def saveValue(self, buildRepo, value):
         raise RuntimeError('a FuncAppliedArtifact cannot be saved')
