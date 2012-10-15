@@ -909,19 +909,23 @@ class TestDist(unittest.TestCase):
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
 
-    def test_estimateInitialMixtureOfTwoExperts(self, eps = 1e-8, numDists = 3):
-        if self.deepTest:
-            for distIndex in range(numDists):
-                dimIn = randint(1, 5)
-                dist, inputGen = gen_MixtureOfTwoExperts(dimIn, bias = True)
-                def train(training):
-                    def accumulate(acc):
-                        for input, output, occ in training:
-                            acc.add(input, output, occ)
-                    acc = d.LinearGaussianAcc(inputLength = dimIn, varianceFloor = 0.0)
-                    accumulate(acc)
-                    initDist = acc.estimateInitialMixtureOfTwoExperts()
-                    return trn.trainEM(initDist, accumulate, deltaThresh = 1e-9)
+    def test_estimateInitialMixtureOfTwoExperts(self, eps = 1e-8, numDists = 3, numPoints = 100):
+        for distIndex in range(numDists):
+            dimIn = randint(1, 5)
+            dist, inputGen = gen_MixtureOfTwoExperts(dimIn, bias = True)
+            def train(training, maxIterations = None):
+                def accumulate(acc):
+                    for input, output, occ in training:
+                        acc.add(input, output, occ)
+                acc = d.LinearGaussianAcc(inputLength = dimIn, varianceFloor = 0.0)
+                accumulate(acc)
+                initDist = acc.estimateInitialMixtureOfTwoExperts()
+                return trn.trainEM(initDist, accumulate, deltaThresh = 1e-9, maxIterations = maxIterations)
+            if True:
+                # check estimateInitialMixtureOfTwoExperts runs at all
+                training = [ (input, dist.synth(input), math.exp(randn())) for input, index in zip(inputGen, range(numPoints)) ]
+                estDist = train(training, maxIterations = 1)
+            if self.deepTest:
                 check_est(dist, train, inputGen, hasParams = True)
 
     def test_MixtureDist(self, eps = 1e-8, numDists = 10, numPoints = 100):
