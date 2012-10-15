@@ -137,6 +137,62 @@ def liftLocal(func, numOut = None, shouldCache = True):
     return argumentsToArt
 
 @codeDeps(Artifact, codedep.getHash, persist.secHashObject)
+class LiteralArtifact(Artifact):
+    """An artifact which is a literal value.
+
+    In general the preferred approach to encoding constant values as artifacts
+    is to explicitly define a module-level function which returns the constant
+    value and wrap this using liftLocal to provide an artifact. However doing
+    this for all literal constants is tedious. This class provides a less
+    verbose alternative when the value of the artifact is a literal which is
+    picklable (and for which the pickle will not change across different runs).
+
+    Example usage:
+
+        LiteralValue(2)
+        LiteralValue('the')
+
+    but not:
+
+        LiteralValue(<call to some function which returns the value 2>)
+        LiteralValue(<an instance of a class>)
+
+    (In some cases the bad examples above will be fine, but haven't worked out
+    full details so for now using this form is not recommended.)
+    """
+    def __init__(self, litValue):
+        self.litValue = litValue
+
+    def parents(self):
+        return []
+
+    def parentArtifacts(self):
+        return []
+
+    def computeSecHash(self):
+        secHashSource = codedep.getHash(self.__class__)
+        return persist.secHashObject((secHashSource, self.litValue))
+
+    def isDone(self, buildRepo):
+        return True
+
+    def loadValue(self, buildRepo):
+        return self.litValue
+
+    def saveValue(self, buildRepo, value):
+        raise RuntimeError('a LiteralArtifact cannot be saved')
+
+@codeDeps(LiteralArtifact)
+def lit(value):
+    """Constructs LiteralArtifacts (and has a short name).
+
+    For example:
+
+        theArt = lit('the')
+    """
+    return LiteralArtifact(value)
+
+@codeDeps(Artifact, codedep.getHash, persist.secHashObject)
 class FixedDirArtifact(Artifact):
     """An artifact which is a fixed directory (or file).
 
