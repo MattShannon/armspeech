@@ -723,8 +723,7 @@ class BinaryLogisticClassifierAcc(TermAcc):
     #   Would allow decision tree clustering with BinaryLogisticClassifier (although
     #   quadratic approx may not be very good in this situation).)
     def addAccSingle(self, acc):
-        # (FIXME : below assert is too strict, but better than nothing)
-        assert self.distPrev == acc.distPrev
+        assert np.all(self.distPrev.coeff == acc.distPrev.coeff)
         self.occ += acc.occ
         self.sumTarget += acc.sumTarget
         self.sumOuter += acc.sumOuter
