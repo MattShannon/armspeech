@@ -76,10 +76,12 @@ class ThunkArtifact(Artifact):
 
 @codeDeps(Artifact, codedep.getHash, persist.secHashObject)
 class FuncAppliedArtifact(Artifact):
-    def __init__(self, func, argArts, kwargArts, shouldCache = True):
+    def __init__(self, func, argArts, kwargArts, indexOut = None,
+                 shouldCache = True):
         self.func = func
         self.argArts = argArts
         self.kwargArts = kwargArts
+        self.indexOut = indexOut
         self.shouldCache = shouldCache
 
         self.inputs = list(argArts) + kwargArts.values()
@@ -95,7 +97,8 @@ class FuncAppliedArtifact(Artifact):
         secHashFunc = codedep.getHash(self.func)
         secHashInputs = [ art.secHash() for art in self.inputs ]
         return persist.secHashObject((secHashSource, secHashFunc,
-                                      secHashInputs, self.shouldCache))
+                                      secHashInputs, self.indexOut,
+                                      self.shouldCache))
 
     def isDone(self, buildRepo):
         return all([ art.isDone(buildRepo) for art in self.inputs ])
@@ -104,7 +107,10 @@ class FuncAppliedArtifact(Artifact):
         args = [ argArt.loadValue(buildRepo) for argArt in self.argArts ]
         kwargs = dict([ (argKey, argArt.loadValue(buildRepo))
                         for argKey, argArt in self.kwargArts.items() ])
-        return self.func(*args, **kwargs)
+        if self.indexOut is None:
+            return self.func(*args, **kwargs)
+        else:
+            return self.func(*args, **kwargs)[self.indexOut]
 
     def loadValue(self, buildRepo):
         if self.shouldCache:
@@ -118,10 +124,16 @@ class FuncAppliedArtifact(Artifact):
         raise RuntimeError('a FuncAppliedArtifact cannot be saved')
 
 @codeDeps(FuncAppliedArtifact)
-def liftLocal(func, shouldCache = True):
+def liftLocal(func, numOut = None, shouldCache = True):
     def argumentsToArt(*argArts, **kwargArts):
-        return FuncAppliedArtifact(func, argArts, kwargArts,
-                                   shouldCache = shouldCache)
+        if numOut is None:
+            return FuncAppliedArtifact(func, argArts, kwargArts,
+                                       shouldCache = shouldCache)
+        else:
+            return [ FuncAppliedArtifact(func, argArts, kwargArts,
+                                         indexOut = indexOut,
+                                         shouldCache = shouldCache)
+                     for indexOut in range(numOut) ]
     return argumentsToArt
 
 @codeDeps(Artifact, codedep.getHash, persist.secHashObject)
@@ -249,7 +261,7 @@ class Job(DagNode):
 
 @codeDeps(Job, codedep.getHash, persist.secHashObject)
 class WrappedFuncJob(Job):
-    def __init__(self, func, argArts, kwargArts, name = None):
+    def __init__(self, func, argArts, kwargArts, numOut = None, name = None):
         if name is None:
             try:
                 name = func.func_name
@@ -258,29 +270,38 @@ class WrappedFuncJob(Job):
         self.func = func
         self.argArts = argArts
         self.kwargArts = kwargArts
+        self.numOut = numOut
         self.name = name
 
         self.inputs = list(argArts) + kwargArts.values()
-        self.valueOut = self.newOutput()
+        if self.numOut is None:
+            self.valueOut = self.newOutput()
+        else:
+            self.valuesOut = [ self.newOutput() for _ in range(self.numOut) ]
 
     def computeSecHash(self):
         secHashSource = codedep.getHash(self.__class__)
         secHashFunc = codedep.getHash(self.func)
         secHashInputs = [ art.secHash() for art in self.inputs ]
         return persist.secHashObject((secHashSource, secHashFunc,
-                                      secHashInputs))
+                                      secHashInputs, self.numOut))
 
     def run(self, buildRepo):
         args = [ argArt.loadValue(buildRepo) for argArt in self.argArts ]
         kwargs = dict([ (argKey, argArt.loadValue(buildRepo))
                         for argKey, argArt in self.kwargArts.items() ])
 
-        valueOut = self.func(*args, **kwargs)
-
-        self.valueOut.saveValue(buildRepo, valueOut)
+        if self.numOut is None:
+            valueOut = self.func(*args, **kwargs)
+            self.valueOut.saveValue(buildRepo, valueOut)
+        else:
+            valuesOut = self.func(*args, **kwargs)
+            assert len(valuesOut) == self.numOut
+            for valueOut, selfValueOut in zip(valuesOut, self.valuesOut):
+                selfValueOut.saveValue(buildRepo, valueOut)
 
 @codeDeps(WrappedFuncJob)
-def lift(func, name = None):
+def lift(func, numOut = None, name = None):
     """Lifts a function, allowing easy creation of jobs.
 
     func takes a collection of values and returns a value. lift(func) takes a
@@ -304,8 +325,43 @@ def lift(func, name = None):
         twoArt = lift(add)(oneArt, y = oneArt)
 
     Here twoArt is the output artifact of a job which has been created.
+
+    If numOut is not None then the output of func should be a sequence (e.g. a
+    list or a tuple) of length numOut, and the lifted function produces a
+    corresponding sequence of artifacts. This makes it easy to create
+    distributable jobs with multiple outputs. For example:
+
+        @codeDeps()
+        def outputTuple():
+            return 'a', 'b'
+
+        aArt, bArt = lift(outputTuple, numOut = 2)()
+
+    Using lift inside a for comprehension makes it easy to create a set of jobs
+    effecting a "map" operation, where each value in a sequence of inputs is
+    acted on by a common function, producing a corresponding sequence of
+    outputs. For example:
+
+        @codeDeps()
+        def one():
+            return 1
+
+        @codeDeps()
+        def getSeq():
+            return [5, 6]
+
+        @codeDeps()
+        def add(x, y):
+            return x + y
+
+        oneArt = lift(one)()
+        xArts = lift(getSeq, numOut = 2)()
+        zArts = [ lift(add)(xArt, oneArt) for xArt in xArts ]
     """
     def argumentsToArt(*argArts, **kwargArts):
-        job = WrappedFuncJob(func, argArts, kwargArts, name = name)
-        return job.valueOut
+        job = WrappedFuncJob(func, argArts, kwargArts, numOut = numOut, name = name)
+        if numOut is None:
+            return job.valueOut
+        else:
+            return job.valuesOut
     return argumentsToArt
