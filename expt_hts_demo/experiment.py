@@ -278,13 +278,14 @@ def getInitialFrame(corpus, bmi):
     d.MappedInputAcc, d.getDefaultEstimateTotAux, nodetree.defaultMapPartial,
     nodetree.getDagMap, reportTrainAux, timed
 )
-def trainGlobalDist(corpus, depth, alignmentToPhoneticSeq, initialFrame, frameSummarizer, createLeafAccs, lgVarianceFloorMult):
+def trainGlobalDist(bmi, corpus, alignmentToPhoneticSeq, initialFrame,
+                    createLeafAccs, lgVarianceFloorMult):
     getAcInput = ElemGetter(1, 2)
     acc = d.AutoregressiveSequenceAcc(
-        depth,
+        bmi.maxDepth,
         alignmentToPhoneticSeq,
-        [ initialFrame for i in range(depth) ],
-        frameSummarizer.createAcc(True, lambda streamIndex:
+        [ initialFrame for i in range(bmi.maxDepth) ],
+        bmi.frameSummarizer.createAcc(True, lambda streamIndex:
             d.MappedInputAcc(getAcInput,
                 createLeafAccs[streamIndex]()
             ).withTag(('stream', corpus.streams[streamIndex].name))
@@ -343,9 +344,9 @@ def trainMonophoneDist(bmi, corpus):
         d.OracleAcc,
         d.OracleAcc,
     ]
-    globalDist = trainGlobalDist(corpus, bmi.maxDepth, alignmentToPhoneticSeq,
-                                 initialFrame, bmi.frameSummarizer,
-                                 createLeafAccs, lgVarianceFloorMult)
+    globalDist = trainGlobalDist(bmi, corpus, alignmentToPhoneticSeq,
+                                 initialFrame, createLeafAccs,
+                                 lgVarianceFloorMult)
     dist = globalDist
 
     print 'DEBUG: converting global dist to monophone dist'
@@ -525,8 +526,7 @@ def doGlobalSystem(synthOutDir, figOutDir):
         d.OracleAcc,
         d.OracleAcc,
     ]
-    dist = trainGlobalDist(corpus, bmi.maxDepth, alignmentToPhoneticSeq,
-                           initialFrame, bmi.frameSummarizer,
+    dist = trainGlobalDist(bmi, corpus, alignmentToPhoneticSeq, initialFrame,
                            createLeafAccs, lgVarianceFloorMult)
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'global')
 
@@ -708,9 +708,9 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
         d.OracleAcc,
         d.OracleAcc,
     ]
-    globalDist = trainGlobalDist(corpus, bmi.maxDepth, alignmentToPhoneticSeq,
-                                 initialFrame, bmi.frameSummarizer,
-                                 createLeafAccs, lgVarianceFloorMult)
+    globalDist = trainGlobalDist(bmi, corpus, alignmentToPhoneticSeq,
+                                 initialFrame, createLeafAccs,
+                                 lgVarianceFloorMult)
     dist = globalDist
 
     print 'DEBUG: converting global dist to full ctx acc'
@@ -980,9 +980,9 @@ def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
         d.OracleAcc,
         d.OracleAcc,
     ]
-    globalDist = trainGlobalDist(corpus, bmi.maxDepth, alignmentToPhoneticSeq,
-                                 initialFrame, bmi.frameSummarizer,
-                                 createLeafAccs, lgVarianceFloorMult)
+    globalDist = trainGlobalDist(bmi, corpus, alignmentToPhoneticSeq,
+                                 initialFrame, createLeafAccs,
+                                 lgVarianceFloorMult)
 
     print 'DEBUG: converting global dist to monophone net dist'
     netFor = NetFor1(bmi.subLabels)
