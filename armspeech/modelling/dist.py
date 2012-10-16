@@ -1275,6 +1275,40 @@ class PassThruAcc(Acc):
         dist = estimateChild(self.acc)
         return PassThruDist(dist, tag = self.tag), (0.0, Rat.Exact)
 
+@codeDeps(Acc, ForwardRef(lambda: CountFramesDist), Rat)
+class CountFramesAcc(Acc):
+    def __init__(self, acc, tag = None):
+        self.acc = acc
+        self.tag = tag
+
+        self.occ = 0.0
+        self.frames = 0.0
+
+    def children(self):
+        return [self.acc]
+
+    def add(self, input, outSeq, occ = 1.0):
+        self.occ += occ
+        self.frames += len(outSeq) * occ
+        self.acc.add(input, outSeq, occ)
+
+    def addAccSingle(self, acc):
+        self.occ += acc.occ
+        self.frames += acc.frames
+
+    def count(self):
+        return self.frames
+
+    def logLikeSingle(self):
+        return 0.0
+
+    def derivParamsSingle(self):
+        return []
+
+    def estimateAux(self, estimateChild):
+        dist = estimateChild(self.acc)
+        return CountFramesDist(dist, tag = self.tag), (0.0, Rat.Exact)
+
 @codeDeps(Acc, ForwardRef(lambda: DebugDist), Memo, Rat)
 class DebugAcc(Acc):
     def __init__(self, maxOcc, acc, tag = None):
@@ -2454,6 +2488,46 @@ class PassThruDist(Dist):
     def parseChildren(self, params, parseChild):
         dist, paramsLeft = parseChild(self.dist, params)
         return PassThruDist(dist, tag = self.tag), paramsLeft
+
+@codeDeps(CountFramesAcc, Dist, SynthMethod)
+class CountFramesDist(Dist):
+    def __init__(self, dist, tag = None):
+        self.dist = dist
+        self.tag = tag
+
+    def __repr__(self):
+        return 'CountFramesDist('+repr(self.dist)+', tag = '+repr(self.tag)+')'
+
+    def children(self):
+        return [self.dist]
+
+    def mapChildren(self, mapChild):
+        return CountFramesDist(mapChild(self.dist), tag = self.tag)
+
+    def logProb(self, input, outSeq):
+        return self.dist.logProb(input, outSeq)
+
+    def logProbDerivInput(self, input, outSeq):
+        return self.dist.logProbDerivInput(input, outSeq)
+
+    def logProbDerivOutput(self, input, outSeq):
+        return self.dist.logProbDerivOutput(input, outSeq)
+
+    def createAcc(self, createAccChild):
+        return CountFramesAcc(createAccChild(self.dist), tag = self.tag)
+
+    def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
+        return self.dist.synth(input, method, actualOutput)
+
+    def paramsSingle(self):
+        return []
+
+    def parseSingle(self, params):
+        return self, params
+
+    def parseChildren(self, params, parseChild):
+        dist, paramsLeft = parseChild(self.dist, params)
+        return CountFramesDist(dist, tag = self.tag), paramsLeft
 
 @codeDeps(DebugAcc, Dist, SynthMethod)
 class DebugDist(Dist):

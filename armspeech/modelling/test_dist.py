@@ -284,6 +284,11 @@ def gen_PassThruDist(dimIn = 3):
     subDist, inputGen = gen_LinearGaussian(dimIn)
     return d.PassThruDist(subDist).withTag(randTag()), inputGen
 
+@codeDeps(d.CountFramesDist, gen_VectorDist, randTag)
+def gen_CountFramesDist(framesPerObs):
+    subDist, inputGen = gen_VectorDist(order = framesPerObs)
+    return d.CountFramesDist(subDist).withTag(randTag()), inputGen
+
 @codeDeps(d.DebugDist, gen_LinearGaussian, randTag)
 def gen_DebugDist(maxOcc = None, dimIn = 3):
     subDist, inputGen = gen_LinearGaussian(dimIn)
@@ -831,7 +836,7 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
     d.AutoGrowingDiscreteAcc, d.ConstantClassifierAcc, d.LinearGaussianAcc,
     d.Memo, d.estimateInitialMixtureOfTwoExperts,
     gen_AutoregressiveSequenceDist, gen_BinaryLogisticClassifier,
-    gen_ConstantClassifier, gen_DebugDist,
+    gen_ConstantClassifier, gen_CountFramesDist, gen_DebugDist,
     gen_DecisionTree_with_LinearGaussian_leaves, gen_DiscreteDist,
     gen_IdentifiableMixtureDist, gen_LinearGaussian, gen_MappedInputDist,
     gen_MappedOutputDist, gen_MixtureDist, gen_MixtureOfTwoExperts,
@@ -1063,6 +1068,19 @@ class TestDist(unittest.TestCase):
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivInputCheck = True, logProbDerivOutputCheck = True)
             if self.deepTest:
                 initEstDist = gen_PassThruDist(dimIn)[0]
+                check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
+                check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
+
+    def test_CountFramesDist(self, eps = 1e-8, numDists = 10, numPoints = 50):
+        def checkAccAdditional(acc, training):
+            assert_allclose(acc.frames, sum([ len(output) * occ for input, output, occ in training ]))
+        for distIndex in range(numDists):
+            framesPerObs = randint(0, 5)
+            dist, inputGen = gen_CountFramesDist(framesPerObs)
+            # (FIXME : add logProbDerivInput and logProbDerivOutput eventually)
+            checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, checkAccAdditional = checkAccAdditional)
+            if self.deepTest:
+                initEstDist = gen_CountFramesDist(framesPerObs)[0]
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
 
