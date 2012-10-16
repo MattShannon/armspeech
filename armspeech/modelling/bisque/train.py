@@ -33,14 +33,14 @@ def accumulateJobSet(
     return accArts
 
 @codeDeps(d.addAcc)
-def estimate(distPrev, createAcc, estimate, verbosity, *accs):
+def estimate(distPrev, createAcc, estimateDist, verbosity, *accs):
     accTot = createAcc(distPrev)
     for acc in accs:
         d.addAcc(accTot, acc)
     logLikePrev = accTot.logLike()
     count = accTot.count()
     count = max(count, 1.0)
-    dist = estimate(accTot)
+    dist = estimateDist(accTot)
     if verbosity >= 2:
         print ('trainEM: logLikePrev = %s (%s count)' %
                (logLikePrev / count, count))
