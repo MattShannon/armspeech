@@ -44,6 +44,7 @@ class Artifact(DagNode):
         if self.secHash() != self.computeSecHash():
             raise RuntimeError('secHash of artifact %s has changed' % self)
 
+# (FIXME : unused? Remove?)
 @codeDeps(Artifact, codedep.getHash, persist.secHashObject)
 class ThunkArtifact(Artifact):
     """An artifact whose value is computed fresh each time it is needed.

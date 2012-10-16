@@ -50,6 +50,7 @@ class ArcticCorpus(cps.Corpus):
         bapStream = feat.Stream('bap', self.bapOrder)
         self.streams = [mgcStream, lf0Stream, bapStream]
 
+        # (FIXME : this should not be part of corpus?)
         self.mgcLims = getMgcLims40()
 
     def parseSubLabel(self, stateString):
@@ -99,6 +100,7 @@ class ArcticCorpus(cps.Corpus):
             frames += len(acousticSeq)
         return frames
 
+    # (FIXME : this should not be part of corpus?)
     def synthComplete(self, dist, uttIds, method, synthOutDir, exptTag, afterSynth = None, verbosity = 1):
         if verbosity >= 1:
             print 'synth: synthesizing to', synthOutDir, 'with tag', exptTag
