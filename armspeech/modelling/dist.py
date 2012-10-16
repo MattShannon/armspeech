@@ -2861,6 +2861,64 @@ class AutoregressiveNetDist(Dist):
         acDist, paramsLeft = parseChild(self.acDist, paramsLeft)
         return AutoregressiveNetDist(self.depth, self.netFor, self.fillFrames, durDist, acDist, self.pruneSpec, tag = self.tag), paramsLeft
 
+@codeDeps(LinearGaussianAcc, accNodeList)
+class FloorSetter(object):
+    """Helper class for setting floors.
+
+    __call__ takes a root acc as input, and mutably sets floors of any sub-accs
+    which are of an appropriate type (currently just LinearGaussianAcc).
+
+    The set of sub-nodes to consider is customizable by setting getNodes.
+
+    If htsStyle is False then the variance floor of each LinearGaussianAcc is
+    set to lgFloorMult times the variance of the dist estimated from that acc.
+
+    If htsStyle is True then the variance floor of each LinearGaussianAcc is
+    set to lgFloorMult times the variance of the output.
+
+    If htsStyle is True then it is assumed that the last component of the input
+    vector is the bias (this is weakly checked).
+    """
+    def __init__(self, lgFloorMult, htsStyle = False, getNodes = accNodeList,
+                 verbosity = 1):
+        self.lgFloorMult = lgFloorMult
+        self.htsStyle = htsStyle
+        self.getNodes = getNodes
+        self.verbosity = verbosity
+
+    def lgFloor(self, acc):
+        assert isinstance(acc, LinearGaussianAcc)
+        if self.htsStyle:
+            assert len(acc.sumTarget) >= 1
+            # weak check that last component of input is bias
+            assert np.allclose(acc.sumOuter[-1, -1], acc.occ)
+            accNew = LinearGaussianAcc(inputLength = 1)
+            accNew.occ = acc.occ
+            accNew.sumSqr = acc.sumSqr
+            accNew.sumTarget = acc.sumTarget[-1:]
+            accNew.sumOuter = acc.sumOuter[-1:, -1:]
+        else:
+            accNew = acc
+        variance = accNew.estimateSingleAux()[0].variance
+        return variance * self.lgFloorMult
+
+    def __call__(self, accRoot):
+        if self.verbosity >= 1:
+            print ('floor: setting floors with lgFloorMult = %s,'
+                   ' htsStyle = %s' % (self.lgFloorMult, self.htsStyle))
+        floorsSet = 0
+        # (FIXME : slightly dodgy to change accs like this, but not too bad)
+        for acc in self.getNodes(accRoot):
+            if isinstance(acc, LinearGaussianAcc):
+                varianceFloor = self.lgFloor(acc)
+                if self.verbosity >= 2:
+                    print ('floor:    changing variance floor from %s to %s' %
+                           (acc.varianceFloor, varianceFloor))
+                acc.varianceFloor = varianceFloor
+                floorsSet += 1
+        if self.verbosity >= 1:
+            print 'floor: set %s floors' % floorsSet
+
 @codeDeps(BinaryLogisticClassifier, ConstantClassifier, LinearGaussian,
     distNodeList
 )
