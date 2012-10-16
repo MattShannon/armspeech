@@ -294,17 +294,11 @@ def trainGlobalDist(bmi, corpus, alignmentToPhoneticSeq, initialFrame,
 
     print 'DEBUG: estimating global dist'
     timed(corpus.accumulate)(acc)
+
+    d.FloorSetter(lgFloorMult = lgVarianceFloorMult)(acc)
+
     dist, (trainAux, trainAuxRat) = d.getDefaultEstimateTotAux()(acc)
     reportTrainAux((trainAux, trainAuxRat), acc.count())
-
-    print 'lgVarianceFloorMult =', lgVarianceFloorMult
-
-    def setFloorMapPartial(dist, mapChild):
-        if isinstance(dist, d.LinearGaussian) and dist.tag == 'setFloor':
-            return d.LinearGaussian(dist.coeff, dist.variance, dist.variance * lgVarianceFloorMult)
-
-    print 'DEBUG: setting floors'
-    dist = nodetree.getDagMap([setFloorMapPartial, nodetree.defaultMapPartial])(dist)
 
     return dist
 
@@ -338,9 +332,8 @@ def trainMonophoneDist(bmi, corpus):
         mapAlignment = align.StandardizeAlignment(corpus.subLabels, bmi.subLabels)
     )
     initialFrame = getInitialFrame(corpus, bmi)
-    # FIXME : setFloor shouldn't need to be specified here
     createLeafAccs = [
-        lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer, lgTag = 'setFloor'),
+        lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer),
         d.OracleAcc,
         d.OracleAcc,
     ]
@@ -520,9 +513,8 @@ def doGlobalSystem(synthOutDir, figOutDir):
         mapAlignment = align.StandardizeAlignment(corpus.subLabels, bmi.subLabels)
     )
     initialFrame = getInitialFrame(corpus, bmi)
-    # FIXME : setFloor shouldn't need to be specified here
     createLeafAccs = [
-        lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer, lgTag = 'setFloor'),
+        lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer),
         d.OracleAcc,
         d.OracleAcc,
     ]
@@ -702,9 +694,8 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
         mapAlignment = align.StandardizeAlignment(corpus.subLabels, bmi.subLabels)
     )
     initialFrame = getInitialFrame(corpus, bmi)
-    # FIXME : setFloor shouldn't need to be specified here
     createLeafAccs = [
-        lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer, lgTag = 'setFloor'),
+        lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer),
         d.OracleAcc,
         d.OracleAcc,
     ]
@@ -974,9 +965,8 @@ def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
         mapAlignment = StandardizeAlignment(corpus.subLabels, [0]),
     )
     initialFrame = getInitialFrame(corpus, bmi)
-    # FIXME : setFloor shouldn't need to be specified here
     createLeafAccs = [
-        lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer, lgTag = 'setFloor'),
+        lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer),
         d.OracleAcc,
         d.OracleAcc,
     ]
