@@ -33,10 +33,12 @@ def accumulateJobSet(
     return accArts
 
 @codeDeps(d.addAcc)
-def estimate(distPrev, createAcc, estimateDist, verbosity, *accs):
+def estimate(distPrev, createAcc, estimateDist, afterAcc, verbosity, *accs):
     accTot = createAcc(distPrev)
     for acc in accs:
         d.addAcc(accTot, acc)
+    if afterAcc is not None:
+        afterAcc(accTot)
     logLikePrev = accTot.logLike()
     count = accTot.count()
     count = max(count, 1.0)
@@ -54,18 +56,22 @@ def estimateJobSet(
     accArts,
     createAccArt = liftLocal(d.getDefaultCreateAcc)(),
     estimateArt = liftLocal(d.getDefaultEstimate)(),
+    afterAccArt = lit(None),
     verbosityArt = lit(0),
 ):
     return lift(estimate)(
-        distPrevArt, createAccArt, estimateArt, verbosityArt, *accArts
+        distPrevArt, createAccArt, estimateArt, afterAccArt, verbosityArt,
+        *accArts
     )
 
 @codeDeps(d.Rat, d.addAcc)
-def estimateWithTotAux(distPrev, createAcc, estimateTotAux, monotoneAux,
-                       verbosity, *accs):
+def estimateWithTotAux(distPrev, createAcc, estimateTotAux, afterAcc,
+                       monotoneAux, verbosity, *accs):
     accTot = createAcc(distPrev)
     for acc in accs:
         d.addAcc(accTot, acc)
+    if afterAcc is not None:
+        afterAcc(accTot)
     logLikePrev = accTot.logLike()
     count = accTot.count()
     count = max(count, 1.0)
@@ -89,11 +95,13 @@ def estimateWithTotAuxJobSet(
     accArts,
     createAccArt = liftLocal(d.getDefaultCreateAcc)(),
     estimateTotAuxArt = liftLocal(d.getDefaultEstimateTotAux)(),
+    afterAccArt = lit(None),
     monotoneAuxArt = lit(True),
     verbosityArt = lit(0),
 ):
     return lift(estimateWithTotAux)(
-        distPrevArt, createAccArt, estimateTotAuxArt, monotoneAuxArt, verbosityArt, *accArts
+        distPrevArt, createAccArt, estimateTotAuxArt, afterAccArt,
+        monotoneAuxArt, verbosityArt, *accArts
     )
 
 @codeDeps(accumulateJobSet, d.getDefaultCreateAcc, d.getDefaultEstimateTotAux,
@@ -105,6 +113,7 @@ def expectationMaximizationJobSet(
     uttIdChunkArts,
     createAccArt = liftLocal(d.getDefaultCreateAcc)(),
     estimateTotAuxArt = liftLocal(d.getDefaultEstimateTotAux)(),
+    afterAccArt = lit(None),
     monotoneAuxArt = lit(True),
     verbosityArt = lit(0),
 ):
@@ -112,8 +121,8 @@ def expectationMaximizationJobSet(
     accArts = accumulateJobSet(distPrevArt, corpusArt, uttIdChunkArts,
                                createAccArt)
     distArt = estimateWithTotAuxJobSet(distPrevArt, accArts, createAccArt,
-                                       estimateTotAuxArt, monotoneAuxArt,
-                                       verbosityArt)
+                                       estimateTotAuxArt, afterAccArt,
+                                       monotoneAuxArt, verbosityArt)
     return distArt
 
 @codeDeps(d.getDefaultCreateAcc, d.getDefaultEstimateTotAux,
@@ -126,6 +135,7 @@ def trainEMJobSet(
     numIterationsLit = lit(1),
     createAccArt = liftLocal(d.getDefaultCreateAcc)(),
     estimateTotAuxArt = liftLocal(d.getDefaultEstimateTotAux)(),
+    afterAccArt = lit(None),
     monotoneAuxArt = lit(True),
     verbosityArt = lit(0),
 ):
@@ -134,6 +144,6 @@ def trainEMJobSet(
     for it in range(numIterations):
         distArt = expectationMaximizationJobSet(distArt, corpusArt,
                                                 uttIdChunkArts, createAccArt,
-                                                estimateTotAuxArt,
+                                                estimateTotAuxArt, afterAccArt,
                                                 monotoneAuxArt, verbosityArt)
     return distArt
