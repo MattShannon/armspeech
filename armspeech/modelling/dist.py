@@ -108,6 +108,10 @@ def getEstimateTotAux(estimateAuxPartials, idValue = id):
             return dist
         dist = nodetree.getDagMap([estimatePartial])(acc)
         totAux, totAuxRat = sumValuedRats([ auxValuedRats[idValue(distNode)] for distNode in distNodeList(dist) ])
+
+        totAuxAgain, totAuxAgainRat = sumValuedRats(auxValuedRats.values())
+        assert np.allclose(totAuxAgain, totAux) and totAuxAgainRat == totAuxRat
+
         return dist, (totAux, totAuxRat)
     return estimateTotAux
 
