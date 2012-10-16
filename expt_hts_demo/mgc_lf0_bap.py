@@ -77,26 +77,3 @@ def computeFirstFrameAverage(corpus, mgcOrder, bapOrder):
     #   if more than half of the first frames are voiced)
     assert lf0FirstFrameProportionUnvoiced >= 0.5
     return mgcFirstFrameAverage, None, bapFirstFrameAverage
-
-@codeDeps()
-def computeFrameMeanAndVariance(corpus, mgcOrder, bapOrder):
-    mgcSum = np.zeros((mgcOrder,))
-    mgcSumSqr = np.zeros((mgcOrder,))
-    bapSum = np.zeros((bapOrder,))
-    bapSumSqr = np.zeros((bapOrder,))
-    numFrames = 0
-    for uttId in corpus.trainUttIds:
-        (uttId, alignment), acousticSeq = corpus.data(uttId)
-        for mgcFrame, lf0Frame, bapFrame in acousticSeq:
-            mgcFrame = np.asarray(mgcFrame)
-            bapFrame = np.asarray(bapFrame)
-            mgcSum += mgcFrame
-            mgcSumSqr += mgcFrame * mgcFrame
-            bapSum += bapFrame
-            bapSumSqr += bapFrame * bapFrame
-        numFrames += len(acousticSeq)
-    mgcMean = mgcSum / numFrames
-    bapMean = bapSum / numFrames
-    mgcVariance = mgcSumSqr / numFrames - mgcMean * mgcMean
-    bapVariance = bapSumSqr / numFrames - bapMean * bapMean
-    return (mgcMean, bapMean), (mgcVariance, bapVariance)
