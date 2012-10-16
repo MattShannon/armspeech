@@ -53,6 +53,14 @@ class TestMathHelp(unittest.TestCase):
             trueDet = la.det(A) if n > 0 else 1.0
             assert_allclose(np.exp(mathhelp.logDet(A)), abs(trueDet))
 
+    def test_logDetPosDef(self, numPoints = 200):
+        for pointIndex in range(numPoints):
+            n = randint(0, 20)
+            factor = randn(n, n)
+            mat = np.dot(factor, factor.T)
+            trueDet = la.det(mat) if n > 0 else 1.0
+            assert_allclose(np.exp(mathhelp.logDetPosDef(mat)), abs(trueDet))
+
     def test_sampleDiscrete(self, numDists = 20, numSamples = 10000):
         for distIndex in range(numDists):
             n = randint(1, 5)
