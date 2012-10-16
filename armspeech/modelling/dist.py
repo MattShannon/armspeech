@@ -2904,7 +2904,7 @@ class FloorSetter(object):
 
     def __call__(self, accRoot):
         if self.verbosity >= 1:
-            print ('floor: setting floors with lgFloorMult = %s,'
+            print ('flooring: setting floors with lgFloorMult = %s,'
                    ' htsStyle = %s' % (self.lgFloorMult, self.htsStyle))
         floorsSet = 0
         # (FIXME : slightly dodgy to change accs like this, but not too bad)
@@ -2912,12 +2912,12 @@ class FloorSetter(object):
             if isinstance(acc, LinearGaussianAcc):
                 varianceFloor = self.lgFloor(acc)
                 if self.verbosity >= 2:
-                    print ('floor:    changing variance floor from %s to %s' %
-                           (acc.varianceFloor, varianceFloor))
+                    print ('flooring:    changing variance floor from %s to'
+                           ' %s' % (acc.varianceFloor, varianceFloor))
                 acc.varianceFloor = varianceFloor
                 floorsSet += 1
         if self.verbosity >= 1:
-            print 'floor: set %s floors' % floorsSet
+            print 'flooring: set %s floors' % floorsSet
 
 @codeDeps(BinaryLogisticClassifier, ConstantClassifier, LinearGaussian,
     distNodeList
