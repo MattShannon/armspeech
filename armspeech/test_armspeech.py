@@ -13,6 +13,7 @@ from armspeech.modelling import test_dist
 from armspeech.modelling import test_minimize
 from armspeech.modelling import test_transform
 from armspeech.modelling import test_wnet
+from armspeech.modelling.bisque import test_modelling_bisque
 from armspeech.util import test_iterhelp
 from armspeech.util import test_mathhelp
 from armspeech.util import test_memoize
@@ -29,8 +30,8 @@ class ShouldNotPickle(object):
 
 @codeDeps(ShouldNotPickle, test_dist.suite, test_iterhelp.suite,
     test_mathhelp.suite, test_memoize.suite, test_minimize.suite,
-    test_persist.suite, test_queuer.suite, test_transform.suite,
-    test_wnet.suite
+    test_modelling_bisque.suite, test_persist.suite, test_queuer.suite,
+    test_transform.suite, test_wnet.suite
 )
 def suite(deepTest = False):
     return unittest.TestSuite([
@@ -39,6 +40,7 @@ def suite(deepTest = False):
         test_minimize.suite(),
         test_transform.suite(),
         test_wnet.suite(),
+        test_modelling_bisque.suite(),
         test_iterhelp.suite(),
         test_mathhelp.suite(),
         test_memoize.suite(),
