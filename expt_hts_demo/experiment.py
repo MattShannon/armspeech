@@ -616,6 +616,46 @@ def doGlobalSystem(synthOutDir, figOutDir):
 
     printTime('finished global')
 
+@codeDeps(corpus_bisque.getUttIdChunkArts, d.FloorSetter, evaluateVarious,
+    getBmiForCorpus, getCorpusWithSubLabels, getInitDist1, lift, liftLocal, lit,
+    mixupJobSet, train_bisque.expectationMaximizationJobSet
+)
+def doGlobalSystemJobSet(synthOutDirArt, figOutDirArt):
+    corpusArt = liftLocal(getCorpusWithSubLabels)()
+    bmiArt = liftLocal(getBmiForCorpus)(corpusArt)
+
+    uttIdChunkArts = corpus_bisque.getUttIdChunkArts(corpusArt,
+                                                     numChunksLit = lit(2))
+
+    distArt = lift(getInitDist1)(bmiArt, corpusArt)
+
+    # train global dist while setting floors
+    distArt = train_bisque.expectationMaximizationJobSet(
+        distArt,
+        corpusArt,
+        uttIdChunkArts,
+        afterAccArt = liftLocal(d.FloorSetter)(lgFloorMult = lit(1e-3)),
+        verbosityArt = lit(2),
+    )
+    results1Art = lift(evaluateVarious)(
+        distArt, bmiArt, corpusArt, synthOutDirArt, figOutDirArt,
+        exptTag = lit('global')
+    )
+
+    distArt = mixupJobSet(distArt, corpusArt, uttIdChunkArts)
+    results2Art = lift(evaluateVarious)(
+        distArt, bmiArt, corpusArt, synthOutDirArt, figOutDirArt,
+        exptTag = lit('global.2mix')
+    )
+
+    distArt = mixupJobSet(distArt, corpusArt, uttIdChunkArts)
+    results4Art = lift(evaluateVarious)(
+        distArt, bmiArt, corpusArt, synthOutDirArt, figOutDirArt,
+        exptTag = lit('global.4mix')
+    )
+
+    return results1Art, results2Art, results4Art
+
 @codeDeps(d.FloorSetter, evaluateVarious, getBmiForCorpus,
     getCorpusWithSubLabels, getInitDist1, globalToMonophoneMap, mixup,
     printTime, trn.expectationMaximization
