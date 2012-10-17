@@ -246,6 +246,32 @@ def createLinearGaussianVectorDist(indexSpecSummarizer):
 
     return indexSpecSummarizer.createDist(False, distFor)
 
+@codeDeps(d.LinearGaussian, d.MappedInputDist, xf.AddBias)
+def createLinearGaussianWithTimingVectorDist(indexSpecSummarizer):
+    """Creates a linear-Gaussian vector dist where input includes timing info.
+
+    Expects input (timingInfo, acInput) where timingInfo is
+    (framesBefore, framesAfter).
+    """
+    extraLength = 2
+    def distFor(outIndex):
+        inputLength = (indexSpecSummarizer.vectorLength(outIndex) +
+                       extraLength + 1)
+        # from (timingInfo, acInputSingle) to (timingInfo + acInputSingle)
+        #   where acInputSingle is a vector which is the acoustic context for a
+        #   single outIndex
+        return d.MappedInputDist(np.concatenate,
+            d.MappedInputDist(xf.AddBias(),
+                d.LinearGaussian(
+                    coeff = np.zeros((inputLength,)),
+                    variance = 1.0,
+                    varianceFloor = 0.0
+                )
+            )
+        )
+
+    return indexSpecSummarizer.createDist(True, distFor)
+
 @codeDeps(d.BinaryLogisticClassifier, d.FixedValueDist,
     d.IdentifiableMixtureDist, d.LinearGaussian, d.MappedInputDist, xf.AddBias,
     xf.Msd01ToVector
@@ -271,8 +297,8 @@ def createBlcBasedLf0Dist(lf0Depth):
     )
 
 @codeDeps()
-def tupleMap1(((label, subLabel), acInput)):
-    return subLabel, (label, acInput)
+def tupleMap1(((a, b), c)):
+    return a, (b, c)
 
 @codeDeps()
 def tupleMap1Phone(((label, subLabel), acInput)):
@@ -367,6 +393,50 @@ def getInitDist1(bmi, corpus, alignmentSubLabels = 'sameAsBmi'):
             d.MappedInputDist(getAcInput,
                 createLeafDists[streamIndex]().withTag('acVec')
             ).withTag(('stream', corpus.streams[streamIndex].name))
+        )
+    )
+    return dist
+
+@codeDeps(ElemGetter, align.AlignmentToPhoneticSeqWithTiming,
+    align.StandardizeAlignment, createLinearGaussianWithTimingVectorDist,
+    d.AutoregressiveSequenceDist, d.MappedInputDist, d.OracleDist,
+    mgc_lf0_bap.computeFirstFrameAverage, tupleMap1
+)
+def getInitDist2(bmi, corpus, alignmentSubLabels = 'sameAsBmi'):
+    """Produces an initial dist which uses timings.
+
+    Has stream tag ('stream', streamName) with input
+    (phInput, (timingInfo, acInput)) where timingInfo is
+    (framesBefore, framesAfter).
+    Has acoustic vector tag 'acVec' with input (timingInfo, acInput).
+    """
+    initialFrame = mgc_lf0_bap.computeFirstFrameAverage(corpus, bmi.mgcOrder,
+                                                        bmi.bapOrder)
+    if alignmentSubLabels == 'sameAsBmi':
+        alignmentSubLabels = bmi.subLabels
+    alignmentToPhoneticSeq = align.AlignmentToPhoneticSeqWithTiming(
+        mapAlignment = align.StandardizeAlignment(
+            corpus.subLabels, alignmentSubLabels
+        )
+    )
+    createLeafDists = [
+        lambda: createLinearGaussianWithTimingVectorDist(bmi.mgcSummarizer),
+        d.OracleDist,
+        d.OracleDist,
+    ]
+    dropPhInput = ElemGetter(1, 2)
+    dist = d.AutoregressiveSequenceDist(
+        bmi.maxDepth,
+        alignmentToPhoneticSeq,
+        [ initialFrame for i in range(bmi.maxDepth) ],
+        bmi.frameSummarizer.createDist(True, lambda streamIndex:
+            # from ((phInput, timingInfo), acInput)
+            #   to (phInput, (timingInfo, acInput))
+            d.MappedInputDist(tupleMap1,
+                d.MappedInputDist(dropPhInput,
+                    createLeafDists[streamIndex]().withTag('acVec')
+                ).withTag(('stream', corpus.streams[streamIndex].name))
+            )
         )
     )
     return dist
@@ -634,26 +704,9 @@ def doMonophoneSystemJobSet(synthOutDirArt, figOutDirArt):
 
     return results1Art, results2Art, results4Art
 
-@codeDeps()
-def convertTimingInfo(input):
-    (phone, subLabel, extra), acousticContext = input
-    return subLabel, (phone, (extra, acousticContext))
-
-@codeDeps()
-class MapTiming1(object):
-    def __init__(self):
-        self.extraLength = 2
-
-    def __call__(self, (framesBefore, framesAfter)):
-        return framesBefore, framesAfter
-
-@codeDeps(AttrGetter, MapTiming1, StandardizeAlignment,
-    align.AlignmentToPhoneticSeqWithTiming, convertTimingInfo,
-    d.AutoregressiveSequenceAcc, d.LinearGaussianAcc, d.MappedInputAcc,
-    d.OracleAcc, d.createDiscreteAcc, d.getDefaultEstimateTotAux,
-    evaluateVarious, getBmiForCorpus, getCorpusWithSubLabels,
-    mgc_lf0_bap.computeFirstFrameAverage, printTime, reportTrainAux, timed,
-    xf.AddBias
+@codeDeps(d.FloorSetter, evaluateVarious, getBmiForCorpus,
+    getCorpusWithSubLabels, getInitDist2, globalToMonophoneMap, printTime,
+    trn.expectationMaximization
 )
 def doTimingInfoSystem(synthOutDir, figOutDir):
     print
@@ -665,48 +718,20 @@ def doTimingInfoSystem(synthOutDir, figOutDir):
 
     print 'numSubLabels =', len(bmi.subLabels)
 
-    mapTiming = MapTiming1()
-    alignmentToPhoneticSeq = align.AlignmentToPhoneticSeqWithTiming(
-        mapAlignment = StandardizeAlignment(corpus.subLabels, bmi.subLabels),
-        mapLabel = AttrGetter('phone'),
-        mapTiming = mapTiming
+    dist = getInitDist2(bmi, corpus)
+
+    # train global dist while setting floors
+    dist, _, _, _ = trn.expectationMaximization(
+        dist,
+        corpus.accumulate,
+        afterAcc = d.FloorSetter(lgFloorMult = 1e-3),
+        verbosity = 2,
     )
 
-    initialFrame = mgc_lf0_bap.computeFirstFrameAverage(corpus, bmi.mgcOrder,
-                                                        bmi.bapOrder)
+    print 'DEBUG: converting global dist to monophone dist'
+    dist = globalToMonophoneMap(dist, bmi)
 
-    acc = d.AutoregressiveSequenceAcc(
-        bmi.maxDepth,
-        alignmentToPhoneticSeq,
-        [ initialFrame for i in range(bmi.maxDepth) ],
-        bmi.frameSummarizer.createAcc(True, lambda streamIndex:
-            {
-                0:
-                    d.MappedInputAcc(convertTimingInfo,
-                        d.createDiscreteAcc(bmi.subLabels, lambda subLabel:
-                            d.createDiscreteAcc(bmi.phoneset.phoneList, lambda phone:
-                                bmi.mgcSummarizer.createAcc(True, lambda outIndex:
-                                    d.MappedInputAcc(np.concatenate,
-                                        d.MappedInputAcc(xf.AddBias(),
-                                            d.LinearGaussianAcc(inputLength = bmi.mgcSummarizer.vectorLength(outIndex) + mapTiming.extraLength + 1, varianceFloor = 0.0)
-                                        )
-                                    )
-                                )
-                            )
-                        )
-                    )
-            ,   1:
-                    d.OracleAcc()
-            ,   2:
-                    d.OracleAcc()
-            }[streamIndex]
-        )
-    )
-
-    timed(corpus.accumulate)(acc)
-    dist, (trainAux, trainAuxRat) = d.getDefaultEstimateTotAux()(acc)
-    reportTrainAux((trainAux, trainAuxRat), acc.count())
-
+    dist = trn.expectationMaximization(dist, corpus.accumulate, verbosity = 2)[0]
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'timingInfo')
 
     printTime('finished timingInfo')

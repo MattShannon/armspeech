@@ -159,7 +159,7 @@ class AlignmentToPhoneticSeqWithTiming(object):
                 for time in range(startTime, endTime):
                     framesBefore = time - startTime
                     framesAfter = endTime - time - 1
-                    yield labelOut, subLabel, mapTiming((framesBefore, framesAfter))
+                    yield (labelOut, subLabel), mapTiming((framesBefore, framesAfter))
 
     def __call__(self, alignment):
         return list(self.toPhoneticIter(alignment))
