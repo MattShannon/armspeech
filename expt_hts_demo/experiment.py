@@ -995,7 +995,7 @@ def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
     ccProbFloor = 3e-5
     print 'ccProbFloor =', ccProbFloor
 
-    globalDist = getInitDist1(bmi, corpus, alignmentSubLabels = [0])
+    globalDist = getInitDist1(bmi, corpus, alignmentSubLabels = None)
 
     # train global dist while setting floors
     globalDist, _, _, _ = trn.expectationMaximization(
