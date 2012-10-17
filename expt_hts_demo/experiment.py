@@ -1157,8 +1157,49 @@ def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
 
     printTime('finished flatStart')
 
+@codeDeps(d.FloorSetter, evaluateVarious, getBmiForCorpus,
+    getCorpusWithSubLabels, getInitDist1, globalToMonophoneMap,
+    monoSeqDistToMonoNetDistMap1, printTime, timed, trn.expectationMaximization,
+    trn.trainEM
+)
+def doMonophoneNetSystem(synthOutDir, figOutDir):
+    print
+    print 'TRAINING MONOPHONE NET SYSTEM'
+    printTime('started monoNet')
+
+    corpus = getCorpusWithSubLabels()
+    bmi = getBmiForCorpus(corpus)
+
+    print 'numSubLabels =', len(bmi.subLabels)
+
+    dist = getInitDist1(bmi, corpus)
+
+    # train global dist while setting floors
+    dist, _, _, _ = trn.expectationMaximization(
+        dist,
+        corpus.accumulate,
+        afterAcc = d.FloorSetter(lgFloorMult = 1e-3),
+        verbosity = 2,
+    )
+
+    print 'DEBUG: converting global dist to monophone dist'
+    dist = globalToMonophoneMap(dist, bmi)
+
+    dist = trn.expectationMaximization(dist, corpus.accumulate, verbosity = 2)[0]
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono')
+
+    print 'DEBUG: converting monophone seq dist to monophone net dist'
+    dist = monoSeqDistToMonoNetDistMap1(dist, bmi)
+
+    print 'DEBUG: estimating monophone net dist'
+    dist = trn.trainEM(dist, timed(corpus.accumulate), deltaThresh = 1e-4, minIterations = 4, maxIterations = 4, verbosity = 2)
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'monoNet.mono')
+
+    printTime('finished monoNet')
+
 @codeDeps(doDecisionTreeClusteredSystem, doDumpCorpus, doFlatStartSystem,
-    doGlobalSystem, doMonophoneSystem, doTimingInfoSystem, doTransformSystem
+    doGlobalSystem, doMonophoneNetSystem, doMonophoneSystem, doTimingInfoSystem,
+    doTransformSystem
 )
 def run(outDir):
     synthOutDir = os.path.join(outDir, 'synth')
@@ -1180,3 +1221,5 @@ def run(outDir):
     doTransformSystem(synthOutDir, figOutDir)
 
     doFlatStartSystem(synthOutDir, figOutDir)
+
+    doMonophoneNetSystem(synthOutDir, figOutDir)
