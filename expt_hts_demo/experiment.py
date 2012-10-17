@@ -1197,6 +1197,54 @@ def doMonophoneNetSystem(synthOutDir, figOutDir):
 
     printTime('finished monoNet')
 
+@codeDeps(corpus_bisque.getUttIdChunkArts, d.FloorSetter, evaluateVarious,
+    getBmiForCorpus, getCorpusWithSubLabels, getInitDist1, globalToMonophoneMap,
+    lift, liftLocal, lit, monoSeqDistToMonoNetDistMap1,
+    train_bisque.expectationMaximizationJobSet, train_bisque.trainEMJobSet
+)
+def doMonophoneNetSystemJobSet(synthOutDirArt, figOutDirArt):
+    corpusArt = liftLocal(getCorpusWithSubLabels)()
+    bmiArt = liftLocal(getBmiForCorpus)(corpusArt)
+
+    uttIdChunkArts = corpus_bisque.getUttIdChunkArts(corpusArt,
+                                                     numChunksLit = lit(2))
+
+    distArt = lift(getInitDist1)(bmiArt, corpusArt)
+
+    # train global dist while setting floors
+    distArt = train_bisque.expectationMaximizationJobSet(
+        distArt,
+        corpusArt,
+        uttIdChunkArts,
+        afterAccArt = liftLocal(d.FloorSetter)(lgFloorMult = lit(1e-3)),
+        verbosityArt = lit(2),
+    )
+
+    distArt = lift(globalToMonophoneMap)(distArt, bmiArt)
+
+    distArt = train_bisque.expectationMaximizationJobSet(
+        distArt,
+        corpusArt,
+        uttIdChunkArts,
+        verbosityArt = lit(2),
+    )
+    resultsSeqArt = lift(evaluateVarious)(
+        distArt, bmiArt, corpusArt, synthOutDirArt, figOutDirArt,
+        exptTag = lit('mono')
+    )
+
+    distArt = lift(monoSeqDistToMonoNetDistMap1)(distArt, bmiArt)
+
+    distArt = train_bisque.trainEMJobSet(distArt, corpusArt, uttIdChunkArts,
+                                         numIterationsLit = lit(4),
+                                         verbosityArt = lit(2))
+    resultsNetArt = lift(evaluateVarious)(
+        distArt, bmiArt, corpusArt, synthOutDirArt, figOutDirArt,
+        exptTag = lit('monoNet.mono')
+    )
+
+    return resultsSeqArt, resultsNetArt
+
 @codeDeps(doDecisionTreeClusteredSystem, doDumpCorpus, doFlatStartSystem,
     doGlobalSystem, doMonophoneNetSystem, doMonophoneSystem, doTimingInfoSystem,
     doTransformSystem
