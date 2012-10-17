@@ -305,6 +305,18 @@ def createBlcBasedLf0Dist(lf0Depth):
         )
     )
 
+@codeDeps(d.ConstantClassifier)
+def createCcBinaryDist(ccProbFloor):
+    """Creates a ConstantClassifier duration dist.
+
+    Expects input acInput where acInput is a sequence of acoustic frames.
+    Expects output (0 or 1).
+    """
+    return d.ConstantClassifier(
+        probs = np.array([0.5, 0.5]),
+        probFloors = np.array([ccProbFloor, ccProbFloor])
+    )
+
 @codeDeps()
 def tupleMap1(((a, b), c)):
     return a, (b, c)
@@ -460,6 +472,22 @@ def getInitDist2(bmi, corpus, alignmentSubLabels = 'sameAsBmi'):
         )
     )
     return dist
+
+@codeDeps(ElemGetter, createCcBinaryDist, d.MappedInputDist)
+def getInitBinaryDurDist1():
+    """Produces an initial binary dist (typically used for duration modelling).
+
+    Expects input (phInput, acInput).
+    Expects output (0, 1).
+    Has stream tag ('stream', 'dur') with input (phInput, acInput).
+    Has acoustic vector tag 'acVec' with input acInput.
+    Here phInput is typically a (label, subLabel) pair and acInput is typically
+    a sequence of vectors.
+    """
+    getAcInput = ElemGetter(1, 2)
+    return d.MappedInputDist(getAcInput,
+        createCcBinaryDist(ccProbFloor = 3e-5).withTag('acVec')
+    ).withTag(('stream', 'dur'))
 
 @codeDeps(corpus_arctic.getCorpusSynthFewer, corpus_arctic.getTrainUttIds,
     labels_hts_demo.getParseLabel
@@ -1044,7 +1072,7 @@ def doTransformSystem(synthOutDir, figOutDir, globalPhone = True, studentResidua
     printTime('finished xf')
 
 @codeDeps(wnet.FlatMappedNet, wnet.SequenceNet, wnet.probLeftToRightZeroNet)
-class NetFor1(object):
+class BinaryDurNetFor(object):
     def __init__(self, subLabels):
         self.subLabels = subLabels
 
@@ -1059,11 +1087,44 @@ class NetFor1(object):
         )
         return net
 
-@codeDeps(NetFor1, d.AutoregressiveNetDist, d.AutoregressiveSequenceDist,
-    d.ConstantClassifier, d.FloorSetter, d.MappedInputDist, d.SimplePruneSpec,
-    d.createDiscreteDist, evaluateVarious, getBmiForCorpus, getCorpus,
-    getInitDist1, globalToMonophoneMap, printTime, timed,
-    trn.expectationMaximization, trn.trainEM, tupleMap1Phone
+@codeDeps(BinaryDurNetFor, d.AutoregressiveNetDist,
+    d.AutoregressiveSequenceDist
+)
+def seqDistToBinaryDurNetDistMap(seqDist, bmi, durDist, pruneSpec):
+    """Converts an AutoregressiveSequenceDist to an AutoregressiveNetDist.
+
+    acDist of new AutoregressiveNetDist is seqDist.dist.
+    durDist should be a binary dist.
+    """
+    assert isinstance(seqDist, d.AutoregressiveSequenceDist)
+    netFor = BinaryDurNetFor(bmi.subLabels)
+    acDist = seqDist.dist
+    return d.AutoregressiveNetDist(seqDist.depth, netFor,
+                                   seqDist.fillFrames, durDist, acDist,
+                                   pruneSpec)
+
+@codeDeps(d.SimplePruneSpec, getInitBinaryDurDist1, globalToMonophoneMap,
+    seqDistToBinaryDurNetDistMap
+)
+def globalSeqDistToMonoNetDistMap1(seqDist, bmi):
+    """Converts global AutoregressiveSequenceDist to monophone AutoregressiveNetDist."""
+    durDist = getInitBinaryDurDist1()
+    pruneSpec = d.SimplePruneSpec(betaThresh = 500.0, logOccThresh = 20.0)
+    dist = seqDistToBinaryDurNetDistMap(seqDist, bmi, durDist, pruneSpec)
+    return globalToMonophoneMap(dist, bmi)
+
+@codeDeps(d.SimplePruneSpec, getInitBinaryDurDist1, globalToMonophoneMap,
+    seqDistToBinaryDurNetDistMap
+)
+def monoSeqDistToMonoNetDistMap1(seqDist, bmi):
+    """Converts monophone AutoregressiveSequenceDist to monophone AutoregressiveNetDist."""
+    durDist = globalToMonophoneMap(getInitBinaryDurDist1(), bmi)
+    pruneSpec = d.SimplePruneSpec(betaThresh = 500.0, logOccThresh = 20.0)
+    return seqDistToBinaryDurNetDistMap(seqDist, bmi, durDist, pruneSpec)
+
+@codeDeps(d.FloorSetter, evaluateVarious, getBmiForCorpus, getCorpus,
+    getInitDist1, globalSeqDistToMonoNetDistMap1, printTime, timed,
+    trn.expectationMaximization, trn.trainEM
 )
 def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
     print
@@ -1077,38 +1138,18 @@ def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
     assert bmi.subLabels is not None
     print 'numSubLabels =', len(bmi.subLabels)
 
-    ccProbFloor = 3e-5
-    print 'ccProbFloor =', ccProbFloor
-
-    globalDist = getInitDist1(bmi, corpus, alignmentSubLabels = None)
+    dist = getInitDist1(bmi, corpus, alignmentSubLabels = None)
 
     # train global dist while setting floors
-    globalDist, _, _, _ = trn.expectationMaximization(
-        globalDist,
+    dist, _, _, _ = trn.expectationMaximization(
+        dist,
         corpus.accumulate,
         afterAcc = d.FloorSetter(lgFloorMult = 1e-3),
         verbosity = 2,
     )
 
     print 'DEBUG: converting global dist to monophone net dist'
-    assert isinstance(globalDist, d.AutoregressiveSequenceDist)
-    netFor = NetFor1(bmi.subLabels)
-    acDist = globalToMonophoneMap(globalDist.dist, bmi)
-    durDist = d.MappedInputDist(tupleMap1Phone,
-        d.createDiscreteDist(bmi.subLabels, lambda subLabel:
-            d.createDiscreteDist(bmi.phoneset.phoneList, lambda phone:
-                d.ConstantClassifier(
-                    probs = np.array([0.5, 0.5]),
-                    probFloors = np.array([ccProbFloor, ccProbFloor])
-                )
-            )
-        )
-    ).withTag(('stream', 'dur'))
-    pruneSpec = d.SimplePruneSpec(betaThresh = 500.0, logOccThresh = 20.0)
-    dist = d.AutoregressiveNetDist(
-        bmi.maxDepth, netFor, globalDist.fillFrames,
-        durDist, acDist, pruneSpec
-    )
+    dist = globalSeqDistToMonoNetDistMap1(dist, bmi)
 
     print 'DEBUG: estimating monophone net dist'
     dist = trn.trainEM(dist, timed(corpus.accumulate), deltaThresh = 1e-4, minIterations = 4, maxIterations = 10, verbosity = 2)
