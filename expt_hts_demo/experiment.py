@@ -232,7 +232,8 @@ def convertToTransformedGaussianResiduals(dist, residualTransformTag = None, deb
 def createLinearGaussianVectorDist(indexSpecSummarizer):
     """Creates a linear-Gaussian vector dist.
 
-    Expects input acInput.
+    Expects input acInput where acInput is a sequence of vectors.
+    Expects output a vector.
     """
     def distFor(outIndex):
         inputLength = indexSpecSummarizer.vectorLength(outIndex) + 1
@@ -251,7 +252,8 @@ def createLinearGaussianWithTimingVectorDist(indexSpecSummarizer):
     """Creates a linear-Gaussian vector dist where input includes timing info.
 
     Expects input (timingInfo, acInput) where timingInfo is
-    (framesBefore, framesAfter).
+    (framesBefore, framesAfter) and acInput is a sequence of vectors.
+    Expects output a vector.
     """
     extraLength = 2
     def distFor(outIndex):
@@ -277,6 +279,13 @@ def createLinearGaussianWithTimingVectorDist(indexSpecSummarizer):
     xf.Msd01ToVector
 )
 def createBlcBasedLf0Dist(lf0Depth):
+    """Creates a BinaryLogisticClassifier-based dist suitable for use with lf0.
+
+    Expects input acInput where acInput is a sequence of MSD elements.
+    Expects output an MSD element.
+    Here an MSD element is a pair which is either (0, None) or (1, value) where
+    value is a scalar value.
+    """
     return d.MappedInputDist(xf.Msd01ToVector(),
         d.MappedInputDist(xf.AddBias(),
             d.IdentifiableMixtureDist(
@@ -314,6 +323,7 @@ def globalToMonophoneMap(dist, bmi):
     Expects stream tag to be ('stream', streamName) with input
     ((label, subLabel), acInput).
     Expects acoustic vector tag to be 'acVec' with input acInput.
+    Here acInput is arbitrary.
 
     The returned dist maintains these properties.
     """
@@ -342,6 +352,7 @@ def globalToFullCtxCreateAcc(dist, bmi):
     Expects stream tag to be ('stream', streamName) with input
     ((label, subLabel), acInput).
     Expects acoustic vector tag to be 'acVec' with input acInput.
+    Here acInput is arbitrary.
 
     The returned dist maintains these properties.
     """
@@ -367,8 +378,12 @@ def globalToFullCtxCreateAcc(dist, bmi):
 def getInitDist1(bmi, corpus, alignmentSubLabels = 'sameAsBmi'):
     """Produces an initial dist.
 
+    Expects input an alignment.
+    Expects output a sequence of acoustic frames.
     Has stream tag ('stream', streamName) with input (phInput, acInput).
     Has acoustic vector tag 'acVec' with input acInput.
+    Here phInput is typically a (label, subLabel) pair and acInput is typically
+    a sequence of vectors.
     """
     initialFrame = mgc_lf0_bap.computeFirstFrameAverage(corpus, bmi.mgcOrder,
                                                         bmi.bapOrder)
@@ -390,6 +405,7 @@ def getInitDist1(bmi, corpus, alignmentSubLabels = 'sameAsBmi'):
         alignmentToPhoneticSeq,
         [ initialFrame for i in range(bmi.maxDepth) ],
         bmi.frameSummarizer.createDist(True, lambda streamIndex:
+            # input is (phInput, acInput)
             d.MappedInputDist(getAcInput,
                 createLeafDists[streamIndex]().withTag('acVec')
             ).withTag(('stream', corpus.streams[streamIndex].name))
@@ -405,10 +421,14 @@ def getInitDist1(bmi, corpus, alignmentSubLabels = 'sameAsBmi'):
 def getInitDist2(bmi, corpus, alignmentSubLabels = 'sameAsBmi'):
     """Produces an initial dist which uses timings.
 
+    Expects input an alignment.
+    Expects output a sequence of acoustic frames.
     Has stream tag ('stream', streamName) with input
     (phInput, (timingInfo, acInput)) where timingInfo is
     (framesBefore, framesAfter).
     Has acoustic vector tag 'acVec' with input (timingInfo, acInput).
+    Here phInput is typically a (label, subLabel) pair and acInput is typically
+    a sequence of vectors.
     """
     initialFrame = mgc_lf0_bap.computeFirstFrameAverage(corpus, bmi.mgcOrder,
                                                         bmi.bapOrder)
