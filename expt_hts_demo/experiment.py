@@ -228,35 +228,43 @@ def convertToTransformedGaussianResiduals(dist, residualTransformTag = None, deb
 
     return transformedGaussianResidualsMap(dist)
 
-@codeDeps(d.LinearGaussianAcc, d.MappedInputAcc, xf.AddBias)
-def createLinearGaussianVectorAcc(indexSpecSummarizer, lgTag = None):
-    return indexSpecSummarizer.createAcc(False, lambda outIndex:
-        d.MappedInputAcc(xf.AddBias(),
-            d.LinearGaussianAcc(
-                inputLength = indexSpecSummarizer.vectorLength(outIndex) + 1
-            ).withTag(lgTag)
-        )
-    )
+@codeDeps(d.LinearGaussian, d.MappedInputDist, xf.AddBias)
+def createLinearGaussianVectorDist(indexSpecSummarizer):
+    """Creates a linear-Gaussian vector dist.
 
-@codeDeps(d.BinaryLogisticClassifier, d.BinaryLogisticClassifierAcc,
-    d.FixedValueAcc, d.IdentifiableMixtureAcc, d.LinearGaussianAcc,
-    d.MappedInputAcc, xf.AddBias, xf.Msd01ToVector
+    Expects input acInput.
+    """
+    def distFor(outIndex):
+        inputLength = indexSpecSummarizer.vectorLength(outIndex) + 1
+        return d.MappedInputDist(xf.AddBias(),
+            d.LinearGaussian(
+                coeff = np.zeros((inputLength,)),
+                variance = 1.0,
+                varianceFloor = 0.0
+            )
+        )
+
+    return indexSpecSummarizer.createDist(False, distFor)
+
+@codeDeps(d.BinaryLogisticClassifier, d.FixedValueDist,
+    d.IdentifiableMixtureDist, d.LinearGaussian, d.MappedInputDist, xf.AddBias,
+    xf.Msd01ToVector
 )
-def createBlcBasedLf0Acc(lf0Depth, lgTag = None):
-    return d.MappedInputAcc(xf.Msd01ToVector(),
-        d.MappedInputAcc(xf.AddBias(),
-            d.IdentifiableMixtureAcc(
-                d.BinaryLogisticClassifierAcc(
-                    d.BinaryLogisticClassifier(
-                        coeff = np.zeros((2 * lf0Depth + 1,)),
-                        coeffFloor = np.ones((2 * lf0Depth + 1,)) * 5.0
-                    )
+def createBlcBasedLf0Dist(lf0Depth):
+    return d.MappedInputDist(xf.Msd01ToVector(),
+        d.MappedInputDist(xf.AddBias(),
+            d.IdentifiableMixtureDist(
+                d.BinaryLogisticClassifier(
+                    coeff = np.zeros((2 * lf0Depth + 1,)),
+                    coeffFloor = np.ones((2 * lf0Depth + 1,)) * 5.0
                 ),
                 [
-                    d.FixedValueAcc(None),
-                    d.LinearGaussianAcc(
-                        inputLength = 2 * lf0Depth + 1
-                    ).withTag(lgTag)
+                    d.FixedValueDist(None),
+                    d.LinearGaussian(
+                        coeff = np.zeros((2 * lf0Depth + 1,)),
+                        variance = 1.0,
+                        varianceFloor = 0.0
+                    )
                 ]
             )
         )
@@ -270,84 +278,97 @@ def tupleMap1(((label, subLabel), acInput)):
 def tupleMap1Phone(((label, subLabel), acInput)):
     return subLabel, (label.phone, acInput)
 
-@codeDeps(mgc_lf0_bap.computeFirstFrameAverage)
-def getInitialFrame(corpus, bmi):
-    return mgc_lf0_bap.computeFirstFrameAverage(corpus, bmi.mgcOrder, bmi.bapOrder)
-
-@codeDeps(ElemGetter, d.AutoregressiveSequenceAcc, d.LinearGaussian,
-    d.MappedInputAcc, d.getDefaultEstimateTotAux, nodetree.defaultMapPartial,
-    nodetree.getDagMap, reportTrainAux, timed
+@codeDeps(d.MappedInputDist, d.createDiscreteDist, d.isolateDist, getElem,
+    nodetree.defaultMapPartial, nodetree.findTaggedNode, nodetree.getDagMap,
+    tupleMap1Phone
 )
-def trainGlobalDist(bmi, corpus, alignmentToPhoneticSeq, initialFrame,
-                    createLeafAccs, lgVarianceFloorMult):
-    getAcInput = ElemGetter(1, 2)
-    acc = d.AutoregressiveSequenceAcc(
-        bmi.maxDepth,
-        alignmentToPhoneticSeq,
-        [ initialFrame for i in range(bmi.maxDepth) ],
-        bmi.frameSummarizer.createAcc(True, lambda streamIndex:
-            d.MappedInputAcc(getAcInput,
-                createLeafAccs[streamIndex]()
-            ).withTag(('stream', corpus.streams[streamIndex].name))
-        )
-    )
+def globalToMonophoneMap(dist, bmi):
+    """Converts a global dist to a monophone dist.
 
-    print 'DEBUG: estimating global dist'
-    timed(corpus.accumulate)(acc)
+    Expects stream tag to be ('stream', streamName) with input
+    ((label, subLabel), acInput).
+    Expects acoustic vector tag to be 'acVec' with input acInput.
 
-    d.FloorSetter(lgFloorMult = lgVarianceFloorMult)(acc)
-
-    dist, (trainAux, trainAuxRat) = d.getDefaultEstimateTotAux()(acc)
-    reportTrainAux((trainAux, trainAuxRat), acc.count())
-
-    return dist
-
-@codeDeps(align.AlignmentToPhoneticSeq, align.StandardizeAlignment,
-    createLinearGaussianVectorAcc, d.MappedInputDist, d.OracleAcc,
-    d.createDiscreteDist, d.isolateDist, getElem, getInitialFrame,
-    nodetree.defaultMapPartial, nodetree.getDagMap, timed, trainGlobalDist,
-    trn.expectationMaximization, tupleMap1Phone
-)
-def trainMonophoneDist(bmi, corpus):
-    print
-    print 'TRAINING MONOPHONE DIST'
-
-    print 'numSubLabels =', len(bmi.subLabels)
-
-    lgVarianceFloorMult = 1e-3
-    print 'lgVarianceFloorMult =', lgVarianceFloorMult
-
+    The returned dist maintains these properties.
+    """
     def globalToMonophoneMapPartial(dist, mapChild):
-        if isinstance(dist, d.MappedInputDist) and getElem(dist.tag, 0, 2) == 'stream':
-            subDist = dist.dist
+        if getElem(dist.tag, 0, 2) == 'stream':
+            acVecDist = nodetree.findTaggedNode(dist,
+                                                lambda tag: tag == 'acVec')
             return d.MappedInputDist(tupleMap1Phone,
                 d.createDiscreteDist(bmi.subLabels, lambda subLabel:
                     d.createDiscreteDist(bmi.phoneset.phoneList, lambda phone:
-                        d.isolateDist(subDist)
+                        d.isolateDist(acVecDist)
                     )
                 )
             ).withTag(dist.tag)
 
+    return nodetree.getDagMap([globalToMonophoneMapPartial,
+                               nodetree.defaultMapPartial])(dist)
+
+@codeDeps(d.AutoGrowingDiscreteAcc, d.MappedInputAcc, d.createDiscreteAcc,
+    d.defaultCreateAccPartial, d.getDefaultCreateAcc, getElem,
+    nodetree.findTaggedNode, nodetree.getDagMap, tupleMap1
+)
+def globalToFullCtxCreateAcc(dist, bmi):
+    """Converts a global dist to a full context acc.
+
+    Expects stream tag to be ('stream', streamName) with input
+    ((label, subLabel), acInput).
+    Expects acoustic vector tag to be 'acVec' with input acInput.
+
+    The returned dist maintains these properties.
+    """
+    def globalToFullCtxCreateAccPartial(dist, createAccChild):
+        if getElem(dist.tag, 0, 2) == 'stream':
+            acVecDist = nodetree.findTaggedNode(dist,
+                                                lambda tag: tag == 'acVec')
+            def createAcc():
+                return d.getDefaultCreateAcc()(acVecDist)
+            return d.MappedInputAcc(tupleMap1,
+                d.createDiscreteAcc(bmi.subLabels, lambda subLabel:
+                    d.AutoGrowingDiscreteAcc(createAcc)
+                )
+            ).withTag(dist.tag)
+
+    return nodetree.getDagMap([globalToFullCtxCreateAccPartial,
+                               d.defaultCreateAccPartial])(dist)
+
+@codeDeps(ElemGetter, align.AlignmentToPhoneticSeq, align.StandardizeAlignment,
+    createLinearGaussianVectorDist, d.AutoregressiveSequenceDist,
+    d.MappedInputDist, d.OracleDist, mgc_lf0_bap.computeFirstFrameAverage
+)
+def getInitDist1(bmi, corpus, alignmentSubLabels = 'sameAsBmi'):
+    """Produces an initial dist.
+
+    Has stream tag ('stream', streamName) with input (phInput, acInput).
+    Has acoustic vector tag 'acVec' with input acInput.
+    """
+    initialFrame = mgc_lf0_bap.computeFirstFrameAverage(corpus, bmi.mgcOrder,
+                                                        bmi.bapOrder)
+    if alignmentSubLabels == 'sameAsBmi':
+        alignmentSubLabels = bmi.subLabels
     alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
-        mapAlignment = align.StandardizeAlignment(corpus.subLabels, bmi.subLabels)
+        mapAlignment = align.StandardizeAlignment(
+            corpus.subLabels, alignmentSubLabels
+        )
     )
-    initialFrame = getInitialFrame(corpus, bmi)
-    createLeafAccs = [
-        lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer),
-        d.OracleAcc,
-        d.OracleAcc,
+    createLeafDists = [
+        lambda: createLinearGaussianVectorDist(bmi.mgcSummarizer),
+        d.OracleDist,
+        d.OracleDist,
     ]
-    globalDist = trainGlobalDist(bmi, corpus, alignmentToPhoneticSeq,
-                                 initialFrame, createLeafAccs,
-                                 lgVarianceFloorMult)
-    dist = globalDist
-
-    print 'DEBUG: converting global dist to monophone dist'
-    dist = nodetree.getDagMap([globalToMonophoneMapPartial, nodetree.defaultMapPartial])(dist)
-
-    print 'DEBUG: estimating monophone dist'
-    dist, trainLogLike, (trainAux, trainAuxRat), trainFrames = trn.expectationMaximization(dist, timed(corpus.accumulate), verbosity = 3)
-
+    getAcInput = ElemGetter(1, 2)
+    dist = d.AutoregressiveSequenceDist(
+        bmi.maxDepth,
+        alignmentToPhoneticSeq,
+        [ initialFrame for i in range(bmi.maxDepth) ],
+        bmi.frameSummarizer.createDist(True, lambda streamIndex:
+            d.MappedInputDist(getAcInput,
+                createLeafDists[streamIndex]().withTag('acVec')
+            ).withTag(('stream', corpus.streams[streamIndex].name))
+        )
+    )
     return dist
 
 @codeDeps(corpus_arctic.getCorpusSynthFewer, corpus_arctic.getTrainUttIds,
@@ -402,8 +423,8 @@ def minusPrevAc((ph, ac)):
 @codeDeps(StandardizeAlignment, align.AlignmentToPhoneticSeq,
     d.AutoregressiveSequenceDist, d.DebugDist, d.MappedOutputDist, d.OracleDist,
     d.getDefaultCreateAcc, getBmiForCorpus, getCorpusWithSubLabels,
-    getInitialFrame, minusPrevAc, nodetree.findTaggedNode, printTime,
-    questions_hts_demo.getTriphoneQuestionGroups, timed,
+    mgc_lf0_bap.computeFirstFrameAverage, minusPrevAc, nodetree.findTaggedNode,
+    printTime, questions_hts_demo.getTriphoneQuestionGroups, timed,
     xf.ShiftOutputTransform
 )
 def doDumpCorpus(outDir):
@@ -431,7 +452,8 @@ def doDumpCorpus(outDir):
         mapLabel = getQuestionAnswers
     )
 
-    initialFrame = getInitialFrame(corpus, bmi)
+    initialFrame = mgc_lf0_bap.computeFirstFrameAverage(corpus, bmi.mgcOrder,
+                                                        bmi.bapOrder)
 
     # FIXME : only works if no cross-stream stuff happening. Make more robust somehow.
     shiftToPrevTransform = xf.ShiftOutputTransform(minusPrevAc)
@@ -491,10 +513,9 @@ def doDumpCorpus(outDir):
 
     printTime('finished dumpCorpus')
 
-@codeDeps(align.AlignmentToPhoneticSeq, align.StandardizeAlignment,
-    createLinearGaussianVectorAcc, d.OracleAcc, evaluateVarious,
-    getBmiForCorpus, getCorpusWithSubLabels, getInitialFrame, mixup, printTime,
-    trainGlobalDist
+@codeDeps(d.FloorSetter, evaluateVarious, getBmiForCorpus,
+    getCorpusWithSubLabels, getInitDist1, mixup, printTime,
+    trn.expectationMaximization
 )
 def doGlobalSystem(synthOutDir, figOutDir):
     print
@@ -506,20 +527,15 @@ def doGlobalSystem(synthOutDir, figOutDir):
 
     print 'numSubLabels =', len(bmi.subLabels)
 
-    lgVarianceFloorMult = 1e-3
-    print 'lgVarianceFloorMult =', lgVarianceFloorMult
+    dist = getInitDist1(bmi, corpus)
 
-    alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
-        mapAlignment = align.StandardizeAlignment(corpus.subLabels, bmi.subLabels)
+    # train global dist while setting floors
+    dist, _, _, _ = trn.expectationMaximization(
+        dist,
+        corpus.accumulate,
+        afterAcc = d.FloorSetter(lgFloorMult = 1e-3),
+        verbosity = 2,
     )
-    initialFrame = getInitialFrame(corpus, bmi)
-    createLeafAccs = [
-        lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer),
-        d.OracleAcc,
-        d.OracleAcc,
-    ]
-    dist = trainGlobalDist(bmi, corpus, alignmentToPhoneticSeq, initialFrame,
-                           createLeafAccs, lgVarianceFloorMult)
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'global')
 
     dist = mixup(dist, corpus.accumulate)
@@ -530,27 +546,48 @@ def doGlobalSystem(synthOutDir, figOutDir):
 
     printTime('finished global')
 
-@codeDeps(evaluateVarious, getBmiForCorpus, getCorpusWithSubLabels, mixup,
-    trainMonophoneDist
+@codeDeps(d.FloorSetter, evaluateVarious, getBmiForCorpus,
+    getCorpusWithSubLabels, getInitDist1, globalToMonophoneMap, mixup,
+    printTime, trn.expectationMaximization
 )
 def doMonophoneSystem(synthOutDir, figOutDir):
+    print
+    print 'TRAINING MONOPHONE SYSTEM'
+    printTime('started mono')
+
     corpus = getCorpusWithSubLabels()
     bmi = getBmiForCorpus(corpus)
 
-    dist = trainMonophoneDist(bmi, corpus)
-    results1 = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono')
+    print 'numSubLabels =', len(bmi.subLabels)
+
+    dist = getInitDist1(bmi, corpus)
+
+    # train global dist while setting floors
+    dist, _, _, _ = trn.expectationMaximization(
+        dist,
+        corpus.accumulate,
+        afterAcc = d.FloorSetter(lgFloorMult = 1e-3),
+        verbosity = 2,
+    )
+
+    print 'DEBUG: converting global dist to monophone dist'
+    dist = globalToMonophoneMap(dist, bmi)
+
+    dist = trn.expectationMaximization(dist, corpus.accumulate, verbosity = 2)[0]
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono')
 
     dist = mixup(dist, corpus.accumulate)
-    results2 = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono.2mix')
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono.2mix')
 
     dist = mixup(dist, corpus.accumulate)
-    results4 = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono.4mix')
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono.4mix')
 
-    return results1, results2, results4
+    printTime('finished mono')
 
-@codeDeps(corpus_bisque.getUttIdChunkArts, evaluateVarious, getBmiForCorpus,
-    getCorpusWithSubLabels, lift, liftLocal, lit, mixupJobSet,
-    trainMonophoneDist
+@codeDeps(corpus_bisque.getUttIdChunkArts, d.FloorSetter, evaluateVarious,
+    getBmiForCorpus, getCorpusWithSubLabels, getInitDist1, globalToMonophoneMap,
+    lift, liftLocal, lit, mixupJobSet,
+    train_bisque.expectationMaximizationJobSet
 )
 def doMonophoneSystemJobSet(synthOutDirArt, figOutDirArt):
     corpusArt = liftLocal(getCorpusWithSubLabels)()
@@ -559,7 +596,25 @@ def doMonophoneSystemJobSet(synthOutDirArt, figOutDirArt):
     uttIdChunkArts = corpus_bisque.getUttIdChunkArts(corpusArt,
                                                      numChunksLit = lit(2))
 
-    distArt = lift(trainMonophoneDist)(bmiArt, corpusArt)
+    distArt = lift(getInitDist1)(bmiArt, corpusArt)
+
+    # train global dist while setting floors
+    distArt = train_bisque.expectationMaximizationJobSet(
+        distArt,
+        corpusArt,
+        uttIdChunkArts,
+        afterAccArt = liftLocal(d.FloorSetter)(lgFloorMult = lit(1e-3)),
+        verbosityArt = lit(2),
+    )
+
+    distArt = lift(globalToMonophoneMap)(distArt, bmiArt)
+
+    distArt = train_bisque.expectationMaximizationJobSet(
+        distArt,
+        corpusArt,
+        uttIdChunkArts,
+        verbosityArt = lit(2),
+    )
     results1Art = lift(evaluateVarious)(
         distArt, bmiArt, corpusArt, synthOutDirArt, figOutDirArt,
         exptTag = lit('mono')
@@ -596,8 +651,9 @@ class MapTiming1(object):
     align.AlignmentToPhoneticSeqWithTiming, convertTimingInfo,
     d.AutoregressiveSequenceAcc, d.LinearGaussianAcc, d.MappedInputAcc,
     d.OracleAcc, d.createDiscreteAcc, d.getDefaultEstimateTotAux,
-    evaluateVarious, getBmiForCorpus, getCorpusWithSubLabels, getInitialFrame,
-    printTime, reportTrainAux, timed, xf.AddBias
+    evaluateVarious, getBmiForCorpus, getCorpusWithSubLabels,
+    mgc_lf0_bap.computeFirstFrameAverage, printTime, reportTrainAux, timed,
+    xf.AddBias
 )
 def doTimingInfoSystem(synthOutDir, figOutDir):
     print
@@ -616,7 +672,8 @@ def doTimingInfoSystem(synthOutDir, figOutDir):
         mapTiming = mapTiming
     )
 
-    initialFrame = getInitialFrame(corpus, bmi)
+    initialFrame = mgc_lf0_bap.computeFirstFrameAverage(corpus, bmi.mgcOrder,
+                                                        bmi.bapOrder)
 
     acc = d.AutoregressiveSequenceAcc(
         bmi.maxDepth,
@@ -654,14 +711,12 @@ def doTimingInfoSystem(synthOutDir, figOutDir):
 
     printTime('finished timingInfo')
 
-@codeDeps(align.AlignmentToPhoneticSeq, align.StandardizeAlignment,
-    cluster.decisionTreeCluster, createLinearGaussianVectorAcc,
-    d.AutoGrowingDiscreteAcc, d.MappedInputAcc, d.MappedInputDist, d.OracleAcc,
-    d.createDiscreteAcc, d.defaultCreateAccPartial, d.defaultEstimatePartial,
-    d.getDefaultCreateAcc, evaluateVarious, getBmiForCorpus,
-    getCorpusWithSubLabels, getElem, getInitialFrame, mixup, nodetree.getDagMap,
-    printTime, questions_hts_demo.getFullContextQuestionGroups, timed,
-    trainGlobalDist, tupleMap1
+@codeDeps(cluster.decisionTreeCluster, d.AutoGrowingDiscreteAcc, d.FloorSetter,
+    d.defaultEstimatePartial, evaluateVarious, getBmiForCorpus,
+    getCorpusWithSubLabels, getInitDist1, globalToFullCtxCreateAcc, mixup,
+    nodetree.getDagMap, printTime,
+    questions_hts_demo.getFullContextQuestionGroups, timed,
+    trn.expectationMaximization
 )
 def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
     print
@@ -673,42 +728,23 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
 
     print 'numSubLabels =', len(bmi.subLabels)
 
-    lgVarianceFloorMult = 1e-3
-    print 'lgVarianceFloorMult =', lgVarianceFloorMult
+    dist = getInitDist1(bmi, corpus)
 
-    questionGroups = questions_hts_demo.getFullContextQuestionGroups(bmi.phoneset)
-
-    def globalToFullCtxCreateAccPartial(dist, createAccChild):
-        if isinstance(dist, d.MappedInputDist) and getElem(dist.tag, 0, 2) == 'stream':
-            rootDist = dist.dist
-            def createAcc():
-                leafAcc = d.getDefaultCreateAcc()(rootDist)
-                return leafAcc
-            return d.MappedInputAcc(tupleMap1,
-                d.createDiscreteAcc(bmi.subLabels, lambda subLabel:
-                    d.AutoGrowingDiscreteAcc(createAcc)
-                )
-            ).withTag(dist.tag)
-
-    alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
-        mapAlignment = align.StandardizeAlignment(corpus.subLabels, bmi.subLabels)
+    # train global dist while setting floors
+    dist, _, _, _ = trn.expectationMaximization(
+        dist,
+        corpus.accumulate,
+        afterAcc = d.FloorSetter(lgFloorMult = 1e-3),
+        verbosity = 2,
     )
-    initialFrame = getInitialFrame(corpus, bmi)
-    createLeafAccs = [
-        lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer),
-        d.OracleAcc,
-        d.OracleAcc,
-    ]
-    globalDist = trainGlobalDist(bmi, corpus, alignmentToPhoneticSeq,
-                                 initialFrame, createLeafAccs,
-                                 lgVarianceFloorMult)
-    dist = globalDist
 
     print 'DEBUG: converting global dist to full ctx acc'
-    acc = nodetree.getDagMap([globalToFullCtxCreateAccPartial, d.defaultCreateAccPartial])(dist)
+    acc = globalToFullCtxCreateAcc(dist, bmi)
 
     print 'DEBUG: accumulating for decision tree clustering'
     timed(corpus.accumulate)(acc)
+
+    questionGroups = questions_hts_demo.getFullContextQuestionGroups(bmi.phoneset)
 
     def decisionTreeClusterEstimatePartial(acc, estimateChild):
         if isinstance(acc, d.AutoGrowingDiscreteAcc):
@@ -734,11 +770,12 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
     d.TransformedInputDist, d.TransformedOutputDist, d.createDiscreteDist,
     d.getByTagParamSpec, d.getDefaultParamSpec, draw.drawFor1DInput,
     draw.drawLogPdf, draw.drawWarping, evaluateVarious, getBmiForCorpus,
-    getCorpusWithSubLabels, getElem, getInitialFrame, nodetree.findTaggedNode,
-    nodetree.findTaggedNodes, printTime, timed, trn.trainCG, trn.trainCGandEM,
-    trn.trainEM, tupleMap1, xf.AddBias, xf.IdentityTransform, xf.MinusPrev,
-    xf.ShiftOutputTransform, xf.SimpleOutputTransform, xf.SumTransform1D,
-    xf.TanhTransform1D, xf.VectorizeTransform
+    getCorpusWithSubLabels, getElem, mgc_lf0_bap.computeFirstFrameAverage,
+    nodetree.findTaggedNode, nodetree.findTaggedNodes, printTime, timed,
+    trn.trainCG, trn.trainCGandEM, trn.trainEM, tupleMap1, xf.AddBias,
+    xf.IdentityTransform, xf.MinusPrev, xf.ShiftOutputTransform,
+    xf.SimpleOutputTransform, xf.SumTransform1D, xf.TanhTransform1D,
+    xf.VectorizeTransform
 )
 def doTransformSystem(synthOutDir, figOutDir, globalPhone = True, studentResiduals = True, numTanhTransforms = 3):
     print
@@ -765,7 +802,8 @@ def doTransformSystem(synthOutDir, figOutDir, globalPhone = True, studentResidua
                     else AttrGetter('phone'))
     )
 
-    initialFrame = getInitialFrame(corpus, bmi)
+    initialFrame = mgc_lf0_bap.computeFirstFrameAverage(corpus, bmi.mgcOrder,
+                                                        bmi.bapOrder)
 
     # FIXME : only works if no cross-stream stuff happening. Make more robust somehow.
     shiftToPrevTransform = xf.ShiftOutputTransform(xf.MinusPrev())
@@ -936,13 +974,11 @@ class NetFor1(object):
         )
         return net
 
-@codeDeps(NetFor1, StandardizeAlignment, align.AlignmentToPhoneticSeq,
-    createLinearGaussianVectorAcc, d.AutoregressiveNetDist,
-    d.ConstantClassifier, d.MappedInputDist, d.OracleAcc, d.SimplePruneSpec,
-    d.createDiscreteDist, d.isolateDist, evaluateVarious, getBmiForCorpus,
-    getCorpus, getElem, getInitialFrame, nodetree.defaultMapPartial,
-    nodetree.getDagMap, printTime, timed, trainGlobalDist, trn.trainEM,
-    tupleMap1Phone
+@codeDeps(NetFor1, d.AutoregressiveNetDist, d.AutoregressiveSequenceDist,
+    d.ConstantClassifier, d.FloorSetter, d.MappedInputDist, d.SimplePruneSpec,
+    d.createDiscreteDist, evaluateVarious, getBmiForCorpus, getCorpus,
+    getInitDist1, globalToMonophoneMap, printTime, timed,
+    trn.expectationMaximization, trn.trainEM, tupleMap1Phone
 )
 def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
     print
@@ -956,47 +992,36 @@ def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
     assert bmi.subLabels is not None
     print 'numSubLabels =', len(bmi.subLabels)
 
-    lgVarianceFloorMult = 1e-3
     ccProbFloor = 3e-5
-    print 'lgVarianceFloorMult =', lgVarianceFloorMult
     print 'ccProbFloor =', ccProbFloor
 
-    alignmentToPhoneticSeq = align.AlignmentToPhoneticSeq(
-        mapAlignment = StandardizeAlignment(corpus.subLabels, [0]),
+    globalDist = getInitDist1(bmi, corpus, alignmentSubLabels = [0])
+
+    # train global dist while setting floors
+    globalDist, _, _, _ = trn.expectationMaximization(
+        globalDist,
+        corpus.accumulate,
+        afterAcc = d.FloorSetter(lgFloorMult = 1e-3),
+        verbosity = 2,
     )
-    initialFrame = getInitialFrame(corpus, bmi)
-    createLeafAccs = [
-        lambda: createLinearGaussianVectorAcc(bmi.mgcSummarizer),
-        d.OracleAcc,
-        d.OracleAcc,
-    ]
-    globalDist = trainGlobalDist(bmi, corpus, alignmentToPhoneticSeq,
-                                 initialFrame, createLeafAccs,
-                                 lgVarianceFloorMult)
 
     print 'DEBUG: converting global dist to monophone net dist'
+    assert isinstance(globalDist, d.AutoregressiveSequenceDist)
     netFor = NetFor1(bmi.subLabels)
-    def globalToMonophoneMapPartial(dist, mapChild):
-        if isinstance(dist, d.MappedInputDist) and getElem(dist.tag, 0, 2) == 'stream':
-            subDist = dist.dist
-            return d.MappedInputDist(tupleMap1Phone,
-                d.createDiscreteDist(bmi.subLabels, lambda subLabel:
-                    d.createDiscreteDist(bmi.phoneset.phoneList, lambda phone:
-                        d.isolateDist(subDist)
-                    )
-                )
-            ).withTag(dist.tag)
-    acDist = nodetree.getDagMap([globalToMonophoneMapPartial, nodetree.defaultMapPartial])(globalDist.dist)
+    acDist = globalToMonophoneMap(globalDist.dist, bmi)
     durDist = d.MappedInputDist(tupleMap1Phone,
         d.createDiscreteDist(bmi.subLabels, lambda subLabel:
             d.createDiscreteDist(bmi.phoneset.phoneList, lambda phone:
-                d.ConstantClassifier(probs = np.array([0.5, 0.5]), probFloors = np.array([ccProbFloor, ccProbFloor]))
+                d.ConstantClassifier(
+                    probs = np.array([0.5, 0.5]),
+                    probFloors = np.array([ccProbFloor, ccProbFloor])
+                )
             )
         )
     ).withTag(('stream', 'dur'))
     pruneSpec = d.SimplePruneSpec(betaThresh = 500.0, logOccThresh = 20.0)
     dist = d.AutoregressiveNetDist(
-        bmi.maxDepth, netFor, [ initialFrame for i in range(bmi.maxDepth) ],
+        bmi.maxDepth, netFor, globalDist.fillFrames,
         durDist, acDist, pruneSpec
     )
 
