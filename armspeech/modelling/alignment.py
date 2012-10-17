@@ -127,10 +127,16 @@ class AlignmentToPhoneticSeq(object):
         mapLabel = self.mapLabel
         for labelStartTime, labelEndTime, label, subAlignment in self.mapAlignment(alignment):
             labelOut = mapLabel(label)
-            for startTime, endTime, subLabel, subSubAlignment in subAlignment:
-                assert subSubAlignment is None
-                for time in range(startTime, endTime):
-                    yield labelOut, subLabel
+            if subAlignment is None:
+                # 1-level alignment
+                for time in range(labelStartTime, labelEndTime):
+                    yield labelOut
+            else:
+                # 2-level alignment
+                for startTime, endTime, subLabel, subSubAlignment in subAlignment:
+                    assert subSubAlignment is None
+                    for time in range(startTime, endTime):
+                        yield labelOut, subLabel
 
     def __call__(self, alignment):
         return list(self.toPhoneticIter(alignment))
