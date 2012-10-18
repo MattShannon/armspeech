@@ -170,9 +170,13 @@ def mixupJobSet(distArt, corpusArt, uttIdChunkArts):
         estimateArt = liftLocal(getMixupEstimate)(),
         verbosityArt = lit(2)
     )
-    distArt = train_bisque.trainEMJobSet(distArt, corpusArt, uttIdChunkArts,
-                                         numIterationsLit = lit(8),
-                                         verbosityArt = lit(2))
+    distArt = train_bisque.trainEMJobSet(
+        distArt,
+        corpusArt,
+        uttIdChunkArts,
+        numIterationsLit = lit(8),
+        verbosityArt = lit(2)
+    )
     return distArt
 
 @codeDeps(d.DebugDist, d.LinearGaussian, d.MappedInputDist, d.StudentDist,
@@ -1152,7 +1156,10 @@ def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
     dist = globalSeqDistToMonoNetDistMap1(dist, bmi)
 
     print 'DEBUG: estimating monophone net dist'
-    dist = trn.trainEM(dist, timed(corpus.accumulate), deltaThresh = 1e-4, minIterations = 4, maxIterations = 10, verbosity = 2)
+    dist = trn.trainEM(dist, timed(corpus.accumulate),
+                       deltaThresh = 1e-4,
+                       minIterations = 4, maxIterations = 10,
+                       verbosity = 2)
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'flatStart.mono')
 
     printTime('finished flatStart')
@@ -1192,7 +1199,10 @@ def doMonophoneNetSystem(synthOutDir, figOutDir):
     dist = monoSeqDistToMonoNetDistMap1(dist, bmi)
 
     print 'DEBUG: estimating monophone net dist'
-    dist = trn.trainEM(dist, timed(corpus.accumulate), deltaThresh = 1e-4, minIterations = 4, maxIterations = 4, verbosity = 2)
+    dist = trn.trainEM(dist, timed(corpus.accumulate),
+                       deltaThresh = 1e-4,
+                       minIterations = 4, maxIterations = 4,
+                       verbosity = 2)
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'monoNet.mono')
 
     printTime('finished monoNet')
@@ -1235,9 +1245,13 @@ def doMonophoneNetSystemJobSet(synthOutDirArt, figOutDirArt):
 
     distArt = lift(monoSeqDistToMonoNetDistMap1)(distArt, bmiArt)
 
-    distArt = train_bisque.trainEMJobSet(distArt, corpusArt, uttIdChunkArts,
-                                         numIterationsLit = lit(4),
-                                         verbosityArt = lit(2))
+    distArt = train_bisque.trainEMJobSet(
+        distArt,
+        corpusArt,
+        uttIdChunkArts,
+        numIterationsLit = lit(4),
+        verbosityArt = lit(2)
+    )
     resultsNetArt = lift(evaluateVarious)(
         distArt, bmiArt, corpusArt, synthOutDirArt, figOutDirArt,
         exptTag = lit('monoNet.mono')
