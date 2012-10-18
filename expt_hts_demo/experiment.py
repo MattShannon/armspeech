@@ -38,6 +38,80 @@ import os
 import math
 import numpy as np
 import armspeech.numpy_settings
+from collections import defaultdict
+
+@codeDeps(d.AutoregressiveNetAcc, d.accNodeList, getElem,
+    nodetree.findTaggedNodes, nodetree.nodeList
+)
+def reportLogLikeBreakdown(accRoot):
+    def getAccLists(accRoot):
+        def isStreamRoot(tag):
+            return getElem(tag, 0, 2) == 'stream'
+        def isNetAcc(node):
+            return isinstance(node, d.AutoregressiveNetAcc)
+        names = []
+        accLists = []
+        for streamRoot in nodetree.findTaggedNodes(accRoot, isStreamRoot):
+            streamName = streamRoot.tag[1]
+            names.append(streamName)
+            accLists.append(d.accNodeList(streamRoot))
+        names.append('net')
+        accLists.append(nodetree.nodeList(accRoot, includeNode = isNetAcc))
+        return names, accLists
+
+    names, accLists = getAccLists(accRoot)
+    accIdSets = [ set([ id(acc) for acc in accList ]) for accList in accLists ]
+
+    logLikeTot = 0.0
+    countTot = 0
+    logLikeDict = defaultdict(float)
+    countDict = defaultdict(int)
+    for accNode in d.accNodeList(accRoot):
+        accId = id(accNode)
+        inSets = tuple([ (accId in accIdSet) for accIdSet in accIdSets ])
+        logLike = accNode.logLikeSingle()
+        logLikeTot += logLike
+        countTot += 1
+        logLikeDict[inSets] += logLike
+        countDict[inSets] += 1
+
+    assert np.allclose(logLikeTot, accRoot.logLike())
+    assert np.allclose(sum(logLikeDict.values()), logLikeTot)
+
+    sortedInSetsList = sorted(
+        logLikeDict.keys(),
+        key = lambda inSets: (
+            # place "other" at end
+            len(inSets) - sum(inSets) if sum(inSets) > 0 else -1,
+            inSets
+        ),
+        reverse = True
+    )
+
+    try:
+        frames = accRoot.frames
+    except AttributeError:
+        frames = None
+
+    if frames is None:
+        print 'train: breakdown of log like:'
+        frames = 1
+    else:
+        print 'train: breakdown of log like (per frame, %s frames)' % frames
+    for inSets in sortedInSetsList:
+        logLike = logLikeDict[inSets]
+        count = countDict[inSets]
+        inSetsNames = [ name for name, inSet in zip(names, inSets) if inSet ]
+        inSetsDesc = ' and '.join(inSetsNames) if inSetsNames else 'other'
+        print 'train:    %s: %s (%s acc nodes)' % (inSetsDesc, logLike / frames, count)
+    print 'train: %s: %s (%s acc nodes)' % ('total', logLikeTot / frames, countTot)
+
+# (FIXME : re-jig how reportLogLikeBreakdown is used so it reports on current
+#   dist (rather than previous dist) more often?)
+
+@codeDeps(reportLogLikeBreakdown)
+def getReportLogLikeBreakdown():
+    return reportLogLikeBreakdown
 
 @codeDeps(d.reportFloored, getElem, nodetree.findTaggedNodes)
 def reportFlooredPerStream(dist):
@@ -159,8 +233,9 @@ def mixup(dist, accumulate):
     dist = trn.trainEM(dist, accumulate, deltaThresh = 1e-4, minIterations = 4, maxIterations = 8, verbosity = 2)
     return dist
 
-@codeDeps(getMixupEstimate, liftLocal, lit, train_bisque.accumulateJobSet,
-    train_bisque.estimateJobSet, train_bisque.trainEMJobSet
+@codeDeps(getMixupEstimate, getReportLogLikeBreakdown, liftLocal, lit,
+    train_bisque.accumulateJobSet, train_bisque.estimateJobSet,
+    train_bisque.trainEMJobSet
 )
 def mixupJobSet(distArt, corpusArt, uttIdChunkArts):
     accArts = train_bisque.accumulateJobSet(distArt, corpusArt, uttIdChunkArts)
@@ -168,6 +243,7 @@ def mixupJobSet(distArt, corpusArt, uttIdChunkArts):
         distArt,
         accArts,
         estimateArt = liftLocal(getMixupEstimate)(),
+        afterAccArt = liftLocal(getReportLogLikeBreakdown)(),
         verbosityArt = lit(2)
     )
     distArt = train_bisque.trainEMJobSet(
@@ -175,6 +251,7 @@ def mixupJobSet(distArt, corpusArt, uttIdChunkArts):
         corpusArt,
         uttIdChunkArts,
         numIterationsLit = lit(8),
+        afterAccArt = liftLocal(getReportLogLikeBreakdown)(),
         verbosityArt = lit(2)
     )
     return distArt
@@ -710,7 +787,7 @@ def doGlobalSystemJobSet(synthOutDirArt, figOutDirArt):
 
 @codeDeps(d.FloorSetter, evaluateVarious, getBmiForCorpus,
     getCorpusWithSubLabels, getInitDist1, globalToMonophoneMap, mixup,
-    printTime, trn.expectationMaximization
+    printTime, reportLogLikeBreakdown, trn.expectationMaximization
 )
 def doMonophoneSystem(synthOutDir, figOutDir):
     print
@@ -735,7 +812,9 @@ def doMonophoneSystem(synthOutDir, figOutDir):
     print 'DEBUG: converting global dist to monophone dist'
     dist = globalToMonophoneMap(dist, bmi)
 
-    dist = trn.expectationMaximization(dist, corpus.accumulate, verbosity = 2)[0]
+    dist = trn.expectationMaximization(dist, corpus.accumulate,
+                                       afterAcc = reportLogLikeBreakdown,
+                                       verbosity = 2)[0]
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono')
 
     dist = mixup(dist, corpus.accumulate)
@@ -747,9 +826,9 @@ def doMonophoneSystem(synthOutDir, figOutDir):
     printTime('finished mono')
 
 @codeDeps(corpus_bisque.getUttIdChunkArts, d.FloorSetter, evaluateVarious,
-    getBmiForCorpus, getCorpusWithSubLabels, getInitDist1, globalToMonophoneMap,
-    lift, liftLocal, lit, mixupJobSet,
-    train_bisque.expectationMaximizationJobSet
+    getBmiForCorpus, getCorpusWithSubLabels, getInitDist1,
+    getReportLogLikeBreakdown, globalToMonophoneMap, lift, liftLocal, lit,
+    mixupJobSet, train_bisque.expectationMaximizationJobSet
 )
 def doMonophoneSystemJobSet(synthOutDirArt, figOutDirArt):
     corpusArt = liftLocal(getCorpusWithSubLabels)()
@@ -775,6 +854,7 @@ def doMonophoneSystemJobSet(synthOutDirArt, figOutDirArt):
         distArt,
         corpusArt,
         uttIdChunkArts,
+        afterAccArt = liftLocal(getReportLogLikeBreakdown)(),
         verbosityArt = lit(2),
     )
     results1Art = lift(evaluateVarious)(
@@ -798,7 +878,7 @@ def doMonophoneSystemJobSet(synthOutDirArt, figOutDirArt):
 
 @codeDeps(d.FloorSetter, evaluateVarious, getBmiForCorpus,
     getCorpusWithSubLabels, getInitDist2, globalToMonophoneMap, printTime,
-    trn.expectationMaximization
+    reportLogLikeBreakdown, trn.expectationMaximization
 )
 def doTimingInfoSystem(synthOutDir, figOutDir):
     print
@@ -823,7 +903,9 @@ def doTimingInfoSystem(synthOutDir, figOutDir):
     print 'DEBUG: converting global dist to monophone dist'
     dist = globalToMonophoneMap(dist, bmi)
 
-    dist = trn.expectationMaximization(dist, corpus.accumulate, verbosity = 2)[0]
+    dist = trn.expectationMaximization(dist, corpus.accumulate,
+                                       afterAcc = reportLogLikeBreakdown,
+                                       verbosity = 2)[0]
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'timingInfo')
 
     printTime('finished timingInfo')
@@ -1128,7 +1210,8 @@ def monoSeqDistToMonoNetDistMap1(seqDist, bmi):
 
 @codeDeps(d.FloorSetter, d.getVerboseNetCreateAcc, evaluateVarious,
     getBmiForCorpus, getCorpus, getInitDist1, globalSeqDistToMonoNetDistMap1,
-    printTime, timed, trn.expectationMaximization, trn.trainEM
+    printTime, reportLogLikeBreakdown, timed, trn.expectationMaximization,
+    trn.trainEM
 )
 def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
     print
@@ -1160,6 +1243,7 @@ def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
                        createAcc = d.getVerboseNetCreateAcc(),
                        deltaThresh = 1e-4,
                        minIterations = 4, maxIterations = 10,
+                       afterAcc = reportLogLikeBreakdown,
                        verbosity = 2)
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'flatStart.mono')
 
@@ -1167,8 +1251,8 @@ def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
 
 @codeDeps(d.FloorSetter, d.getVerboseNetCreateAcc, evaluateVarious,
     getBmiForCorpus, getCorpusWithSubLabels, getInitDist1, globalToMonophoneMap,
-    monoSeqDistToMonoNetDistMap1, printTime, timed, trn.expectationMaximization,
-    trn.trainEM
+    monoSeqDistToMonoNetDistMap1, printTime, reportLogLikeBreakdown, timed,
+    trn.expectationMaximization, trn.trainEM
 )
 def doMonophoneNetSystem(synthOutDir, figOutDir):
     print
@@ -1193,7 +1277,9 @@ def doMonophoneNetSystem(synthOutDir, figOutDir):
     print 'DEBUG: converting global dist to monophone dist'
     dist = globalToMonophoneMap(dist, bmi)
 
-    dist = trn.expectationMaximization(dist, corpus.accumulate, verbosity = 2)[0]
+    dist = trn.expectationMaximization(dist, corpus.accumulate,
+                                       afterAcc = reportLogLikeBreakdown,
+                                       verbosity = 2)[0]
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'mono')
 
     print 'DEBUG: converting monophone seq dist to monophone net dist'
@@ -1204,6 +1290,7 @@ def doMonophoneNetSystem(synthOutDir, figOutDir):
                        createAcc = d.getVerboseNetCreateAcc(),
                        deltaThresh = 1e-4,
                        minIterations = 4, maxIterations = 4,
+                       afterAcc = reportLogLikeBreakdown,
                        verbosity = 2)
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'monoNet.mono')
 
@@ -1211,8 +1298,8 @@ def doMonophoneNetSystem(synthOutDir, figOutDir):
 
 @codeDeps(corpus_bisque.getUttIdChunkArts, d.FloorSetter,
     d.getVerboseNetCreateAcc, evaluateVarious, getBmiForCorpus,
-    getCorpusWithSubLabels, getInitDist1, globalToMonophoneMap, lift, liftLocal,
-    lit, monoSeqDistToMonoNetDistMap1,
+    getCorpusWithSubLabels, getInitDist1, getReportLogLikeBreakdown,
+    globalToMonophoneMap, lift, liftLocal, lit, monoSeqDistToMonoNetDistMap1,
     train_bisque.expectationMaximizationJobSet, train_bisque.trainEMJobSet
 )
 def doMonophoneNetSystemJobSet(synthOutDirArt, figOutDirArt):
@@ -1242,6 +1329,7 @@ def doMonophoneNetSystemJobSet(synthOutDirArt, figOutDirArt):
         distArt,
         corpusArt,
         uttIdChunkArts,
+        afterAccArt = liftLocal(getReportLogLikeBreakdown)(),
         verbosityArt = lit(2),
     )
     resultsSeqArt = lift(evaluateVarious)(
@@ -1257,6 +1345,7 @@ def doMonophoneNetSystemJobSet(synthOutDirArt, figOutDirArt):
         uttIdChunkArtsNet,
         numIterationsLit = lit(4),
         createAccArt = liftLocal(d.getVerboseNetCreateAcc)(),
+        afterAccArt = liftLocal(getReportLogLikeBreakdown)(),
         verbosityArt = lit(2)
     )
     resultsNetArt = lift(evaluateVarious)(
