@@ -1219,6 +1219,9 @@ def doMonophoneNetSystemJobSet(synthOutDirArt, figOutDirArt):
     uttIdChunkArts = corpus_bisque.getUttIdChunkArts(corpusArt,
                                                      numChunksLit = lit(2))
 
+    uttIdChunkArtsNet = corpus_bisque.getUttIdChunkArts(corpusArt,
+                                                        numChunksLit = lit(10))
+
     distArt = lift(getInitDist1)(bmiArt, corpusArt)
 
     # train global dist while setting floors
@@ -1248,7 +1251,7 @@ def doMonophoneNetSystemJobSet(synthOutDirArt, figOutDirArt):
     distArt = train_bisque.trainEMJobSet(
         distArt,
         corpusArt,
-        uttIdChunkArts,
+        uttIdChunkArtsNet,
         numIterationsLit = lit(4),
         verbosityArt = lit(2)
     )
