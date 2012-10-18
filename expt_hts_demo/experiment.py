@@ -1126,9 +1126,9 @@ def monoSeqDistToMonoNetDistMap1(seqDist, bmi):
     pruneSpec = d.SimplePruneSpec(betaThresh = 500.0, logOccThresh = 20.0)
     return seqDistToBinaryDurNetDistMap(seqDist, bmi, durDist, pruneSpec)
 
-@codeDeps(d.FloorSetter, evaluateVarious, getBmiForCorpus, getCorpus,
-    getInitDist1, globalSeqDistToMonoNetDistMap1, printTime, timed,
-    trn.expectationMaximization, trn.trainEM
+@codeDeps(d.FloorSetter, d.getVerboseNetCreateAcc, evaluateVarious,
+    getBmiForCorpus, getCorpus, getInitDist1, globalSeqDistToMonoNetDistMap1,
+    printTime, timed, trn.expectationMaximization, trn.trainEM
 )
 def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
     print
@@ -1157,6 +1157,7 @@ def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
 
     print 'DEBUG: estimating monophone net dist'
     dist = trn.trainEM(dist, timed(corpus.accumulate),
+                       createAcc = d.getVerboseNetCreateAcc(),
                        deltaThresh = 1e-4,
                        minIterations = 4, maxIterations = 10,
                        verbosity = 2)
@@ -1164,8 +1165,8 @@ def doFlatStartSystem(synthOutDir, figOutDir, numSubLabels = 5):
 
     printTime('finished flatStart')
 
-@codeDeps(d.FloorSetter, evaluateVarious, getBmiForCorpus,
-    getCorpusWithSubLabels, getInitDist1, globalToMonophoneMap,
+@codeDeps(d.FloorSetter, d.getVerboseNetCreateAcc, evaluateVarious,
+    getBmiForCorpus, getCorpusWithSubLabels, getInitDist1, globalToMonophoneMap,
     monoSeqDistToMonoNetDistMap1, printTime, timed, trn.expectationMaximization,
     trn.trainEM
 )
@@ -1200,6 +1201,7 @@ def doMonophoneNetSystem(synthOutDir, figOutDir):
 
     print 'DEBUG: estimating monophone net dist'
     dist = trn.trainEM(dist, timed(corpus.accumulate),
+                       createAcc = d.getVerboseNetCreateAcc(),
                        deltaThresh = 1e-4,
                        minIterations = 4, maxIterations = 4,
                        verbosity = 2)
@@ -1207,9 +1209,10 @@ def doMonophoneNetSystem(synthOutDir, figOutDir):
 
     printTime('finished monoNet')
 
-@codeDeps(corpus_bisque.getUttIdChunkArts, d.FloorSetter, evaluateVarious,
-    getBmiForCorpus, getCorpusWithSubLabels, getInitDist1, globalToMonophoneMap,
-    lift, liftLocal, lit, monoSeqDistToMonoNetDistMap1,
+@codeDeps(corpus_bisque.getUttIdChunkArts, d.FloorSetter,
+    d.getVerboseNetCreateAcc, evaluateVarious, getBmiForCorpus,
+    getCorpusWithSubLabels, getInitDist1, globalToMonophoneMap, lift, liftLocal,
+    lit, monoSeqDistToMonoNetDistMap1,
     train_bisque.expectationMaximizationJobSet, train_bisque.trainEMJobSet
 )
 def doMonophoneNetSystemJobSet(synthOutDirArt, figOutDirArt):
@@ -1253,6 +1256,7 @@ def doMonophoneNetSystemJobSet(synthOutDirArt, figOutDirArt):
         corpusArt,
         uttIdChunkArtsNet,
         numIterationsLit = lit(4),
+        createAccArt = liftLocal(d.getVerboseNetCreateAcc)(),
         verbosityArt = lit(2)
     )
     resultsNetArt = lift(evaluateVarious)(
