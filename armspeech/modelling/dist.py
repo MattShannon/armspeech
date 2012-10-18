@@ -137,6 +137,17 @@ def defaultCreateAccPartial(dist, createAccChild):
 def getDefaultCreateAcc():
     return nodetree.getDagMap([defaultCreateAccPartial])
 
+@codeDeps(ForwardRef(lambda: AutoregressiveNetDist))
+def verboseNetCreateAccPartial(dist, createAccChild):
+    if isinstance(dist, AutoregressiveNetDist):
+        return dist.createAcc(createAccChild, verbosity = 3)
+@codeDeps(defaultCreateAccPartial, nodetree.getDagMap,
+    verboseNetCreateAccPartial
+)
+def getVerboseNetCreateAcc():
+    return nodetree.getDagMap([verboseNetCreateAccPartial,
+                               defaultCreateAccPartial])
+
 @codeDeps(nodetree.getDagMap)
 def getParams(partialMaps):
     return nodetree.getDagMap(
