@@ -63,17 +63,17 @@ def reportLogLikeBreakdown(accRoot):
     accIdSets = [ set([ id(acc) for acc in accList ]) for accList in accLists ]
 
     logLikeTot = 0.0
-    countTot = 0
+    numNodesTot = 0
     logLikeDict = defaultdict(float)
-    countDict = defaultdict(int)
+    numNodesDict = defaultdict(int)
     for accNode in d.accNodeList(accRoot):
         accId = id(accNode)
         inSets = tuple([ (accId in accIdSet) for accIdSet in accIdSets ])
         logLike = accNode.logLikeSingle()
         logLikeTot += logLike
-        countTot += 1
+        numNodesTot += 1
         logLikeDict[inSets] += logLike
-        countDict[inSets] += 1
+        numNodesDict[inSets] += 1
 
     assert np.allclose(logLikeTot, accRoot.logLike())
     assert np.allclose(sum(logLikeDict.values()), logLikeTot)
@@ -88,23 +88,19 @@ def reportLogLikeBreakdown(accRoot):
         reverse = True
     )
 
-    try:
-        frames = accRoot.frames
-    except AttributeError:
-        frames = None
+    count = accRoot.count()
+    count = max(count, 1.0)
 
-    if frames is None:
-        print 'train: breakdown of log like:'
-        frames = 1
-    else:
-        print 'train: breakdown of log like (per frame, %s frames)' % frames
+    print 'train: breakdown of log like (count = %s)' % count
     for inSets in sortedInSetsList:
         logLike = logLikeDict[inSets]
-        count = countDict[inSets]
+        numNodes = numNodesDict[inSets]
         inSetsNames = [ name for name, inSet in zip(names, inSets) if inSet ]
         inSetsDesc = ' and '.join(inSetsNames) if inSetsNames else 'other'
-        print 'train:    %s: %s (%s acc nodes)' % (inSetsDesc, logLike / frames, count)
-    print 'train: %s: %s (%s acc nodes)' % ('total', logLikeTot / frames, countTot)
+        print 'train:    %s: %s (%s acc nodes)' % (inSetsDesc, logLike / count,
+                                                   numNodes)
+    print 'train: %s: %s (%s acc nodes)' % ('total', logLikeTot / count,
+                                            numNodesTot)
 
 # (FIXME : re-jig how reportLogLikeBreakdown is used so it reports on current
 #   dist (rather than previous dist) more often?)
