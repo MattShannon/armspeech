@@ -41,7 +41,7 @@ class ElemGetter(object):
         self.length = length
 
     def __repr__(self):
-        return 'ElemGetter(%s, %s)' % (repr(self.index), repr(self.length))
+        return 'ElemGetter(%r, %r)' % (self.index, self.length)
 
     def __call__(self, xs):
         lengthActual = len(xs)
@@ -57,7 +57,7 @@ class AttrGetter(object):
         self.attr = attr
 
     def __repr__(self):
-        return 'AttrGetter(%s)' % repr(self.attr)
+        return 'AttrGetter(%r)' % self.attr
 
     def __call__(self, obj):
         return getattr(obj, self.attr)
@@ -70,7 +70,7 @@ class AndThen(object):
         self.second = second
 
     def __repr__(self):
-        return 'AndThen(%s, %s)' % (repr(self.first), repr(self.second))
+        return 'AndThen(%r, %r)' % (self.first, self.second)
 
     def __call__(self, x):
         y = self.first(x)
