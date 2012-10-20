@@ -93,13 +93,6 @@ def decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups,
 @codeDeps(d.EstimationError, d.addAcc)
 def decisionTreeGetBestSplit(labelList, accForLabel, createAcc, questionGroups,
                              minCount, auxLeaf, estimateTotAux):
-    # (N.B. Could probably get a further speed-up (over and above that
-    #   obtained by using question groups) for EqualityQuestion and
-    #   ThreshQuestion by doing clever stuff with subtracting accs (i.e.
-    #   adding accs with negative occupancies).
-    #   However not at all clear this would worth it in terms of speed-up
-    #   achieved vs implementation complexity / fragility.
-    # )
     bestFullQuestion = None
     bestAux = auxLeaf
     bestEstimatedYes = None
