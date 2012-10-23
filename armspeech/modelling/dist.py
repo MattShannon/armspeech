@@ -371,6 +371,13 @@ class SynthSeqTooLongError(Exception):
 
 @codeDeps(accNodeList)
 class AccCommon(object):
+    """A common baseclass for an accumulator.
+
+    Note that in subclasses addAccSingle (and addAccChildPairs) should be such
+    that the overall accumulator addition implemented by addAcc is associative
+    and commutative (this should happen naturally, but we mention this here
+    to be explicit).
+    """
     def children(self):
         abstract
     def mapChildren(self, mapChild):
