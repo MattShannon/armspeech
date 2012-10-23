@@ -395,8 +395,12 @@ def createCcBinaryDist(ccProbFloor):
     )
 
 @codeDeps()
-def tupleMap1(((a, b), c)):
+def tupleMap0(((a, b), c)):
     return a, (b, c)
+
+@codeDeps()
+def tupleMap1(((label, subLabel), acInput)):
+    return subLabel, (label, acInput)
 
 @codeDeps()
 def tupleMap1Phone(((label, subLabel), acInput)):
@@ -505,7 +509,7 @@ def getInitDist1(bmi, corpus, alignmentSubLabels = 'sameAsBmi'):
 @codeDeps(ElemGetter, align.AlignmentToPhoneticSeqWithTiming,
     align.StandardizeAlignment, createLinearGaussianWithTimingVectorDist,
     d.AutoregressiveSequenceDist, d.MappedInputDist, d.OracleDist,
-    mgc_lf0_bap.computeFirstFrameAverage, tupleMap1
+    mgc_lf0_bap.computeFirstFrameAverage, tupleMap0
 )
 def getInitDist2(bmi, corpus, alignmentSubLabels = 'sameAsBmi'):
     """Produces an initial dist which uses timings.
@@ -541,7 +545,7 @@ def getInitDist2(bmi, corpus, alignmentSubLabels = 'sameAsBmi'):
         bmi.frameSummarizer.createDist(True, lambda streamIndex:
             # from ((phInput, timingInfo), acInput)
             #   to (phInput, (timingInfo, acInput))
-            d.MappedInputDist(tupleMap1,
+            d.MappedInputDist(tupleMap0,
                 d.MappedInputDist(dropPhInput,
                     createLeafDists[streamIndex]().withTag('acVec')
                 ).withTag(('stream', corpus.streams[streamIndex].name))
