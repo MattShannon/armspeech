@@ -568,7 +568,8 @@ class LinearGaussianAcc(TermAcc):
         self.sumTarget += input * output * occ
         self.sumOuter += np.outer(input, input) * occ
 
-    # N.B. assumes distPrev (if present) is the same for self and acc (not checked).
+    # N.B. assumes distPrev (if present) is the same for self and acc (not
+    #   checked).
     def addAccSingle(self, acc):
         self.occ += acc.occ
         self.sumSqr += acc.sumSqr
@@ -654,7 +655,8 @@ class ConstantClassifierAcc(TermAcc):
         self.occs[classIndex] += occ
 
     # N.B. assumes class 0 in self corresponds to class 0 in acc, etc.
-    #   Also assumes distPrev (if present) is the same for self and acc (not checked).
+    #   Also assumes distPrev (if present) is the same for self and acc (not
+    #   checked).
     def addAccSingle(self, acc):
         self.occ += acc.occ
         self.occs += acc.occs
@@ -2676,7 +2678,9 @@ class TransformedOutputDist(Dist):
     def parseChildren(self, params, parseChild):
         outputTransform, paramsLeft = parseChild(self.outputTransform, params)
         dist, paramsLeft = parseChild(self.dist, paramsLeft)
-        return TransformedOutputDist(outputTransform, dist, tag = self.tag), paramsLeft
+        overallDistNew = TransformedOutputDist(outputTransform, dist,
+                                               tag = self.tag)
+        return overallDistNew, paramsLeft
 
 @codeDeps(Dist, PassThruAcc, SynthMethod)
 class PassThruDist(Dist):
