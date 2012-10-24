@@ -130,6 +130,16 @@ def defaultEstimateAuxPartial(acc, estimateChild):
 def getDefaultEstimateTotAux():
     return getEstimateTotAux([defaultEstimateAuxPartial])
 
+@codeDeps(ForwardRef(lambda: TermAcc))
+def defaultEstimateAuxNoRevertPartial(acc, estimateChild):
+    if isinstance(acc, TermAcc):
+        return acc.estimateSingleAux()
+    else:
+        return acc.estimateAux(estimateChild)
+@codeDeps(defaultEstimateAuxNoRevertPartial, getEstimateTotAux)
+def getDefaultEstimateTotAuxNoRevert():
+    return getEstimateTotAux([defaultEstimateAuxNoRevertPartial])
+
 @codeDeps()
 def defaultEstimatePartial(acc, estimateChild):
     dist, _ = acc.estimateAux(estimateChild)
@@ -439,9 +449,16 @@ class TermAcc(Acc):
     """Acc with no children."""
     def children(self):
         return []
+
     def estimateSingleAux(self):
         abstract
-    def estimateAux(self, estimateChild):
+
+    def estimateSingleAuxSafe(self):
+        """A version of estimateSingleAux which tries to recover from errors.
+
+        Tries to revert to the previous dist self.distPrev when
+        estimateSingleAux raises an EstimationError.
+        """
         try:
             return self.estimateSingleAux()
         except EstimationError, detail:
@@ -453,6 +470,9 @@ class TermAcc(Acc):
                                 (self.distPrev.__class__.__name__, detail))
                 distNew = self.distPrev.mapChildren(None)
                 return distNew, (self.logLikeSingle(), Rat.Exact)
+
+    def estimateAux(self, estimateChild):
+        return self.estimateSingleAuxSafe()
 
 @codeDeps(AccG)
 class DerivTermAccG(AccG):
@@ -3250,7 +3270,7 @@ def estimateInitialMixtureOfTwoExperts(acc):
     assert isinstance(acc, LinearGaussianAcc)
     if acc.occ == 0.0:
         logging.warning('not mixing up LinearGaussian with occ == 0.0')
-        return acc.estimateSingleAux()[0]
+        return acc.estimateSingleAuxSafe()[0]
     sigmoidAbscissaAtOneStdev = 0.5
     occRecompute = acc.sumOuter[-1, -1]
     S = acc.sumOuter[:-1, :-1] / occRecompute
@@ -3267,7 +3287,7 @@ def estimateInitialMixtureOfTwoExperts(acc):
         coeff = np.array([0.0])
         coeffFloor = np.array([float('inf')])
         blc = BinaryLogisticClassifier(coeff, coeffFloor)
-        dist = acc.estimateSingleAux()[0]
+        dist = acc.estimateSingleAuxSafe()[0]
         mean, = dist.coeff
         variance = dist.variance
         dist0 = LinearGaussian(np.array([mean - 0.2 * math.sqrt(variance)]),
@@ -3281,7 +3301,7 @@ def estimateInitialMixtureOfTwoExperts(acc):
         if eigVal == 0.0:
             logging.warning('not mixing up LinearGaussian since eigenvalue'
                             ' 0.0')
-            return acc.estimateSingleAux()[0]
+            return acc.estimateSingleAuxSafe()[0]
         w = eigVec * sigmoidAbscissaAtOneStdev / math.sqrt(eigVal)
         w0 = -np.dot(w, mu)
         coeff = np.append(w, w0)
@@ -3289,6 +3309,6 @@ def estimateInitialMixtureOfTwoExperts(acc):
         coeff = np.minimum(coeff, coeffFloor)
         coeff = np.maximum(coeff, -coeffFloor)
         blc = BinaryLogisticClassifier(coeff, coeffFloor)
-        dist0 = acc.estimateSingleAux()[0]
-        dist1 = acc.estimateSingleAux()[0]
+        dist0 = acc.estimateSingleAuxSafe()[0]
+        dist1 = acc.estimateSingleAuxSafe()[0]
         return MixtureDist(blc, [dist0, dist1])
