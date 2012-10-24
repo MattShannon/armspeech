@@ -186,8 +186,8 @@ class SimpleGrower(Grower):
     def allowSplit(self, protoYes, protoNo):
         return (protoYes is not None and
                 protoNo is not None and
-                protoYes.count > self.minCount and
-                protoNo.count > self.minCount)
+                protoYes.count >= self.minCount and
+                protoNo.count >= self.minCount)
 
     def useSplit(self, protoNoSplit, splitInfo):
         allowNoSplit = (self.maxCount is None or
