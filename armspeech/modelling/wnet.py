@@ -363,6 +363,7 @@ def netIsTopSorted(net, nodeSet, deltaTime):
 @codeDeps()
 class HasCycleError(Exception):
     pass
+
 @codeDeps(HasCycleError)
 def topSort(net, deltaTime, forwards = False, detectCycles = True, debugCheckInvariants = False):
     """Topologically sorts the nodes in a net.

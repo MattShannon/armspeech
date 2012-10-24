@@ -359,27 +359,15 @@ class Memo(object):
 
 @codeDeps()
 class EstimationError(Exception):
-    def __init__(self, msg):
-        self.msg = msg
-
-    def __str__(self):
-        return str(self.msg)
+    pass
 
 @codeDeps()
 class InvalidParamsError(Exception):
-    def __init__(self, msg):
-        self.msg = msg
-
-    def __str__(self):
-        return str(self.msg)
+    pass
 
 @codeDeps()
 class SynthSeqTooLongError(Exception):
-    def __init__(self, msg):
-        self.msg = msg
-
-    def __str__(self):
-        return str(self.msg)
+    pass
 
 @codeDeps(accNodeList)
 class AccCommon(object):

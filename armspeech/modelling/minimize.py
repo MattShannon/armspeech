@@ -178,19 +178,11 @@ def solveToMinimize(F, a, convertFrom1D = False):
 
 @codeDeps()
 class NoSolutionError(Exception):
-    def __init__(self, msg):
-        self.msg = msg
-
-    def __str__(self):
-        return repr(self.msg)
+    pass
 
 @codeDeps()
 class DidNotConvergeError(Exception):
-    def __init__(self, msg):
-        self.msg = msg
-
-    def __str__(self):
-        return repr(self.msg)
+    pass
 
 @codeDeps(DidNotConvergeError, NoSolutionError, minimize, solveToMinimize)
 def solveByMinimize(F, a, x0, length, red = 1.0, verbosity = 0, solvedThresh = 1e-8):

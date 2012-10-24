@@ -41,11 +41,7 @@ def parseConcat(parsers, params):
 
 @codeDeps()
 class DerivativeNotPositiveError(Exception):
-    def __init__(self, msg):
-        self.msg = msg
-
-    def __str__(self):
-        return str(self.msg)
+    pass
 
 @codeDeps()
 class Transform(object):
