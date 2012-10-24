@@ -317,7 +317,7 @@ class SimplePruneSpec(PruneSpec):
         self.betaThresh = betaThresh
         self.logOccThresh = logOccThresh
     def __repr__(self):
-        return 'SimplePruneSpec('+repr(self.betaThresh)+', '+repr(self.logOccThresh)+')'
+        return 'SimplePruneSpec(%r, %r)' % (self.betaThresh, self.logOccThresh)
 
 @codeDeps(assert_allclose)
 class Memo(object):
@@ -1644,7 +1644,8 @@ class FixedValueDist(TermDist):
         self.tag = tag
 
     def __repr__(self):
-        return 'FixedValueDist('+repr(self.value)+', tag = '+repr(self.tag)+')'
+        return ('FixedValueDist(%r, tag=%r)' %
+                (self.value, self.tag))
 
     def mapChildren(self, mapChild):
         return FixedValueDist(self.value, tag = self.tag)
@@ -1676,7 +1677,7 @@ class OracleDist(TermDist):
         self.tag = tag
 
     def __repr__(self):
-        return 'OracleDist(tag = '+repr(self.tag)+')'
+        return 'OracleDist(tag=%r)' % self.tag
 
     def mapChildren(self, mapChild):
         return OracleDist(tag = self.tag)
@@ -1716,7 +1717,8 @@ class LinearGaussian(TermDist):
                                self.variance)
 
     def __repr__(self):
-        return 'LinearGaussian('+repr(self.coeff)+', '+repr(self.variance)+', '+repr(self.varianceFloor)+', tag = '+repr(self.tag)+')'
+        return ('LinearGaussian(%r, %r, %r, tag=%r)' %
+                (self.coeff, self.variance, self.varianceFloor, self.tag))
 
     def mapChildren(self, mapChild):
         return LinearGaussian(self.coeff, self.variance, self.varianceFloor,
@@ -1749,7 +1751,7 @@ class LinearGaussian(TermDist):
         elif method == SynthMethod.Sample:
             return random.gauss(mean, math.sqrt(self.variance))
         else:
-            raise RuntimeError('unknown SynthMethod '+repr(method))
+            raise RuntimeError('unknown SynthMethod %r' % method)
 
     def paramsSingle(self):
         return np.append(self.coeff, -math.log(self.variance))
@@ -1788,7 +1790,8 @@ class StudentDist(TermDist):
                        -0.5 * math.log(math.pi))
 
     def __repr__(self):
-        return 'StudentDist('+repr(self.df)+', '+repr(self.precision)+', tag = '+repr(self.tag)+')'
+        return ('StudentDist(%r, %r, tag=%r)' %
+                (self.df, self.precision, self.tag))
 
     def mapChildren(self, mapChild):
         return StudentDist(self.df, self.precision, tag = self.tag)
@@ -1834,7 +1837,7 @@ class StudentDist(TermDist):
                 else:
                     return out
         else:
-            raise RuntimeError('unknown SynthMethod '+repr(method))
+            raise RuntimeError('unknown SynthMethod %r' % method)
 
     def paramsSingle(self):
         return np.array([math.log(self.df), math.log(self.precision)])
@@ -1862,7 +1865,8 @@ class ConstantClassifier(TermDist):
         assert all(self.probs >= self.probFloors)
 
     def __repr__(self):
-        return 'ConstantClassifier('+repr(self.probs)+', '+repr(self.probFloors)+', tag = '+repr(self.tag)+')'
+        return ('ConstantClassifier(%r, %r, tag=%r)' %
+                (self.probs, self.probFloors, self.tag))
 
     def mapChildren(self, mapChild):
         return ConstantClassifier(self.probs, self.probFloors, tag = self.tag)
@@ -1887,7 +1891,7 @@ class ConstantClassifier(TermDist):
         elif method == SynthMethod.Sample:
             return sampleDiscrete(list(enumerate(self.probs)))
         else:
-            raise RuntimeError('unknown SynthMethod '+repr(method))
+            raise RuntimeError('unknown SynthMethod %r' % method)
 
     def paramsSingle(self):
         logProbs = np.log(self.probs)
@@ -1940,7 +1944,8 @@ class BinaryLogisticClassifier(TermDist):
         assert all(np.abs(self.coeff) <= self.coeffFloor)
 
     def __repr__(self):
-        return 'BinaryLogisticClassifier('+repr(self.coeff)+', '+repr(self.coeffFloor)+', tag = '+repr(self.tag)+')'
+        return ('BinaryLogisticClassifier(%r, %r, tag=%r)' %
+                (self.coeff, self.coeffFloor, self.tag))
 
     def mapChildren(self, mapChild):
         return BinaryLogisticClassifier(self.coeff, self.coeffFloor,
@@ -1976,7 +1981,7 @@ class BinaryLogisticClassifier(TermDist):
             else:
                 return 0
         else:
-            raise RuntimeError('unknown SynthMethod '+repr(method))
+            raise RuntimeError('unknown SynthMethod %r' % method)
 
     def paramsSingle(self):
         return self.coeff
@@ -2008,7 +2013,8 @@ class MixtureDist(Dist):
         self.tag = tag
 
     def __repr__(self):
-        return 'MixtureDist('+repr(self.classDist)+', '+repr(self.regDists)+', tag = '+repr(self.tag)+')'
+        return ('MixtureDist(%r, %r, tag=%r)' %
+                (self.classDist, self.regDists, self.tag))
 
     def children(self):
         return [self.classDist] + self.regDists
@@ -2060,7 +2066,7 @@ class MixtureDist(Dist):
             output = self.regDists[comp].synth(input, method, actualOutput)
             return output
         else:
-            raise RuntimeError('unknown SynthMethod '+repr(method))
+            raise RuntimeError('unknown SynthMethod %r' % method)
 
     def paramsSingle(self):
         return []
@@ -2080,7 +2086,8 @@ class IdentifiableMixtureDist(Dist):
         self.tag = tag
 
     def __repr__(self):
-        return 'IdentifiableMixtureDist('+repr(self.classDist)+', '+repr(self.regDists)+', tag = '+repr(self.tag)+')'
+        return ('IdentifiableMixtureDist(%r, %r, tag=%r)' %
+                (self.classDist, self.regDists, self.tag))
 
     def children(self):
         return [self.classDist] + self.regDists
@@ -2147,7 +2154,10 @@ class VectorDist(Dist):
         self.tag = tag
 
     def __repr__(self):
-        return 'VectorDist('+repr(self.order)+', '+repr(self.vectorSummarizer)+', '+repr(self.keys)+', '+orderedDictRepr(self.keys, self.distComps)+', tag = '+repr(self.tag)+')'
+        return ('VectorDist(%r, %r, %r, %s, tag=%r)' %
+                (self.order, self.vectorSummarizer, self.keys,
+                 orderedDictRepr(self.keys, self.distComps),
+                 self.tag))
 
     def children(self):
         return [ self.distComps[key] for key in self.keys ]
@@ -2226,7 +2236,9 @@ class DiscreteDist(Dist):
         self.tag = tag
 
     def __repr__(self):
-        return 'DiscreteDist('+repr(self.keys)+', '+orderedDictRepr(self.keys, self.distDict)+', tag = '+repr(self.tag)+')'
+        return ('DiscreteDist(%r, %s, tag=%r)' %
+                (self.keys, orderedDictRepr(self.keys, self.distDict),
+                 self.tag))
 
     def children(self):
         return [ self.distDict[key] for key in self.keys ]
@@ -2284,7 +2296,8 @@ class DecisionTreeNode(DecisionTree):
         self.tag = tag
 
     def __repr__(self):
-        return 'DecisionTreeNode('+repr(self.fullQuestion)+', '+repr(self.distYes)+', '+repr(self.distNo)+', tag = '+repr(self.tag)+')'
+        return ('DecisionTreeNode(%r, %r, %r, tag=%r)' %
+                (self.fullQuestion, self.distYes, self.distNo, self.tag))
 
     def children(self):
         return [self.distYes, self.distNo]
@@ -2355,7 +2368,8 @@ class DecisionTreeLeaf(DecisionTree):
         self.tag = tag
 
     def __repr__(self):
-        return 'DecisionTreeLeaf('+repr(self.dist)+', tag = '+repr(self.tag)+')'
+        return ('DecisionTreeLeaf(%r, tag=%r)' %
+                (self.dist, self.tag))
 
     def children(self):
         return [self.dist]
@@ -2406,7 +2420,8 @@ class MappedInputDist(Dist):
         self.tag = tag
 
     def __repr__(self):
-        return 'MappedInputDist('+repr(self.inputTransform)+', '+repr(self.dist)+', tag = '+repr(self.tag)+')'
+        return ('MappedInputDist(%r, %r, tag=%r)' %
+                (self.inputTransform, self.dist, self.tag))
 
     def children(self):
         return [self.dist]
@@ -2458,7 +2473,8 @@ class MappedOutputDist(Dist):
         self.tag = tag
 
     def __repr__(self):
-        return 'MappedOutputDist('+repr(self.outputTransform)+', '+repr(self.dist)+', tag = '+repr(self.tag)+')'
+        return ('MappedOutputDist(%r, %r, tag=%r)' %
+                (self.outputTransform, self.dist, self.tag))
 
     def children(self):
         return [self.dist]
@@ -2522,7 +2538,8 @@ class TransformedInputDist(Dist):
         self.tag = tag
 
     def __repr__(self):
-        return 'TransformedInputDist('+repr(self.inputTransform)+', '+repr(self.dist)+', tag = '+repr(self.tag)+')'
+        return ('TransformedInputDist(%r, %r, tag=%r)' %
+                (self.inputTransform, self.dist, self.tag))
 
     def children(self):
         return [self.inputTransform, self.dist]
@@ -2589,7 +2606,8 @@ class TransformedOutputDist(Dist):
         self.tag = tag
 
     def __repr__(self):
-        return 'TransformedOutputDist('+repr(self.outputTransform)+', '+repr(self.dist)+', tag = '+repr(self.tag)+')'
+        return ('TransformedOutputDist(%r, %r, tag=%r)' %
+                (self.outputTransform, self.dist, self.tag))
 
     def children(self):
         return [self.outputTransform, self.dist]
@@ -2667,7 +2685,7 @@ class PassThruDist(Dist):
         self.tag = tag
 
     def __repr__(self):
-        return 'PassThruDist('+repr(self.dist)+', tag = '+repr(self.tag)+')'
+        return 'PassThruDist(%r, tag=%r)' % (self.dist, self.tag)
 
     def children(self):
         return [self.dist]
@@ -2707,7 +2725,7 @@ class CountFramesDist(Dist):
         self.tag = tag
 
     def __repr__(self):
-        return 'CountFramesDist('+repr(self.dist)+', tag = '+repr(self.tag)+')'
+        return 'CountFramesDist(%r, tag=%r)' % (self.dist, self.tag)
 
     def children(self):
         return [self.dist]
@@ -2748,7 +2766,7 @@ class DebugDist(Dist):
         self.tag = tag
 
     def __repr__(self):
-        return 'DebugDist('+repr(self.maxOcc)+', '+repr(self.dist)+', tag = '+repr(self.tag)+')'
+        return 'DebugDist(%r, %r, tag=%r)' % (self.maxOcc, self.dist, self.tag)
 
     def children(self):
         return [self.dist]
@@ -2793,7 +2811,9 @@ class AutoregressiveSequenceDist(Dist):
         assert len(self.fillFrames) <= self.depth
 
     def __repr__(self):
-        return 'AutoregressiveSequenceDist('+repr(self.depth)+', '+repr(self.seqFor)+', '+repr(self.fillFrames)+', '+repr(self.dist)+', tag = '+repr(self.tag)+')'
+        return ('AutoregressiveSequenceDist(%r, %r, %r, %r, tag=%r)' %
+                (self.depth, self.seqFor, self.fillFrames, self.dist,
+                 self.tag))
 
     def children(self):
         return [self.dist]
@@ -2880,7 +2900,7 @@ class SimpleLeftToRightNetFor(object):
     def __init__(self, subLabels):
         self.subLabels = subLabels
     def __repr__(self):
-        return 'SimpleLeftToRightNetFor('+repr(self.subLabels)+')'
+        return 'SimpleLeftToRightNetFor(%r)' % self.subLabels
     def __call__(self, labelSeq):
         net = wnet.FlatMappedNet(
             lambda label: wnet.probLeftToRightNet(
@@ -2966,7 +2986,9 @@ class AutoregressiveNetDist(Dist):
         self.ring = semiring.LogRealsField()
 
     def __repr__(self):
-        return 'AutoregressiveNetDist('+repr(self.depth)+', '+repr(self.netFor)+', '+repr(self.fillFrames)+', '+repr(self.durDist)+', '+repr(self.acDist)+', '+repr(self.pruneSpec)+', tag = '+repr(self.tag)+')'
+        return ('AutoregressiveNetDist(%r, %r, %r, %r, %r, %r, tag=%r)' %
+                (self.depth, self.netFor, self.fillFrames, self.durDist,
+                 self.acDist, self.pruneSpec, self.tag))
 
     def children(self):
         return [self.durDist, self.acDist]
