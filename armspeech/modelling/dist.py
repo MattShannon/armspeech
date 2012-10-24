@@ -29,13 +29,17 @@ from itertools import izip
 from armspeech.util.iterhelp import contextualizeIter
 from collections import deque
 
-# (FIXME : add more checks to validate Dists and Accs on creation (including checking for NaNs))
+# (FIXME : add more checks to validate Dists and Accs on creation (including
+#   checking for NaNs))
 
 def eval_local(reprString):
-    # (FIXME : the contents of test_dist affects what needs to be included here)
+    # (FIXME : the contents of test_dist affects what must be included here)
     from questions import IdLabelValuer, SubsetQuestion
     from summarizer import VectorSeqSummarizer
-    from transform import AddBias, ConstantTransform, IdentityTransform, LinearTransform, ShiftOutputTransform, VectorizeTransform, DotProductTransform, PolynomialTransform1D
+    from transform import AddBias, ConstantTransform, IdentityTransform
+    from transform import LinearTransform, ShiftOutputTransform
+    from transform import VectorizeTransform, DotProductTransform
+    from transform import PolynomialTransform1D
     from wnet import ConcreteNet
     from armspeech.util.mathhelp import AsArray
 
@@ -102,12 +106,16 @@ def getEstimateTotAux(estimateAuxPartials, idValue = id):
         def estimatePartial(acc, estimateChild):
             ret = estimateAuxPartial(acc, estimateChild)
             if ret is None:
-                raise RuntimeError('none of the given partial functions was defined at acc '+repr(acc))
+                raise RuntimeError('none of the given partial functions was'
+                                   ' defined at acc %r' % acc)
             dist, auxValuedRat = ret
             auxValuedRats[idValue(dist)] = auxValuedRat
             return dist
         dist = nodetree.getDagMap([estimatePartial])(acc)
-        totAux, totAuxRat = sumValuedRats([ auxValuedRats[idValue(distNode)] for distNode in distNodeList(dist) ])
+        totAux, totAuxRat = sumValuedRats([
+            auxValuedRats[idValue(distNode)]
+            for distNode in distNodeList(dist)
+        ])
 
         totAuxAgain, totAuxAgainRat = sumValuedRats(auxValuedRats.values())
         assert np.allclose(totAuxAgain, totAux) and totAuxAgainRat == totAuxRat
@@ -175,7 +183,8 @@ def getCreateAccG(partialMaps):
 
 @codeDeps(getCreateAccG, getDerivParams, getParams, getParse)
 class ParamSpec(object):
-    def __init__(self, paramsPartials, derivParamsPartials, parsePartials, createAccGPartials):
+    def __init__(self, paramsPartials, derivParamsPartials, parsePartials,
+                 createAccGPartials):
         self.params = getParams(paramsPartials)
         self.derivParams = getDerivParams(derivParamsPartials)
         self.parse = getParse(parsePartials)
@@ -188,10 +197,12 @@ class ParamSpec(object):
 
 @codeDeps()
 def defaultParamsPartial(node, paramsChild):
-    return np.concatenate([node.paramsSingle(), node.paramsChildren(paramsChild)])
+    return np.concatenate([node.paramsSingle(),
+                           node.paramsChildren(paramsChild)])
 @codeDeps()
 def defaultDerivParamsPartial(node, derivParamsChild):
-    return np.concatenate([node.derivParamsSingle(), node.derivParamsChildren(derivParamsChild)])
+    return np.concatenate([node.derivParamsSingle(),
+                           node.derivParamsChildren(derivParamsChild)])
 @codeDeps()
 def defaultParsePartial(node, params, parseChild):
     newNode, paramsLeft = node.parseSingle(params)
@@ -327,7 +338,8 @@ class Memo(object):
             self.inputs.append(input)
             self.outputs.append(output)
         elif random.random() * self.occ < self.fakeOcc:
-            # (FIXME : behind the scenes, only do subset selection every certain number of inputs (for efficiency)?)
+            # (FIXME : behind the scenes, only do subset selection every
+            #   certain number of inputs (for efficiency)?)
             assert len(self.inputs) == self.maxOcc
             delIndex = random.randrange(self.maxOcc)
             self.inputs[delIndex] = input
@@ -387,7 +399,8 @@ class AccCommon(object):
     #    abstract
     def add(self, input, output, occ = 1.0):
         abstract
-    # (FIXME : for all of the Accs defined below, add more checks that acc is of the right type during addAccSingle?)
+    # (FIXME : for all of the Accs defined below, add more checks that acc is
+    #   of the right type during addAccSingle?)
     def addAccSingle(self, acc):
         abstract
     def addAccChildPairs(self, acc):
@@ -400,7 +413,8 @@ class AccCommon(object):
     def logLikeSingle(self):
         abstract
     def logLike(self):
-        return sum([ accNode.logLikeSingle() for accNode in accNodeList(self) ])
+        return sum([ accNode.logLikeSingle()
+                     for accNode in accNodeList(self) ])
     def withTag(self, tag):
         """Set tag and return self.
 
@@ -422,7 +436,11 @@ class AccG(AccCommon):
         abstract
     def derivParamsChildren(self, derivParamsChild):
         children = self.children()
-        return [] if not children else np.concatenate([ derivParamsChild(child) for child in children ])
+        if children:
+            return np.concatenate([ derivParamsChild(child)
+                                    for child in children ])
+        else:
+            return []
 
 @codeDeps(AccEM, AccG)
 class Acc(AccEM, AccG):
@@ -465,7 +483,8 @@ class DerivTermAccG(AccG):
     def add(self, input, output, occ = 1.0):
         self.occ += occ
         self.logLikePrev += self.distPrev.logProb(input, output) * occ
-        self.derivParams += self.distPrev.logProbDerivParams(input, output) * occ
+        self.derivParams += self.distPrev.logProbDerivParams(input,
+                                                             output) * occ
 
     # N.B. assumes distPrev is the same for self and acc (not checked).
     def addAccSingle(self, acc):
@@ -489,7 +508,8 @@ class FixedValueAcc(TermAcc):
 
     def add(self, input, output, occ = 1.0):
         if output != self.value:
-            raise RuntimeError('output '+repr(output)+' != fixed value '+repr(self.value)+' for FixedValueAcc')
+            raise RuntimeError('output %r != fixed value %r for'
+                               ' FixedValueAcc' % (output, self.value))
         self.occ += occ
 
     # N.B. assumes self and acc have same fixed value (not checked)
@@ -531,12 +551,19 @@ class OracleAcc(TermAcc):
     mla.pinv
 )
 class LinearGaussianAcc(TermAcc):
-    def __init__(self, distPrev = None, inputLength = None, varianceFloor = None, tag = None):
+    def __init__(self, distPrev = None, inputLength = None,
+                 varianceFloor = None, tag = None):
         self.distPrev = distPrev
         if distPrev is not None:
             inputLength = len(distPrev.coeff)
         assert inputLength is not None and inputLength >= 0
-        self.varianceFloor = varianceFloor if varianceFloor is not None else (distPrev.varianceFloor if distPrev is not None else 0.0)
+        if varianceFloor is not None:
+            self.varianceFloor = varianceFloor
+        else:
+            if distPrev is not None:
+                self.varianceFloor = distPrev.varianceFloor
+            else:
+                self.varianceFloor = 0.0
         self.tag = tag
 
         self.occ = 0.0
@@ -561,21 +588,25 @@ class LinearGaussianAcc(TermAcc):
         self.sumOuter += acc.sumOuter
 
     def auxFn(self, coeff, variance):
-        term = self.sumSqr - 2.0 * np.dot(self.sumTarget, coeff) + np.dot(np.dot(self.sumOuter, coeff), coeff)
-        aux = -0.5 * math.log(2.0 * math.pi) * self.occ - 0.5 * math.log(variance) * self.occ - 0.5 * term / variance
+        term = (self.sumSqr - 2.0 * np.dot(self.sumTarget, coeff) +
+                np.dot(np.dot(self.sumOuter, coeff), coeff))
+        aux = (-0.5 * math.log(2.0 * math.pi) * self.occ +
+               -0.5 * math.log(variance) * self.occ - 0.5 * term / variance)
         return aux, Rat.Exact
 
     def logLikeSingle(self):
         return self.auxFn(self.distPrev.coeff, self.distPrev.variance)[0]
 
     def auxDerivParams(self, coeff, variance):
-        term = self.sumSqr - 2.0 * np.dot(self.sumTarget, coeff) + np.dot(np.dot(self.sumOuter, coeff), coeff)
+        term = (self.sumSqr - 2.0 * np.dot(self.sumTarget, coeff) +
+                np.dot(np.dot(self.sumOuter, coeff), coeff))
         derivCoeff = (self.sumTarget - np.dot(self.sumOuter, coeff)) / variance
         derivLogPrecision = 0.5 * self.occ - 0.5 * term / variance
         return np.append(derivCoeff, derivLogPrecision), Rat.Exact
 
     def derivParamsSingle(self):
-        return self.auxDerivParams(self.distPrev.coeff, self.distPrev.variance)[0]
+        return self.auxDerivParams(self.distPrev.coeff,
+                                   self.distPrev.variance)[0]
 
     def estimateSingleAux(self):
         if self.occ == 0.0:
@@ -583,7 +614,8 @@ class LinearGaussianAcc(TermAcc):
         try:
             sumOuterInv = mla.pinv(self.sumOuter)
         except la.LinAlgError, detail:
-            raise EstimationError('could not compute pseudo-inverse: %s'+str(detail))
+            raise EstimationError('could not compute pseudo-inverse: %s' %
+                                  detail)
         coeff = np.dot(sumOuterInv, self.sumTarget)
         variance = (self.sumSqr - np.dot(coeff, self.sumTarget)) / self.occ
 
@@ -591,21 +623,34 @@ class LinearGaussianAcc(TermAcc):
             variance = self.varianceFloor
 
         if variance <= 0.0:
-            raise EstimationError('computed variance is zero or negative: '+str(variance))
+            raise EstimationError('computed variance is zero or negative: %s' %
+                                  variance)
         elif variance < 1e-10:
-            raise EstimationError('computed variance too miniscule (variances this small can lead to substantial loss of precision during accumulation): '+str(variance))
-        return LinearGaussian(coeff, variance, self.varianceFloor, tag = self.tag), self.auxFn(coeff, variance)
+            raise EstimationError('computed variance too miniscule (variances'
+                                  ' this small can lead to substantial loss of'
+                                  ' precision during accumulation): %s' %
+                                  variance)
+        distNew = LinearGaussian(coeff, variance, self.varianceFloor,
+                                 tag = self.tag)
+        return distNew, self.auxFn(coeff, variance)
 
 @codeDeps(ForwardRef(lambda: ConstantClassifier), EstimationError, Rat, TermAcc,
     assert_allclose
 )
 class ConstantClassifierAcc(TermAcc):
-    def __init__(self, distPrev = None, numClasses = None, probFloors = None, tag = None):
+    def __init__(self, distPrev = None, numClasses = None, probFloors = None,
+                 tag = None):
         self.distPrev = distPrev
         if distPrev is not None:
             numClasses = len(distPrev.probs)
         assert numClasses >= 1
-        self.probFloors = probFloors if probFloors is not None else (distPrev.probFloors if distPrev is not None else np.zeros((numClasses,)))
+        if probFloors is not None:
+            self.probFloors = probFloors
+        else:
+            if distPrev is not None:
+                self.probFloors = distPrev.probFloors
+            else:
+                self.probFloors = np.zeros((numClasses,))
         self.tag = tag
 
         self.occ = 0.0
@@ -627,13 +672,18 @@ class ConstantClassifierAcc(TermAcc):
         self.occs += acc.occs
 
     def auxFn(self, probs):
-        return sum([ occ * logProb for occ, logProb in zip(self.occs, np.log(probs)) if occ > 0.0 ]), Rat.Exact
+        aux = sum([ occ * logProb
+                    for occ, logProb in zip(self.occs, np.log(probs))
+                    if occ > 0.0 ])
+        return aux, Rat.Exact
 
     def logLikeSingle(self):
         return self.auxFn(self.distPrev.probs)[0]
 
     def auxDerivParams(self, probs):
-        return self.occs[:-1] - self.occs[-1] - (probs[:-1] - probs[-1]) * self.occ, Rat.Exact
+        auxDeriv = ((self.occs[:-1] - self.occs[-1]) -
+                    (probs[:-1] - probs[-1]) * self.occ)
+        return auxDeriv, Rat.Exact
 
     def derivParamsSingle(self):
         return self.auxDerivParams(self.distPrev.probs)[0]
@@ -662,7 +712,8 @@ class ConstantClassifierAcc(TermAcc):
         assert_allclose(sum(probs), 1.0)
         assert all(probs >= self.probFloors)
 
-        return ConstantClassifier(probs, self.probFloors, tag = self.tag), self.auxFn(probs)
+        distNew = ConstantClassifier(probs, self.probFloors, tag = self.tag)
+        return distNew, self.auxFn(probs)
 
 @codeDeps(ForwardRef(lambda: BinaryLogisticClassifier), EstimationError, Rat,
     TermAcc, mla.pinv
@@ -681,17 +732,18 @@ class BinaryLogisticClassifierAcc(TermAcc):
     def add(self, input, classIndex, occ = 1.0):
         if occ > 0.0:
             probPrev1 = self.distPrev.prob(input, 1)
+            probPrevProduct = probPrev1 * (1.0 - probPrev1)
             self.occ += occ
             self.sumTarget += input * (probPrev1 - classIndex) * occ
-            self.sumOuter += np.outer(input, input) * probPrev1 * (1.0 - probPrev1) * occ
+            self.sumOuter += np.outer(input, input) * probPrevProduct * occ
             self.logLikePrev += self.distPrev.logProb(input, classIndex) * occ
 
     # N.B. assumes class 0 in self corresponds to class 0 in acc, etc.
     # (FIXME : accumulated values encode a local quadratic approx of likelihood
-    #   function at current params. However should the origin in parameter space
-    #   be treated as absolute zero rather than the current params?
-    #   Would allow decision tree clustering with BinaryLogisticClassifier (although
-    #   quadratic approx may not be very good in this situation).)
+    #   function at current params. However should the origin in parameter
+    #   space be treated as absolute zero rather than the current params?
+    #   Would allow decision tree clustering with BinaryLogisticClassifier
+    #   (although quadratic approx may not be very good in this situation).)
     def addAccSingle(self, acc):
         assert np.all(self.distPrev.coeff == acc.distPrev.coeff)
         self.occ += acc.occ
@@ -704,7 +756,11 @@ class BinaryLogisticClassifierAcc(TermAcc):
         if np.all(coeffDelta == 0.0):
             return self.logLikePrev, Rat.Exact
         else:
-            return self.logLikePrev - np.dot(self.sumTarget, coeffDelta) - 0.5 * np.dot(np.dot(self.sumOuter, coeffDelta), coeffDelta), Rat.Approx
+            targetTerm = -np.dot(self.sumTarget, coeffDelta)
+            outerTerm = -0.5 * np.dot(np.dot(self.sumOuter, coeffDelta),
+                                      coeffDelta)
+            aux = self.logLikePrev + targetTerm + outerTerm
+            return aux, Rat.Approx
 
     def logLikeSingle(self):
         return self.logLikePrev
@@ -727,17 +783,21 @@ class BinaryLogisticClassifierAcc(TermAcc):
         try:
             sumOuterInv = mla.pinv(self.sumOuter)
         except la.LinAlgError, detail:
-            raise EstimationError('could not compute pseudo-inverse: '+str(detail))
+            raise EstimationError('could not compute pseudo-inverse: %s' %
+                                  detail)
         coeffDelta = -np.dot(sumOuterInv, self.sumTarget)
 
         # approximate constrained maximum likelihood
         step = 0.7
-        while any(np.abs(self.distPrev.coeff + coeffDelta * step) > self.distPrev.coeffFloor):
+        while any(np.abs(self.distPrev.coeff + coeffDelta * step) >
+                  self.distPrev.coeffFloor):
             step *= 0.5
         coeff = self.distPrev.coeff + coeffDelta * step
         assert all(np.abs(coeff) <= self.distPrev.coeffFloor)
 
-        return BinaryLogisticClassifier(coeff, self.distPrev.coeffFloor, tag = self.tag), self.auxFn(coeff)
+        distNew = BinaryLogisticClassifier(coeff, self.distPrev.coeffFloor,
+                                           tag = self.tag)
+        return distNew, self.auxFn(coeff)
 
 @codeDeps(Acc, ForwardRef(lambda: MixtureDist), Rat, assert_allclose, logSum)
 class MixtureAcc(Acc):
@@ -756,7 +816,8 @@ class MixtureAcc(Acc):
 
     def add(self, input, output, occ = 1.0):
         self.occ += occ
-        logProbs = [ self.distPrev.logProbComp(input, comp, output) for comp in range(self.numComps) ]
+        logProbs = [ self.distPrev.logProbComp(input, comp, output)
+                     for comp in range(self.numComps) ]
         logTot = logSum(logProbs)
         relOccs = np.exp(logProbs - logTot)
         assert_allclose(sum(relOccs), 1.0)
@@ -783,7 +844,8 @@ class MixtureAcc(Acc):
     def estimateAux(self, estimateChild):
         classDist = estimateChild(self.classAcc)
         regDists = [ estimateChild(regAcc) for regAcc in self.regAccs ]
-        return MixtureDist(classDist, regDists, tag = self.tag), (self.entropy, Rat.LowerBound)
+        distNew = MixtureDist(classDist, regDists, tag = self.tag)
+        return distNew, (self.entropy, Rat.LowerBound)
 
 @codeDeps(Acc, ForwardRef(lambda: IdentifiableMixtureDist), Rat)
 class IdentifiableMixtureAcc(Acc):
@@ -816,7 +878,8 @@ class IdentifiableMixtureAcc(Acc):
     def estimateAux(self, estimateChild):
         classDist = estimateChild(self.classAcc)
         regDists = [ estimateChild(regAcc) for regAcc in self.regAccs ]
-        return IdentifiableMixtureDist(classDist, regDists, tag = self.tag), (0.0, Rat.Exact)
+        distNew = IdentifiableMixtureDist(classDist, regDists, tag = self.tag)
+        return distNew, (0.0, Rat.Exact)
 
 @codeDeps(ForwardRef(lambda: VectorAcc))
 def createVectorAcc(order, outIndices, vectorSummarizer, createAccForIndex):
@@ -863,7 +926,9 @@ class VectorAcc(Acc):
         distComps = dict()
         for outIndex in self.accComps:
             distComps[outIndex] = estimateChild(self.accComps[outIndex])
-        return VectorDist(self.order, self.vectorSummarizer, self.keys, distComps, tag = self.tag), (0.0, Rat.Exact)
+        distNew = VectorDist(self.order, self.vectorSummarizer, self.keys,
+                             distComps, tag = self.tag)
+        return distNew, (0.0, Rat.Exact)
 
 @codeDeps(ForwardRef(lambda: DiscreteAcc))
 def createDiscreteAcc(keys, createAccFor):
@@ -906,15 +971,18 @@ class DiscreteAcc(Acc):
         distDict = dict()
         for label in self.accDict:
             distDict[label] = estimateChild(self.accDict[label])
-        return DiscreteDist(self.keys, distDict, tag = self.tag), (0.0, Rat.Exact)
+        distNew = DiscreteDist(self.keys, distDict, tag = self.tag)
+        return distNew, (0.0, Rat.Exact)
 
 @codeDeps(Acc)
 class AutoGrowingDiscreteAcc(Acc):
-    """Discrete acc that creates sub-accs as necessary when a new phonetic context is seen.
+    """A discrete accumulator that creates sub-accumulators as necessary.
 
-    (N.B. the accumulator sub-DAGs created by createAcc should probably not have
-    any nodes which are shared outside that sub-DAG. (Could think about more
-    carefully if we ever have a use case).)
+    Sub-accumulators are created whenever a new phonetic context is seen.
+
+    (N.B. the accumulator sub-DAGs created by createAcc should probably not
+    have any nodes which are shared outside that sub-DAG. (Could think about
+    more carefully if we ever have a use case).)
     """
     def __init__(self, createAcc, tag = None):
         self.accDict = dict()
@@ -986,7 +1054,9 @@ class DecisionTreeAccNode(DecisionTreeAcc):
     def estimateAux(self, estimateChild):
         distYes = estimateChild(self.accYes)
         distNo = estimateChild(self.accNo)
-        return DecisionTreeNode(self.fullQuestion, distYes, distNo, tag = self.tag), (0.0, Rat.Exact)
+        distNew = DecisionTreeNode(self.fullQuestion, distYes, distNo,
+                                   tag = self.tag)
+        return distNew, (0.0, Rat.Exact)
 
 @codeDeps(DecisionTreeAcc, ForwardRef(lambda: DecisionTreeLeaf), Rat)
 class DecisionTreeAccLeaf(DecisionTreeAcc):
@@ -1045,7 +1115,9 @@ class MappedInputAcc(Acc):
 
     def estimateAux(self, estimateChild):
         dist = estimateChild(self.acc)
-        return MappedInputDist(self.inputTransform, dist, tag = self.tag), (0.0, Rat.Exact)
+        overallDistNew = MappedInputDist(self.inputTransform, dist,
+                                         tag = self.tag)
+        return overallDistNew, (0.0, Rat.Exact)
 
 @codeDeps(Acc, ForwardRef(lambda: MappedOutputDist), Rat)
 class MappedOutputAcc(Acc):
@@ -1078,11 +1150,13 @@ class MappedOutputAcc(Acc):
 
     def estimateAux(self, estimateChild):
         dist = estimateChild(self.acc)
-        return MappedOutputDist(self.outputTransform, dist, tag = self.tag), (self.logJac, Rat.Exact)
+        overallDistNew = MappedOutputDist(self.outputTransform, dist,
+                                          tag = self.tag)
+        return overallDistNew, (self.logJac, Rat.Exact)
 
 @codeDeps(AccEM, Rat, ForwardRef(lambda: TransformedInputDist))
 class TransformedInputLearnDistAccEM(AccEM):
-    """Acc for transformed input, where we learn the sub-dist parameters using EM."""
+    """Acc for transformed input, where we learn the sub-dist using EM."""
     def __init__(self, inputTransform, acc, tag = None):
         self.inputTransform = inputTransform
         self.acc = acc
@@ -1105,11 +1179,13 @@ class TransformedInputLearnDistAccEM(AccEM):
 
     def estimateAux(self, estimateChild):
         dist = estimateChild(self.acc)
-        return TransformedInputDist(self.inputTransform, dist, tag = self.tag), (0.0, Rat.Exact)
+        overallDistNew = TransformedInputDist(self.inputTransform, dist,
+                                              tag = self.tag)
+        return overallDistNew, (0.0, Rat.Exact)
 
 @codeDeps(AccEM, Rat, ForwardRef(lambda: TransformedInputDist))
 class TransformedInputLearnTransformAccEM(AccEM):
-    """Acc for transformed input, where we learn the transform parameters using EM."""
+    """Acc for transformed input, where we learn the transform using EM."""
     def __init__(self, inputTransformAcc, dist, tag = None):
         self.inputTransformAcc = inputTransformAcc
         self.dist = dist
@@ -1132,12 +1208,19 @@ class TransformedInputLearnTransformAccEM(AccEM):
 
     def estimateAux(self, estimateChild):
         inputTransform = estimateChild(self.inputTransformAcc)
-        return TransformedInputDist(inputTransform, self.dist, tag = self.tag), (0.0, Rat.Exact)
+        overallDistNew = TransformedInputDist(inputTransform, self.dist,
+                                              tag = self.tag)
+        return overallDistNew, (0.0, Rat.Exact)
 
 @codeDeps(AccG)
 class TransformedInputAccG(AccG):
-    """Acc for transformed input, where we compute the gradient with respect to both the transform and sub-dist parameters."""
-    def __init__(self, (inputTransformAcc, inputTransform), (acc, dist), tag = None):
+    """Acc for transformed input, where we compute the gradient.
+
+    The gradient is computed with respect to the parameters of both the
+    transform and the sub-dist.
+    """
+    def __init__(self, (inputTransformAcc, inputTransform), (acc, dist),
+                 tag = None):
         self.inputTransformAcc = inputTransformAcc
         self.inputTransform = inputTransform
         self.acc = acc
@@ -1165,7 +1248,7 @@ class TransformedInputAccG(AccG):
 
 @codeDeps(AccEM, Rat, ForwardRef(lambda: TransformedOutputDist))
 class TransformedOutputLearnDistAccEM(AccEM):
-    """Acc for transformed output, where we learn the sub-dist parameters using EM."""
+    """Acc for transformed output, where we learn the sub-dist using EM."""
     def __init__(self, outputTransform, acc, tag = None):
         self.outputTransform = outputTransform
         self.acc = acc
@@ -1191,11 +1274,13 @@ class TransformedOutputLearnDistAccEM(AccEM):
 
     def estimateAux(self, estimateChild):
         dist = estimateChild(self.acc)
-        return TransformedOutputDist(self.outputTransform, dist, tag = self.tag), (self.logJac, Rat.Exact)
+        overallDistNew = TransformedOutputDist(self.outputTransform, dist,
+                                               tag = self.tag)
+        return overallDistNew, (self.logJac, Rat.Exact)
 
 @codeDeps(AccEM, Rat, ForwardRef(lambda: TransformedOutputDist))
 class TransformedOutputLearnTransformAccEM(AccEM):
-    """Acc for transformed output, where we learn the transform parameters using EM."""
+    """Acc for transformed output, where we learn the transform using EM."""
     def __init__(self, outputTransformAcc, dist, tag = None):
         self.outputTransformAcc = outputTransformAcc
         self.dist = dist
@@ -1218,12 +1303,19 @@ class TransformedOutputLearnTransformAccEM(AccEM):
 
     def estimateAux(self, estimateChild):
         outputTransform = estimateChild(self.outputTransformAcc)
-        return TransformedOutputDist(outputTransform, self.dist, tag = self.tag), (0.0, Rat.Exact)
+        overallDistNew = TransformedOutputDist(outputTransform, self.dist,
+                                               tag = self.tag)
+        return overallDistNew, (0.0, Rat.Exact)
 
 @codeDeps(AccG)
 class TransformedOutputAccG(AccG):
-    """Acc for transformed output, where we compute the gradient with respect to both the transform and sub-dist parameters."""
-    def __init__(self, (outputTransformAcc, outputTransform), (acc, dist), tag = None):
+    """Acc for transformed output, where we compute the gradient.
+
+    The gradient is computed with respect to the parameters of both the
+    transform and the sub-dist.
+    """
+    def __init__(self, (outputTransformAcc, outputTransform), (acc, dist),
+                 tag = None):
         self.outputTransformAcc = outputTransformAcc
         self.outputTransform = outputTransform
         self.acc = acc
@@ -1231,7 +1323,7 @@ class TransformedOutputAccG(AccG):
         self.tag = tag
 
         self.occ = 0.0
-        # (FIXME : should logJac tracking go into the outputTransformAcc instead?)
+        # (FIXME : should logJac tracking go in outputTransformAcc instead?)
         self.logJac = 0.0
 
     def children(self):
@@ -1345,7 +1437,8 @@ class DebugAcc(Acc):
 
     def estimateAux(self, estimateChild):
         dist = estimateChild(self.acc)
-        return DebugDist(self.memo.maxOcc, dist, tag = self.tag), (0.0, Rat.Exact)
+        overallDistNew = DebugDist(self.memo.maxOcc, dist, tag = self.tag)
+        return overallDistNew, (0.0, Rat.Exact)
 
 @codeDeps(Acc, ForwardRef(lambda: AutoregressiveSequenceDist), Rat,
     contextualizeIter
@@ -1370,7 +1463,9 @@ class AutoregressiveSequenceAcc(Acc):
         inSeq = self.seqFor(input)
         assert len(inSeq) == len(outSeq)
         self.occ += occ
-        for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq, fillFrames = self.fillFrames)):
+        contextedOutSeq = contextualizeIter(self.depth, outSeq,
+                                            fillFrames = self.fillFrames)
+        for inFrame, (outContext, outFrame) in izip(inSeq, contextedOutSeq):
             self.frames += occ
             self.acc.add((inFrame, outContext), outFrame, occ)
 
@@ -1389,7 +1484,10 @@ class AutoregressiveSequenceAcc(Acc):
 
     def estimateAux(self, estimateChild):
         dist = estimateChild(self.acc)
-        return AutoregressiveSequenceDist(self.depth, self.seqFor, self.fillFrames, dist, tag = self.tag), (0.0, Rat.Exact)
+        overallDistNew = AutoregressiveSequenceDist(self.depth, self.seqFor,
+                                                    self.fillFrames, dist,
+                                                    tag = self.tag)
+        return overallDistNew, (0.0, Rat.Exact)
 
 @codeDeps(Acc, ForwardRef(lambda: AutoregressiveNetDist), Rat,
     wnet.forwardBackwardAlt
@@ -1416,18 +1514,30 @@ class AutoregressiveNetAcc(Acc):
         self.frames += len(outSeq) * occ
 
         timedNet, labelToWeight = self.distPrev.getTimedNet(input, outSeq)
-        totalLogProb, edgeGen = wnet.forwardBackwardAlt(timedNet, labelToWeight = labelToWeight, divisionRing = self.distPrev.ring, getAgenda = self.distPrev.getAgenda)
+        totalLogProb, edgeGen = wnet.forwardBackwardAlt(
+            timedNet,
+            labelToWeight = labelToWeight,
+            divisionRing = self.distPrev.ring,
+            getAgenda = self.distPrev.getAgenda
+        )
 
+        pruneSpec = self.distPrev.pruneSpec
         numFilled = len(self.distPrev.fillFrames)
         outSeqFilled = self.distPrev.fillFrames + outSeq
         entropy = totalLogProb * occ
         accedEdges = 0
         for (label, labelStartTime, labelEndTime), logOcc in edgeGen:
-            if label is not None and (self.distPrev.pruneSpec is None or self.distPrev.pruneSpec.logOccThresh is None or logOcc > -self.distPrev.pruneSpec.logOccThresh):
+            if label is not None and (pruneSpec is None or
+                                      pruneSpec.logOccThresh is None or
+                                      logOcc > -pruneSpec.logOccThresh):
                 labelOcc = math.exp(logOcc) * occ
-                entropy -= labelToWeight((label, labelStartTime, labelEndTime)) * labelOcc
+                entropy -= labelToWeight((label, labelStartTime,
+                                          labelEndTime)) * labelOcc
 
-                acInput = outSeqFilled[max(labelStartTime - self.distPrev.depth + numFilled, 0):(labelStartTime + numFilled)]
+                acInput = outSeqFilled[
+                    max(labelStartTime - self.distPrev.depth + numFilled, 0):
+                    (labelStartTime + numFilled)
+                ]
                 if not label[0]:
                     _, phInput, phOutput = label
                     self.durAcc.add((phInput, acInput), phOutput, labelOcc)
@@ -1441,7 +1551,8 @@ class AutoregressiveNetAcc(Acc):
 
         if self.verbosity >= 2:
             print 'fb:    log like = %s (net path entropy = %s)' % (
-                (0.0, 0.0) if len(outSeq) == 0 else (totalLogProb / len(outSeq), entropy / len(outSeq))
+                (0.0, 0.0) if len(outSeq) == 0
+                else (totalLogProb / len(outSeq), entropy / len(outSeq))
             )
         if self.verbosity >= 3:
             print 'fb:    (accumulated over %s edges)' % accedEdges
@@ -1468,9 +1579,16 @@ class AutoregressiveNetAcc(Acc):
         acDist = estimateChild(self.acAcc)
         if self.verbosity >= 1:
             print 'fb:    overall net path entropy = %s (%s frames)' % (
-                (0.0, 0) if self.frames == 0 else (self.entropy / self.frames, self.frames)
+                (0.0, 0) if self.frames == 0
+                else (self.entropy / self.frames, self.frames)
             )
-        return AutoregressiveNetDist(self.distPrev.depth, self.distPrev.netFor, self.distPrev.fillFrames, durDist, acDist, self.distPrev.pruneSpec, tag = self.tag), (self.entropy, Rat.LowerBound)
+        distNew = AutoregressiveNetDist(self.distPrev.depth,
+                                        self.distPrev.netFor,
+                                        self.distPrev.fillFrames,
+                                        durDist, acDist,
+                                        self.distPrev.pruneSpec,
+                                        tag = self.tag)
+        return distNew, (self.entropy, Rat.LowerBound)
 
 
 @codeDeps(SynthMethod)
@@ -1496,7 +1614,10 @@ class Dist(object):
         abstract
     def paramsChildren(self, paramsChild):
         children = self.children()
-        return [] if not children else np.concatenate([ paramsChild(child) for child in children ])
+        if children:
+            return np.concatenate([ paramsChild(child) for child in children ])
+        else:
+            return []
     def parseSingle(self, params):
         abstract
     def parseChildren(self, params, parseChild):
@@ -1601,17 +1722,22 @@ class LinearGaussian(TermDist):
         assert self.variance >= self.varianceFloor
         assert self.variance > 0.0
         if self.variance < 1e-10:
-            raise RuntimeError('LinearGaussian variance too miniscule (variances this small can lead to substantial loss of precision during accumulation): '+str(self.variance))
+            raise RuntimeError('LinearGaussian variance too miniscule'
+                               ' (variances this small can lead to substantial'
+                               ' loss of precision during accumulation): %s' %
+                               self.variance)
 
     def __repr__(self):
         return 'LinearGaussian('+repr(self.coeff)+', '+repr(self.variance)+', '+repr(self.varianceFloor)+', tag = '+repr(self.tag)+')'
 
     def mapChildren(self, mapChild):
-        return LinearGaussian(self.coeff, self.variance, self.varianceFloor, tag = self.tag)
+        return LinearGaussian(self.coeff, self.variance, self.varianceFloor,
+                              tag = self.tag)
 
     def logProb(self, input, output):
         mean = np.dot(self.coeff, input)
-        return self.gConst - 0.5 * math.log(self.variance) - 0.5 * (output - mean) ** 2 / self.variance
+        return (self.gConst - 0.5 * math.log(self.variance) +
+                -0.5 * (output - mean) ** 2 / self.variance)
 
     def logProbDerivInput(self, input, output):
         mean = np.dot(self.coeff, input)
@@ -1645,24 +1771,33 @@ class LinearGaussian(TermDist):
         coeff = params[:n]
         variance = math.exp(-params[n])
         if variance < self.varianceFloor:
-            raise InvalidParamsError('variance = %s < varianceFloor = %s during LinearGaussian parsing' % (variance, self.varianceFloor))
-        return LinearGaussian(coeff, variance, self.varianceFloor, tag = self.tag), params[n + 1:]
+            raise InvalidParamsError('variance = %s < varianceFloor = %s'
+                                     ' during LinearGaussian parsing' %
+                                     (variance, self.varianceFloor))
+        distNew = LinearGaussian(coeff, variance, self.varianceFloor,
+                                 tag = self.tag)
+        return distNew, params[n + 1:]
 
     def flooredSingle(self):
-        return (1, 1) if np.allclose(self.variance, self.varianceFloor) else (0, 1)
+        return ((1, 1) if np.allclose(self.variance, self.varianceFloor)
+                else (0, 1))
 
 @codeDeps(DerivTermAccG, SynthMethod, TermDist)
 class StudentDist(TermDist):
     def __init__(self, df, precision, tag = None):
         if df <= 0.0:
-            raise ValueError('df = '+str(df)+' but should be > 0.0')
+            raise ValueError('df = %s but should be > 0.0' % df)
         if precision <= 0.0:
-            raise ValueError('precision = '+str(precision)+' but should be > 0.0')
+            raise ValueError('precision = %s but should be > 0.0' % precision)
         self.df = df
         self.precision = precision
         self.tag = tag
 
-        self.gConst = special.gammaln(0.5) - special.betaln(0.5, 0.5 * self.df) + 0.5 * math.log(self.precision) - 0.5 * math.log(self.df) - 0.5 * math.log(math.pi)
+        self.gConst = (special.gammaln(0.5) +
+                       -special.betaln(0.5, 0.5 * self.df) +
+                       0.5 * math.log(self.precision) +
+                       -0.5 * math.log(self.df) +
+                       -0.5 * math.log(math.pi))
 
     def __repr__(self):
         return 'StudentDist('+repr(self.df)+', '+repr(self.precision)+', tag = '+repr(self.tag)+')'
@@ -1688,7 +1823,9 @@ class StudentDist(TermDist):
         a = output * output * self.precision / self.df
         K = self.df - (1.0 + self.df) / (1.0 + a)
         return np.array([
-            0.5 * K + 0.5 * self.df * (special.psi(0.5 * (self.df + 1.0)) - special.psi(0.5 * self.df) - math.log(1.0 + a)),
+            0.5 * K + 0.5 * self.df * (special.psi(0.5 * (self.df + 1.0)) +
+                                       -special.psi(0.5 * self.df) +
+                                       -math.log(1.0 + a)),
             -0.5 * K
         ])
 
@@ -1754,7 +1891,10 @@ class ConstantClassifier(TermDist):
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
         if method == SynthMethod.Meanish:
-            prob, classIndex = max([ (prob, classIndex) for classIndex, prob in enumerate(self.probs) ])
+            prob, classIndex = max([
+                (prob, classIndex)
+                for classIndex, prob in enumerate(self.probs)
+            ])
             return classIndex
         elif method == SynthMethod.Sample:
             return sampleDiscrete(list(enumerate(self.probs)))
@@ -1764,7 +1904,9 @@ class ConstantClassifier(TermDist):
     def paramsSingle(self):
         logProbs = np.log(self.probs)
         if not np.all(np.isfinite(logProbs)):
-            raise RuntimeError('this parameterization of ConstantClassifier cannot cope with zero (or NaN) probabilities (probs = '+repr(self.probs)+')')
+            raise RuntimeError('this parameterization of ConstantClassifier'
+                               ' cannot cope with zero (or NaN) probabilities'
+                               ' (probs = %r)' % self.probs)
         sumZeroLogProbs = logProbs - np.mean(logProbs)
         return sumZeroLogProbs[:-1]
 
@@ -1772,17 +1914,24 @@ class ConstantClassifier(TermDist):
         n = len(self.probs) - 1
         p = params[:n]
         if not np.all(np.isfinite(p)):
-            raise InvalidParamsError('params %s not all finite during ConstantClassifier parsing' % p)
+            raise InvalidParamsError('params %s not all finite during'
+                                     ' ConstantClassifier parsing' % p)
         sumZeroLogProbs = np.append(p, -sum(p))
         assert_allclose(sum(sumZeroLogProbs), 0.0)
         probs = np.exp(sumZeroLogProbs)
         probs = probs / sum(probs)
         if not all(probs >= self.probFloors):
-            raise InvalidParamsError('probs = %s not all >= probFloors = %s during ConstantClassifier parsing' % (probs, self.probFloors))
-        return ConstantClassifier(probs, self.probFloors, tag = self.tag), params[n:]
+            raise InvalidParamsError('probs = %s not all >= probFloors = %s'
+                                     ' during ConstantClassifier parsing' %
+                                     (probs, self.probFloors))
+        distNew = ConstantClassifier(probs, self.probFloors, tag = self.tag)
+        return distNew, params[n:]
 
     def flooredSingle(self):
-        numFloored = sum([ (1 if np.allclose(prob, probFloor) else 0) for prob, probFloor in zip(self.probs, self.probFloors) ])
+        numFloored = sum([
+            (1 if np.allclose(prob, probFloor) else 0)
+            for prob, probFloor in zip(self.probs, self.probFloors)
+        ])
         if np.allclose(sum(self.probFloors), 1.0):
             assert numFloored == len(self.probs)
             return numFloored, len(self.probs)
@@ -1806,7 +1955,8 @@ class BinaryLogisticClassifier(TermDist):
         return 'BinaryLogisticClassifier('+repr(self.coeff)+', '+repr(self.coeffFloor)+', tag = '+repr(self.tag)+')'
 
     def mapChildren(self, mapChild):
-        return BinaryLogisticClassifier(self.coeff, self.coeffFloor, tag = self.tag)
+        return BinaryLogisticClassifier(self.coeff, self.coeffFloor,
+                                        tag = self.tag)
 
     def logProb(self, input, classIndex):
         prob = self.prob(input, classIndex)
@@ -1847,11 +1997,18 @@ class BinaryLogisticClassifier(TermDist):
         n = len(self.coeff)
         coeff = params[:n]
         if not all(np.abs(coeff) <= self.coeffFloor):
-            raise InvalidParamsError('abs(coeff = %s) not all <= coeffFloor = %s during BinaryLogisticClassifier parsing' % (coeff, self.coeffFloor))
-        return BinaryLogisticClassifier(coeff, self.coeffFloor, tag = self.tag), params[n:]
+            raise InvalidParamsError('abs(coeff = %s) not all <= coeffFloor'
+                                     ' = %s during BinaryLogisticClassifier'
+                                     ' parsing' % (coeff, self.coeffFloor))
+        distNew = BinaryLogisticClassifier(coeff, self.coeffFloor,
+                                           tag = self.tag)
+        return distNew, params[n:]
 
     def flooredSingle(self):
-        numFloored = sum([ (1 if np.allclose(abs(coeffValue), coeffFloorValue) else 0) for coeffValue, coeffFloorValue in zip(self.coeff, self.coeffFloor) ])
+        numFloored = sum([
+            (1 if np.allclose(abs(coeffValue), coeffFloorValue) else 0)
+            for coeffValue, coeffFloorValue in zip(self.coeff, self.coeffFloor)
+        ])
         return numFloored, len(self.coeff)
 
 @codeDeps(Dist, MixtureAcc, SynthMethod, logSum, parseConcat)
@@ -1874,15 +2031,18 @@ class MixtureDist(Dist):
         return MixtureDist(classDist, regDists, tag = self.tag)
 
     def logProb(self, input, output):
-        return logSum([ self.logProbComp(input, comp, output) for comp in range(self.numComps) ])
+        return logSum([ self.logProbComp(input, comp, output)
+                        for comp in range(self.numComps) ])
 
     def logProbComp(self, input, comp, output):
-        return self.classDist.logProb(input, comp) + self.regDists[comp].logProb(input, output)
+        return (self.classDist.logProb(input, comp) +
+                self.regDists[comp].logProb(input, output))
 
     def logProbDerivInput(self, input, output):
         logTot = self.logProb(input, output)
         return np.sum([
-            (regDist.logProbDerivInput(input, output) + self.classDist.logProbDerivInput(input, comp)) *
+            (regDist.logProbDerivInput(input, output) +
+             self.classDist.logProbDerivInput(input, comp)) *
             math.exp(self.logProbComp(input, comp, output) - logTot)
             for comp, regDist in enumerate(self.regDists)
         ], axis = 0)
@@ -1944,11 +2104,13 @@ class IdentifiableMixtureDist(Dist):
 
     def logProb(self, input, output):
         comp, acOutput = output
-        return self.classDist.logProb(input, comp) + self.regDists[comp].logProb(input, acOutput)
+        return (self.classDist.logProb(input, comp) +
+                self.regDists[comp].logProb(input, acOutput))
 
     def logProbDerivInput(self, input, output):
         comp, acOutput = output
-        return self.regDists[comp].logProbDerivInput(input, acOutput) + self.classDist.logProbDerivInput(input, comp)
+        return (self.regDists[comp].logProbDerivInput(input, acOutput) +
+                self.classDist.logProbDerivInput(input, comp))
 
     def logProbDerivOutput(self, input, output):
         comp, acOutput = output
@@ -1960,7 +2122,8 @@ class IdentifiableMixtureDist(Dist):
         return IdentifiableMixtureAcc(classAcc, regAccs, tag = self.tag)
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
-        actualComp, actualAcOutput = actualOutput if actualOutput is not None else (None, None)
+        actualComp, actualAcOutput = (actualOutput if actualOutput is not None
+                                      else (None, None))
         comp = self.classDist.synth(input, method, actualComp)
         acOutput = self.regDists[comp].synth(input, method, actualAcOutput)
         return comp, acOutput
@@ -1973,7 +2136,8 @@ class IdentifiableMixtureDist(Dist):
 
     def parseChildren(self, params, parseChild):
         dists, paramsLeft = parseConcat(self.children(), params, parseChild)
-        return IdentifiableMixtureDist(dists[0], dists[1:], tag = self.tag), paramsLeft
+        distNew = IdentifiableMixtureDist(dists[0], dists[1:], tag = self.tag)
+        return distNew, paramsLeft
 
 @codeDeps(ForwardRef(lambda: VectorDist))
 def createVectorDist(order, outIndices, vectorSummarizer, createDistForIndex):
@@ -2004,7 +2168,8 @@ class VectorDist(Dist):
         distComps = dict()
         for outIndex in self.distComps:
             distComps[outIndex] = mapChild(self.distComps[outIndex])
-        return VectorDist(self.order, self.vectorSummarizer, self.keys, distComps, tag = self.tag)
+        return VectorDist(self.order, self.vectorSummarizer, self.keys,
+                          distComps, tag = self.tag)
 
     def logProb(self, input, output):
         lp = 0.0
@@ -2025,7 +2190,8 @@ class VectorDist(Dist):
         accComps = dict()
         for outIndex in self.distComps:
             accComps[outIndex] = createAccChild(self.distComps[outIndex])
-        return VectorAcc(self.order, self.vectorSummarizer, self.keys, accComps, tag = self.tag)
+        return VectorAcc(self.order, self.vectorSummarizer, self.keys,
+                         accComps, tag = self.tag)
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
         partialOutput = []
@@ -2034,7 +2200,11 @@ class VectorDist(Dist):
                 out = actualOutput[outIndex]
             else:
                 summary = self.vectorSummarizer(input, partialOutput, outIndex)
-                out = self.distComps[outIndex].synth(summary, method, actualOutput[outIndex] if actualOutput is not None else None)
+                out = self.distComps[outIndex].synth(
+                    summary,
+                    method,
+                    None if actualOutput is None else actualOutput[outIndex]
+                )
             partialOutput.append(out)
         return partialOutput
 
@@ -2046,7 +2216,9 @@ class VectorDist(Dist):
 
     def parseChildren(self, params, parseChild):
         dists, paramsLeft = parseConcat(self.children(), params, parseChild)
-        return VectorDist(self.order, self.vectorSummarizer, self.keys, dict(zip(self.keys, dists)), tag = self.tag), paramsLeft
+        distNew = VectorDist(self.order, self.vectorSummarizer, self.keys,
+                             dict(zip(self.keys, dists)), tag = self.tag)
+        return distNew, paramsLeft
 
 @codeDeps(ForwardRef(lambda: DiscreteDist))
 def createDiscreteDist(keys, createDistFor):
@@ -2107,7 +2279,9 @@ class DiscreteDist(Dist):
 
     def parseChildren(self, params, parseChild):
         dists, paramsLeft = parseConcat(self.children(), params, parseChild)
-        return DiscreteDist(self.keys, dict(zip(self.keys, dists)), tag = self.tag), paramsLeft
+        distNew = DiscreteDist(self.keys, dict(zip(self.keys, dists)),
+                               tag = self.tag)
+        return distNew, paramsLeft
 
 @codeDeps(Dist)
 class DecisionTree(Dist):
@@ -2128,7 +2302,8 @@ class DecisionTreeNode(DecisionTree):
         return [self.distYes, self.distNo]
 
     def mapChildren(self, mapChild):
-        return DecisionTreeNode(self.fullQuestion, mapChild(self.distYes), mapChild(self.distNo), tag = self.tag)
+        return DecisionTreeNode(self.fullQuestion, mapChild(self.distYes),
+                                mapChild(self.distNo), tag = self.tag)
 
     def logProb(self, input, output):
         label, acInput = input
@@ -2155,7 +2330,10 @@ class DecisionTreeNode(DecisionTree):
             return self.distNo.logProbDerivOutput(input, output)
 
     def createAcc(self, createAccChild):
-        return DecisionTreeAccNode(self.fullQuestion, createAccChild(self.distYes), createAccChild(self.distNo), tag = self.tag)
+        return DecisionTreeAccNode(self.fullQuestion,
+                                   createAccChild(self.distYes),
+                                   createAccChild(self.distNo),
+                                   tag = self.tag)
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
         label, acInput = input
@@ -2178,7 +2356,9 @@ class DecisionTreeNode(DecisionTree):
         paramsLeft = params
         distYes, paramsLeft = parseChild(self.distYes, paramsLeft)
         distNo, paramsLeft = parseChild(self.distNo, paramsLeft)
-        return DecisionTreeNode(self.fullQuestion, distYes, distNo, tag = self.tag), paramsLeft
+        distNew = DecisionTreeNode(self.fullQuestion, distYes, distNo,
+                                   tag = self.tag)
+        return distNew, paramsLeft
 
 @codeDeps(DecisionTree, DecisionTreeAccLeaf, SynthMethod)
 class DecisionTreeLeaf(DecisionTree):
@@ -2227,7 +2407,8 @@ class DecisionTreeLeaf(DecisionTree):
         dist, paramsLeft = parseChild(self.dist, params)
         return DecisionTreeLeaf(dist, tag = self.tag), paramsLeft
 
-# (FIXME : merge MappedInputDist with TransformedInputDist? (Also merge some of the corresponding Accs?))
+# (FIXME : merge MappedInputDist with TransformedInputDist?
+#   (Also merge some of the corresponding Accs?))
 @codeDeps(Dist, MappedInputAcc, SynthMethod)
 class MappedInputDist(Dist):
     """Dist where input is mapped using a fixed transform."""
@@ -2263,7 +2444,8 @@ class MappedInputDist(Dist):
         return MappedInputAcc(self.inputTransform, acc, tag = self.tag)
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
-        return self.dist.synth(self.inputTransform(input), method, actualOutput)
+        return self.dist.synth(self.inputTransform(input), method,
+                               actualOutput)
 
     def paramsSingle(self):
         return []
@@ -2273,9 +2455,12 @@ class MappedInputDist(Dist):
 
     def parseChildren(self, params, parseChild):
         dist, paramsLeft = parseChild(self.dist, params)
-        return MappedInputDist(self.inputTransform, dist, tag = self.tag), paramsLeft
+        overallDistNew = MappedInputDist(self.inputTransform, dist,
+                                         tag = self.tag)
+        return overallDistNew, paramsLeft
 
-# (FIXME : merge MappedOutputDist with TransformedOutputDist? (Also merge some of the corresponding Accs?))
+# (FIXME : merge MappedOutputDist with TransformedOutputDist?
+#   (Also merge some of the corresponding Accs?))
 @codeDeps(Dist, MappedOutputAcc, SynthMethod)
 class MappedOutputDist(Dist):
     """Dist where output is mapped using a fixed transform."""
@@ -2295,19 +2480,21 @@ class MappedOutputDist(Dist):
         return MappedOutputDist(self.outputTransform, dist, tag = self.tag)
 
     def logProb(self, input, output):
-        return self.dist.logProb(input, self.outputTransform(input, output)) + self.outputTransform.logJac(input, output)
+        return (self.dist.logProb(input, self.outputTransform(input, output)) +
+                self.outputTransform.logJac(input, output))
 
     def logProbDerivInput(self, input, output):
         outputT = self.outputTransform(input, output)
-        return np.dot(
-            self.outputTransform.derivInput(input, output),
-            self.dist.logProbDerivOutput(input, outputT)
-        ) + self.dist.logProbDerivInput(input, outputT) + self.outputTransform.logJacDerivInput(input, output)
+        return (np.dot(self.outputTransform.derivInput(input, output),
+                       self.dist.logProbDerivOutput(input, outputT)) +
+                self.dist.logProbDerivInput(input, outputT) +
+                self.outputTransform.logJacDerivInput(input, output))
 
     def logProbDerivOutput(self, input, output):
         return np.dot(
             self.outputTransform.deriv(input, output),
-            self.dist.logProbDerivOutput(input, self.outputTransform(input, output))
+            self.dist.logProbDerivOutput(input,
+                                         self.outputTransform(input, output))
         ) + self.outputTransform.logJacDeriv(input, output)
 
     def createAcc(self, createAccChild):
@@ -2316,7 +2503,12 @@ class MappedOutputDist(Dist):
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
         return self.outputTransform.inv(input,
-            self.dist.synth(input, method, None if actualOutput is None else self.outputTransform(input, actualOutput))
+            self.dist.synth(
+                input,
+                method,
+                (None if actualOutput is None
+                 else self.outputTransform(input, actualOutput))
+            )
         )
 
     def paramsSingle(self):
@@ -2327,7 +2519,9 @@ class MappedOutputDist(Dist):
 
     def parseChildren(self, params, parseChild):
         dist, paramsLeft = parseChild(self.dist, params)
-        return MappedOutputDist(self.outputTransform, dist, tag = self.tag), paramsLeft
+        overallDistNew = MappedOutputDist(self.outputTransform, dist,
+                                          tag = self.tag)
+        return overallDistNew, paramsLeft
 
 @codeDeps(Dist, SynthMethod, TransformedInputAccG,
     TransformedInputLearnDistAccEM, TransformedInputLearnTransformAccEM
@@ -2365,18 +2559,23 @@ class TransformedInputDist(Dist):
     def createAcc(self, createAccChild, estTransform = False):
         if estTransform:
             inputTransformAcc = createAccChild(self.inputTransform)
-            return TransformedInputLearnTransformAccEM(inputTransformAcc, self.dist, tag = self.tag)
+            return TransformedInputLearnTransformAccEM(inputTransformAcc,
+                                                       self.dist,
+                                                       tag = self.tag)
         else:
             acc = createAccChild(self.dist)
-            return TransformedInputLearnDistAccEM(self.inputTransform, acc, tag = self.tag)
+            return TransformedInputLearnDistAccEM(self.inputTransform, acc,
+                                                  tag = self.tag)
 
     def createAccG(self, createAccChild):
         inputTransformAcc = createAccChild(self.inputTransform)
         acc = createAccChild(self.dist)
-        return TransformedInputAccG((inputTransformAcc, self.inputTransform), (acc, self.dist), tag = self.tag)
+        return TransformedInputAccG((inputTransformAcc, self.inputTransform),
+                                    (acc, self.dist), tag = self.tag)
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
-        return self.dist.synth(self.inputTransform(input), method, actualOutput)
+        return self.dist.synth(self.inputTransform(input), method,
+                               actualOutput)
 
     def paramsSingle(self):
         return []
@@ -2387,7 +2586,9 @@ class TransformedInputDist(Dist):
     def parseChildren(self, params, parseChild):
         inputTransform, paramsLeft = parseChild(self.inputTransform, params)
         dist, paramsLeft = parseChild(self.dist, paramsLeft)
-        return TransformedInputDist(inputTransform, dist, tag = self.tag), paramsLeft
+        overallDistNew = TransformedInputDist(inputTransform, dist,
+                                              tag = self.tag)
+        return overallDistNew, paramsLeft
 
 @codeDeps(Dist, SynthMethod, TransformedOutputAccG,
     TransformedOutputLearnDistAccEM, TransformedOutputLearnTransformAccEM
@@ -2411,37 +2612,53 @@ class TransformedOutputDist(Dist):
         return TransformedOutputDist(outputTransform, dist, tag = self.tag)
 
     def logProb(self, input, output):
-        return self.dist.logProb(input, self.outputTransform(input, output)) + self.outputTransform.logJac(input, output)
+        return (
+            self.dist.logProb(input, self.outputTransform(input, output)) +
+            self.outputTransform.logJac(input, output)
+        )
 
     def logProbDerivInput(self, input, output):
         outputT = self.outputTransform(input, output)
-        return np.dot(
-            self.outputTransform.derivInput(input, output),
-            self.dist.logProbDerivOutput(input, outputT)
-        ) + self.dist.logProbDerivInput(input, outputT) + self.outputTransform.logJacDerivInput(input, output)
+        return (np.dot(self.outputTransform.derivInput(input, output),
+                       self.dist.logProbDerivOutput(input, outputT)) +
+                self.dist.logProbDerivInput(input, outputT) +
+                self.outputTransform.logJacDerivInput(input, output))
 
     def logProbDerivOutput(self, input, output):
         return np.dot(
             self.outputTransform.deriv(input, output),
-            self.dist.logProbDerivOutput(input, self.outputTransform(input, output))
+            self.dist.logProbDerivOutput(input,
+                                         self.outputTransform(input, output))
         ) + self.outputTransform.logJacDeriv(input, output)
 
     def createAcc(self, createAccChild, estTransform = False):
         if estTransform:
             outputTransformAcc = createAccChild(self.outputTransform)
-            return TransformedOutputLearnTransformAccEM(outputTransformAcc, self.dist, tag = self.tag)
+            return TransformedOutputLearnTransformAccEM(outputTransformAcc,
+                                                        self.dist,
+                                                        tag = self.tag)
         else:
             acc = createAccChild(self.dist)
-            return TransformedOutputLearnDistAccEM(self.outputTransform, acc, tag = self.tag)
+            return TransformedOutputLearnDistAccEM(self.outputTransform, acc,
+                                                   tag = self.tag)
 
     def createAccG(self, createAccChild):
         outputTransformAcc = createAccChild(self.outputTransform)
         acc = createAccChild(self.dist)
-        return TransformedOutputAccG((outputTransformAcc, self.outputTransform), (acc, self.dist), tag = self.tag)
+        return TransformedOutputAccG(
+            (outputTransformAcc, self.outputTransform),
+            (acc, self.dist),
+            tag = self.tag
+        )
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
         return self.outputTransform.inv(input,
-            self.dist.synth(input, method, None if actualOutput is None else self.outputTransform(input, actualOutput))
+            self.dist.synth(
+                input,
+                method,
+                (None if actualOutput is None
+                 else self.outputTransform(input, actualOutput))
+            )
         )
 
     def paramsSingle(self):
@@ -2594,13 +2811,17 @@ class AutoregressiveSequenceDist(Dist):
         return [self.dist]
 
     def mapChildren(self, mapChild):
-        return AutoregressiveSequenceDist(self.depth, self.seqFor, self.fillFrames, mapChild(self.dist), tag = self.tag)
+        return AutoregressiveSequenceDist(self.depth, self.seqFor,
+                                          self.fillFrames, mapChild(self.dist),
+                                          tag = self.tag)
 
     def logProb(self, (uttId, input), outSeq):
         inSeq = self.seqFor(input)
         lp = 0.0
         assert len(inSeq) == len(outSeq)
-        for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq, fillFrames = self.fillFrames)):
+        contextedOutSeq = contextualizeIter(self.depth, outSeq,
+                                            fillFrames = self.fillFrames)
+        for inFrame, (outContext, outFrame) in izip(inSeq, contextedOutSeq):
             lp += self.dist.logProb((inFrame, outContext), outFrame)
         return lp
 
@@ -2615,25 +2836,37 @@ class AutoregressiveSequenceDist(Dist):
     def sum(self, (uttId, input), outSeq, computeValue):
         inSeq = self.seqFor(input)
         assert len(inSeq) == len(outSeq)
+        contextedOutSeq = contextualizeIter(self.depth, outSeq,
+                                            fillFrames = self.fillFrames)
         return sum([
             computeValue(self.dist, (inFrame, outContext), outFrame)
-            for inFrame, (outContext, outFrame) in izip(inSeq, contextualizeIter(self.depth, outSeq, fillFrames = self.fillFrames))
+            for inFrame, (outContext, outFrame) in izip(inSeq, contextedOutSeq)
         ])
 
     def createAcc(self, createAccChild):
-        return AutoregressiveSequenceAcc(self.depth, self.seqFor, self.fillFrames, createAccChild(self.dist), tag = self.tag)
+        return AutoregressiveSequenceAcc(self.depth, self.seqFor,
+                                         self.fillFrames,
+                                         createAccChild(self.dist),
+                                         tag = self.tag)
 
-    def synth(self, (uttId, input), method = SynthMethod.Sample, actualOutput = None):
-        return list(self.synthIterator((uttId, input), method = method, actualOutput = actualOutput))
+    def synth(self, (uttId, input), method = SynthMethod.Sample,
+              actualOutput = None):
+        return list(self.synthIterator((uttId, input), method = method,
+                                       actualOutput = actualOutput))
 
-    def synthIterator(self, (uttId, input), method = SynthMethod.Sample, actualOutput = None):
+    def synthIterator(self, (uttId, input), method = SynthMethod.Sample,
+                      actualOutput = None):
         inSeq = self.seqFor(input)
         actualOutSeq = actualOutput
         outContext = deque(self.fillFrames)
         if actualOutSeq is not None:
             assert len(actualOutSeq) == len(inSeq)
         for frameIndex, inFrame in enumerate(inSeq):
-            outFrame = self.dist.synth((inFrame, list(outContext)), method, None if actualOutSeq is None else actualOutSeq[frameIndex])
+            outFrame = self.dist.synth(
+                (inFrame, list(outContext)),
+                method,
+                None if actualOutSeq is None else actualOutSeq[frameIndex]
+            )
 
             yield outFrame
 
@@ -2649,7 +2882,10 @@ class AutoregressiveSequenceDist(Dist):
 
     def parseChildren(self, params, parseChild):
         dist, paramsLeft = parseChild(self.dist, params)
-        return AutoregressiveSequenceDist(self.depth, self.seqFor, self.fillFrames, dist, tag = self.tag), paramsLeft
+        overallDistNew = AutoregressiveSequenceDist(self.depth, self.seqFor,
+                                                    self.fillFrames, dist,
+                                                    tag = self.tag)
+        return overallDistNew, paramsLeft
 
 @codeDeps(wnet.FlatMappedNet, wnet.SequenceNet, wnet.probLeftToRightNet)
 class SimpleLeftToRightNetFor(object):
@@ -2661,7 +2897,9 @@ class SimpleLeftToRightNetFor(object):
         net = wnet.FlatMappedNet(
             lambda label: wnet.probLeftToRightNet(
                 [ (label, subLabel) for subLabel in self.subLabels ],
-                [ [ ((label, subLabel), adv) for adv in [0, 1] ] for subLabel in self.subLabels ]
+                [ [ ((label, subLabel), adv)
+                    for adv in [0, 1] ]
+                  for subLabel in self.subLabels ]
             ),
             wnet.SequenceNet(labelSeq, None)
         )
@@ -2721,7 +2959,8 @@ class AutoregressiveNetDist(Dist):
     phonetic output 0 and one with phonetic output 1, and both with the given
     phonetic context.
     """
-    def __init__(self, depth, netFor, fillFrames, durDist, acDist, pruneSpec, tag = None):
+    def __init__(self, depth, netFor, fillFrames, durDist, acDist, pruneSpec,
+                 tag = None):
         self.depth = depth
         self.netFor = netFor
         self.fillFrames = fillFrames
@@ -2745,12 +2984,22 @@ class AutoregressiveNetDist(Dist):
         return [self.durDist, self.acDist]
 
     def mapChildren(self, mapChild):
-        return AutoregressiveNetDist(self.depth, self.netFor, self.fillFrames, mapChild(self.durDist), mapChild(self.acDist), self.pruneSpec, tag = self.tag)
+        return AutoregressiveNetDist(self.depth, self.netFor, self.fillFrames,
+                                     mapChild(self.durDist),
+                                     mapChild(self.acDist),
+                                     self.pruneSpec,
+                                     tag = self.tag)
 
     def getNet(self, input):
         net0 = self.netFor(input)
-        net1 = wnet.MappedLabelNet(lambda (phInput, phOutput): (False, phInput, phOutput), net0)
-        net2 = wnet.FlatMappedNet(lambda phInput: wnet.TrivialNet((True, phInput)), net1)
+        net1 = wnet.MappedLabelNet(
+            lambda (phInput, phOutput): (False, phInput, phOutput),
+            net0
+        )
+        net2 = wnet.FlatMappedNet(
+            lambda phInput: wnet.TrivialNet((True, phInput)),
+            net1
+        )
         def deltaTime(label):
             return 0 if label is None or not label[0] else 1
         net = wnet.concretizeNetTopSort(net2, deltaTime)
@@ -2758,7 +3007,8 @@ class AutoregressiveNetDist(Dist):
 
     def getTimedNet(self, input, outSeq, preComputeLabelToWeight = False):
         net, deltaTime = self.getNet(input)
-        timedNet = wnet.UnrolledNet(net, startTime = 0, endTime = len(outSeq), deltaTime = deltaTime)
+        timedNet = wnet.UnrolledNet(net, startTime = 0, endTime = len(outSeq),
+                                    deltaTime = deltaTime)
         labelToWeight = self.getLabelToWeight(outSeq)
 
         if preComputeLabelToWeight:
@@ -2769,7 +3019,8 @@ class AutoregressiveNetDist(Dist):
                 for label, nextNode in net.next(node, forwards = True):
                     delta = deltaTime(label)
                     assert delta == 0 or delta == 1
-                    for labelStartTime, labelEndTime in (times0 if delta == 0 else times1):
+                    times0or1 = times0 if delta == 0 else times1
+                    for labelStartTime, labelEndTime in times0or1:
                         labelToWeight((label, labelStartTime, labelEndTime))
 
         return timedNet, labelToWeight
@@ -2781,7 +3032,10 @@ class AutoregressiveNetDist(Dist):
             if label is None:
                 return 0.0
             else:
-                acInput = outSeqFilled[max(labelStartTime - self.depth + numFilled, 0):(labelStartTime + numFilled)]
+                acInput = outSeqFilled[
+                    max(labelStartTime - self.depth + numFilled, 0):
+                    (labelStartTime + numFilled)
+                ]
                 if not label[0]:
                     _, phInput, phOutput = label
                     return self.durDist.logProb((phInput, acInput), phOutput)
@@ -2798,13 +3052,18 @@ class AutoregressiveNetDist(Dist):
         def pruneTrigger(nodePrevPop, nodeCurrPop):
             # compare times
             return (nodePrevPop[0] != nodeCurrPop[0])
-        pruneThresh = None if self.pruneSpec is None else self.pruneSpec.betaThresh
-        agenda = wnet.PriorityQueueSumAgenda(self.ring, forwards, negMap = negMap, pruneThresh = pruneThresh, pruneTrigger = pruneTrigger)
+        pruneThresh = (None if self.pruneSpec is None
+                       else self.pruneSpec.betaThresh)
+        agenda = wnet.PriorityQueueSumAgenda(self.ring, forwards,
+                                             negMap = negMap,
+                                             pruneThresh = pruneThresh,
+                                             pruneTrigger = pruneTrigger)
         return agenda
 
     def logProb(self, (uttId, input), outSeq):
         timedNet, labelToWeight = self.getTimedNet(input, outSeq)
-        totalLogProb = wnet.sum(timedNet, labelToWeight = labelToWeight, ring = self.ring, getAgenda = self.getAgenda)
+        totalLogProb = wnet.sum(timedNet, labelToWeight = labelToWeight,
+                                ring = self.ring, getAgenda = self.getAgenda)
         return totalLogProb
 
     def logProbDerivOutput(self, (uttId, input), outSeq):
@@ -2816,11 +3075,20 @@ class AutoregressiveNetDist(Dist):
         notyetimplemented
 
     def createAcc(self, createAccChild, verbosity = 0):
-        return AutoregressiveNetAcc(distPrev = self, durAcc = createAccChild(self.durDist), acAcc = createAccChild(self.acDist), verbosity = verbosity, tag = self.tag)
+        return AutoregressiveNetAcc(
+            distPrev = self,
+            durAcc = createAccChild(self.durDist),
+            acAcc = createAccChild(self.acDist),
+            verbosity = verbosity,
+            tag = self.tag
+        )
 
-    def synth(self, (uttId, input), method = SynthMethod.Sample, actualOutput = None, maxLength = None):
-        # (FIXME : align actualOutSeq and pass down to frames below? (What exactly do I mean?))
-        # (FIXME : can we do anything simple and reasonable with durations for meanish case?)
+    def synth(self, (uttId, input), method = SynthMethod.Sample,
+              actualOutput = None, maxLength = None):
+        # (FIXME : align actualOutSeq and pass down to frames below? (What
+        #   exactly do I mean?))
+        # (FIXME : can we do anything simple and reasonable with durations for
+        #   meanish case?)
         forwards = True
         net = self.netFor(input)
         actualOutSeq = actualOutput
@@ -2839,7 +3107,8 @@ class AutoregressiveNetDist(Dist):
                     nodedProbs.append((nextNode, 1.0))
                 else:
                     phInput, phOutput = label
-                    logProb = self.durDist.logProb((phInput, list(acInput)), phOutput)
+                    logProb = self.durDist.logProb((phInput, list(acInput)),
+                                                   phOutput)
                     nodedProbs.append((nextNode, math.exp(logProb)))
             node = sampleDiscrete(nodedProbs)
             elem = net.elem(node)
@@ -2851,7 +3120,10 @@ class AutoregressiveNetDist(Dist):
                 if len(acInput) > self.depth:
                     acInput.popleft()
             if maxLength is not None and len(outSeq) > maxLength:
-                raise SynthSeqTooLongError('maximum length '+str(maxLength)+' exceeded during synth from AutoregressiveNetDist')
+                raise SynthSeqTooLongError(
+                    'maximum length %s exceeded during synth from'
+                    ' AutoregressiveNetDist' % maxLength
+                )
 
         return outSeq
 
@@ -2865,7 +3137,11 @@ class AutoregressiveNetDist(Dist):
         paramsLeft = params
         durDist, paramsLeft = parseChild(self.durDist, paramsLeft)
         acDist, paramsLeft = parseChild(self.acDist, paramsLeft)
-        return AutoregressiveNetDist(self.depth, self.netFor, self.fillFrames, durDist, acDist, self.pruneSpec, tag = self.tag), paramsLeft
+        distNew = AutoregressiveNetDist(self.depth, self.netFor,
+                                        self.fillFrames,
+                                        durDist, acDist,
+                                        self.pruneSpec, tag = self.tag)
+        return distNew, paramsLeft
 
 @codeDeps(LinearGaussianAcc, accNodeList)
 class FloorSetter(object):
@@ -2933,14 +3209,14 @@ def reportFloored(distRoot, rootTag):
     taggedDistTypes = [('LG', LinearGaussian),
                        ('CC', ConstantClassifier),
                        ('BLC', BinaryLogisticClassifier)]
-    numFlooreds = [ np.array([0, 0]) for distTypeIndex, (distTypeTag, distType)
+    numFlooreds = [ np.array([0, 0]) for dtIndex, (dtTag, dt)
                                      in enumerate(taggedDistTypes) ]
     for dist in dists:
-        for distTypeIndex, (distTypeTag, distType) in enumerate(taggedDistTypes):
-            if isinstance(dist, distType):
-                numFlooreds[distTypeIndex] += dist.flooredSingle()
-    parts = [ '%s: %s of %s' % (distTypeTag, numFloored, numTot)
-              for (distTypeTag, distType), (numFloored, numTot)
+        for dtIndex, (dtTag, dt) in enumerate(taggedDistTypes):
+            if isinstance(dist, dt):
+                numFlooreds[dtIndex] += dist.flooredSingle()
+    parts = [ '%s: %s of %s' % (dtTag, numFloored, numTot)
+              for (dtTag, dt), (numFloored, numTot)
               in zip(taggedDistTypes, numFlooreds)
               if numTot > 0 ]
     summary = ', '.join(parts)
