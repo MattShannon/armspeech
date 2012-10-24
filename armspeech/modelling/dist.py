@@ -500,8 +500,8 @@ class FixedValueAcc(TermAcc):
                                ' FixedValueAcc' % (output, self.value))
         self.occ += occ
 
-    # N.B. assumes self and acc have same fixed value (not checked)
     def addAccSingle(self, acc):
+        assert self.value == acc.value
         self.occ += acc.occ
 
     def logLikeSingle(self):
