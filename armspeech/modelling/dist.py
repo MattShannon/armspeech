@@ -436,7 +436,17 @@ class TermAcc(Acc):
     def estimateSingleAux(self):
         abstract
     def estimateAux(self, estimateChild):
-        return self.estimateSingleAux()
+        try:
+            return self.estimateSingleAux()
+        except EstimationError, detail:
+            if not hasattr(self, 'distPrev') or self.distPrev is None:
+                raise
+            else:
+                logging.warning('reverting to previous dist due to error'
+                                ' during %s estimation: %s' %
+                                (self.distPrev.__class__.__name__, detail))
+                distNew = self.distPrev.mapChildren(None)
+                return distNew, (self.logLikeSingle(), Rat.Exact)
 
 @codeDeps(AccG)
 class DerivTermAccG(AccG):
@@ -568,32 +578,23 @@ class LinearGaussianAcc(TermAcc):
         return self.auxDerivParams(self.distPrev.coeff, self.distPrev.variance)[0]
 
     def estimateSingleAux(self):
+        if self.occ == 0.0:
+            raise EstimationError('require occ > 0')
         try:
-            if self.occ == 0.0:
-                raise EstimationError('require occ > 0')
-            try:
-                sumOuterInv = mla.pinv(self.sumOuter)
-            except la.LinAlgError, detail:
-                raise EstimationError('could not compute pseudo-inverse: '+str(detail))
-            coeff = np.dot(sumOuterInv, self.sumTarget)
-            variance = (self.sumSqr - np.dot(coeff, self.sumTarget)) / self.occ
+            sumOuterInv = mla.pinv(self.sumOuter)
+        except la.LinAlgError, detail:
+            raise EstimationError('could not compute pseudo-inverse: %s'+str(detail))
+        coeff = np.dot(sumOuterInv, self.sumTarget)
+        variance = (self.sumSqr - np.dot(coeff, self.sumTarget)) / self.occ
 
-            if variance < self.varianceFloor:
-                variance = self.varianceFloor
+        if variance < self.varianceFloor:
+            variance = self.varianceFloor
 
-            if variance <= 0.0:
-                raise EstimationError('computed variance is zero or negative: '+str(variance))
-            elif variance < 1e-10:
-                raise EstimationError('computed variance too miniscule (variances this small can lead to substantial loss of precision during accumulation): '+str(variance))
-            return LinearGaussian(coeff, variance, self.varianceFloor, tag = self.tag), self.auxFn(coeff, variance)
-        except EstimationError, detail:
-            if self.distPrev is None:
-                raise
-            else:
-                logging.warning('reverting to previous dist due to error during LinearGaussian estimation: '+str(detail))
-                coeff = self.distPrev.coeff
-                variance = self.distPrev.variance
-                return LinearGaussian(coeff, variance, self.varianceFloor, tag = self.tag), self.auxFn(coeff, variance)
+        if variance <= 0.0:
+            raise EstimationError('computed variance is zero or negative: '+str(variance))
+        elif variance < 1e-10:
+            raise EstimationError('computed variance too miniscule (variances this small can lead to substantial loss of precision during accumulation): '+str(variance))
+        return LinearGaussian(coeff, variance, self.varianceFloor, tag = self.tag), self.auxFn(coeff, variance)
 
 @codeDeps(ForwardRef(lambda: ConstantClassifier), EstimationError, Rat, TermAcc,
     assert_allclose
@@ -638,38 +639,30 @@ class ConstantClassifierAcc(TermAcc):
         return self.auxDerivParams(self.distPrev.probs)[0]
 
     def estimateSingleAux(self):
-        try:
-            if self.occ == 0.0:
-                raise EstimationError('require occ > 0')
-            probs = self.occs / self.occ
+        if self.occ == 0.0:
+            raise EstimationError('require occ > 0')
+        probs = self.occs / self.occ
 
-            # find the probs which maximize the auxiliary function, subject to
-            #   the given flooring constraints
-            # FIXME : think more about maths of flooring procedure below. It
-            #   is guaranteed to terminate, but think there are cases (for more
-            #   than 2 classes) where it doesn't find the constrained ML
-            #   optimum.
-            floored = (probs < self.probFloors)
-            done = False
-            while not done:
-                probsBelow = self.probFloors * floored
-                probsAbove = probs * (-floored)
-                probsAbove = probsAbove / sum(probsAbove) * (1.0 - sum(probsBelow))
-                flooredOld = floored
-                floored = floored + (probsAbove < self.probFloors)
-                done = all(flooredOld == floored)
-            probs = probsBelow + probsAbove
-            assert_allclose(sum(probs), 1.0)
-            assert all(probs >= self.probFloors)
+        # find the probs which maximize the auxiliary function, subject to
+        #   the given flooring constraints
+        # FIXME : think more about maths of flooring procedure below. It
+        #   is guaranteed to terminate, but think there are cases (for more
+        #   than 2 classes) where it doesn't find the constrained ML
+        #   optimum.
+        floored = (probs < self.probFloors)
+        done = False
+        while not done:
+            probsBelow = self.probFloors * floored
+            probsAbove = probs * (-floored)
+            probsAbove = probsAbove / sum(probsAbove) * (1.0 - sum(probsBelow))
+            flooredOld = floored
+            floored = floored + (probsAbove < self.probFloors)
+            done = all(flooredOld == floored)
+        probs = probsBelow + probsAbove
+        assert_allclose(sum(probs), 1.0)
+        assert all(probs >= self.probFloors)
 
-            return ConstantClassifier(probs, self.probFloors, tag = self.tag), self.auxFn(probs)
-        except EstimationError, detail:
-            if self.distPrev is None:
-                raise
-            else:
-                logging.warning('reverting to previous dist due to error during ConstantClassifier estimation: '+str(detail))
-                probs = self.distPrev.probs
-                return ConstantClassifier(probs, self.probFloors, tag = self.tag), self.auxFn(probs)
+        return ConstantClassifier(probs, self.probFloors, tag = self.tag), self.auxFn(probs)
 
 @codeDeps(ForwardRef(lambda: BinaryLogisticClassifier), EstimationError, Rat,
     TermAcc, mla.pinv
@@ -729,27 +722,22 @@ class BinaryLogisticClassifierAcc(TermAcc):
     #   a different problem -- shouldn't have to use any regularization to get
     #   the nice non-linearly-separable case to work!).)
     def estimateSingleAux(self):
+        if self.occ == 0.0:
+            raise EstimationError('require occ > 0')
         try:
-            if self.occ == 0.0:
-                raise EstimationError('require occ > 0')
-            try:
-                sumOuterInv = mla.pinv(self.sumOuter)
-            except la.LinAlgError, detail:
-                raise EstimationError('could not compute pseudo-inverse: '+str(detail))
-            coeffDelta = -np.dot(sumOuterInv, self.sumTarget)
+            sumOuterInv = mla.pinv(self.sumOuter)
+        except la.LinAlgError, detail:
+            raise EstimationError('could not compute pseudo-inverse: '+str(detail))
+        coeffDelta = -np.dot(sumOuterInv, self.sumTarget)
 
-            # approximate constrained maximum likelihood
-            step = 0.7
-            while any(np.abs(self.distPrev.coeff + coeffDelta * step) > self.distPrev.coeffFloor):
-                step *= 0.5
-            coeff = self.distPrev.coeff + coeffDelta * step
-            assert all(np.abs(coeff) <= self.distPrev.coeffFloor)
+        # approximate constrained maximum likelihood
+        step = 0.7
+        while any(np.abs(self.distPrev.coeff + coeffDelta * step) > self.distPrev.coeffFloor):
+            step *= 0.5
+        coeff = self.distPrev.coeff + coeffDelta * step
+        assert all(np.abs(coeff) <= self.distPrev.coeffFloor)
 
-            return BinaryLogisticClassifier(coeff, self.distPrev.coeffFloor, tag = self.tag), self.auxFn(coeff)
-        except EstimationError, detail:
-            logging.warning('reverting to previous dist due to error during BinaryLogisticClassifier estimation: '+str(detail))
-            coeff = self.distPrev.coeff
-            return BinaryLogisticClassifier(coeff, self.distPrev.coeffFloor, tag = self.tag), self.auxFn(coeff)
+        return BinaryLogisticClassifier(coeff, self.distPrev.coeffFloor, tag = self.tag), self.auxFn(coeff)
 
 @codeDeps(Acc, ForwardRef(lambda: MixtureDist), Rat, assert_allclose, logSum)
 class MixtureAcc(Acc):
