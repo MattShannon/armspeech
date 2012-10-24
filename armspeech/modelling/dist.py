@@ -611,12 +611,12 @@ class LinearGaussianAcc(TermAcc):
             variance = self.varianceFloor
 
         if variance <= 0.0:
-            raise EstimationError('computed variance is zero or negative: %s' %
+            raise EstimationError('computed variance is zero or negative: %r' %
                                   variance)
         elif variance < 1e-10:
             raise EstimationError('computed variance too miniscule (variances'
                                   ' this small can lead to substantial loss of'
-                                  ' precision during accumulation): %s' %
+                                  ' precision during accumulation): %r' %
                                   variance)
         distNew = LinearGaussian(coeff, variance, self.varianceFloor,
                                  tag = self.tag)
@@ -1712,7 +1712,7 @@ class LinearGaussian(TermDist):
         if self.variance < 1e-10:
             raise RuntimeError('LinearGaussian variance too miniscule'
                                ' (variances this small can lead to substantial'
-                               ' loss of precision during accumulation): %s' %
+                               ' loss of precision during accumulation): %r' %
                                self.variance)
 
     def __repr__(self):
@@ -1759,7 +1759,7 @@ class LinearGaussian(TermDist):
         coeff = params[:n]
         variance = math.exp(-params[n])
         if variance < self.varianceFloor:
-            raise InvalidParamsError('variance = %s < varianceFloor = %s'
+            raise InvalidParamsError('variance = %r < varianceFloor = %r'
                                      ' during LinearGaussian parsing' %
                                      (variance, self.varianceFloor))
         distNew = LinearGaussian(coeff, variance, self.varianceFloor,
@@ -1774,9 +1774,9 @@ class LinearGaussian(TermDist):
 class StudentDist(TermDist):
     def __init__(self, df, precision, tag = None):
         if df <= 0.0:
-            raise ValueError('df = %s but should be > 0.0' % df)
+            raise ValueError('df = %r but should be > 0.0' % df)
         if precision <= 0.0:
-            raise ValueError('precision = %s but should be > 0.0' % precision)
+            raise ValueError('precision = %r but should be > 0.0' % precision)
         self.df = df
         self.precision = precision
         self.tag = tag
@@ -1902,14 +1902,14 @@ class ConstantClassifier(TermDist):
         n = len(self.probs) - 1
         p = params[:n]
         if not np.all(np.isfinite(p)):
-            raise InvalidParamsError('params %s not all finite during'
+            raise InvalidParamsError('params %r not all finite during'
                                      ' ConstantClassifier parsing' % p)
         sumZeroLogProbs = np.append(p, -sum(p))
         assert_allclose(sum(sumZeroLogProbs), 0.0)
         probs = np.exp(sumZeroLogProbs)
         probs = probs / sum(probs)
         if not all(probs >= self.probFloors):
-            raise InvalidParamsError('probs = %s not all >= probFloors = %s'
+            raise InvalidParamsError('probs = %r not all >= probFloors = %r'
                                      ' during ConstantClassifier parsing' %
                                      (probs, self.probFloors))
         distNew = ConstantClassifier(probs, self.probFloors, tag = self.tag)
@@ -1985,8 +1985,8 @@ class BinaryLogisticClassifier(TermDist):
         n = len(self.coeff)
         coeff = params[:n]
         if not all(np.abs(coeff) <= self.coeffFloor):
-            raise InvalidParamsError('abs(coeff = %s) not all <= coeffFloor'
-                                     ' = %s during BinaryLogisticClassifier'
+            raise InvalidParamsError('abs(coeff = %r) not all <= coeffFloor'
+                                     ' = %r during BinaryLogisticClassifier'
                                      ' parsing' % (coeff, self.coeffFloor))
         distNew = BinaryLogisticClassifier(coeff, self.coeffFloor,
                                            tag = self.tag)
@@ -3109,7 +3109,7 @@ class AutoregressiveNetDist(Dist):
                     acInput.popleft()
             if maxLength is not None and len(outSeq) > maxLength:
                 raise SynthSeqTooLongError(
-                    'maximum length %s exceeded during synth from'
+                    'maximum length %r exceeded during synth from'
                     ' AutoregressiveNetDist' % maxLength
                 )
 
@@ -3231,7 +3231,7 @@ def estimateInitialMixtureOfTwoExperts(acc):
     mu = acc.sumOuter[-1, :-1] / occRecompute
     if abs(occRecompute - acc.occ) > 1e-10:
         raise RuntimeError('looks like last component of input vector is not'
-                           ' bias (%s vs %s)' % (occRecompute, acc.occ))
+                           ' bias (%r vs %r)' % (occRecompute, acc.occ))
     # FIXME : completely different behaviour for depth 0 case!
     #   Can we unify (or improve depth > 0 case with something HTK-like)?
     # FIXME : what about len(acc.sumOuter) == 0 case?
