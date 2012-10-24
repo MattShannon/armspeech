@@ -434,7 +434,7 @@ class AccG(AccCommon):
 class Acc(AccEM, AccG):
     pass
 
-@codeDeps(Acc)
+@codeDeps(Acc, EstimationError, Rat)
 class TermAcc(Acc):
     """Acc with no children."""
     def children(self):
