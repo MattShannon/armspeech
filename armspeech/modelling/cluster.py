@@ -9,119 +9,234 @@
 import dist as d
 from armspeech.util.mathhelp import assert_allclose
 from armspeech.util.timing import timed
-from codedep import codeDeps, ForwardRef
+from codedep import codeDeps
 
 import logging
 import math
 from collections import defaultdict
 
-@codeDeps(d.Rat, d.addAcc, d.getDefaultEstimateTotAux, d.getDefaultParamSpec,
-    ForwardRef(lambda: decisionTreeSubCluster)
+@codeDeps()
+class ProtoLeaf(object):
+    def __init__(self, dist, aux, auxRat, count):
+        self.dist = dist
+        self.aux = aux
+        self.auxRat = auxRat
+        self.count = count
+
+    def score(self):
+        """Returns a score for this proto-leaf.
+
+        A score is an abstract quantity that is only used when choosing which
+        question to use for a potential split and whether to split at all.
+        """
+        return self.aux
+
+@codeDeps()
+class SplitInfo(object):
+    """Collected information for a (potential or actual) split."""
+    def __init__(self, fullQuestion, protoYes, protoNo):
+        self.fullQuestion = fullQuestion
+        self.protoYes = protoYes
+        self.protoNo = protoNo
+
+    def score(self):
+        """Returns a score for this split.
+
+        A score is an abstract quantity that is only used when choosing which
+        question to use for a potential split and whether to split at all.
+        """
+        return self.protoYes.score() + self.protoNo.score()
+
+@codeDeps()
+class Grower(object):
+    def allowSplit(self, protoYes, protoNo):
+        abstract
+
+    def useSplit(self, protoNoSplit, splitInfo):
+        abstract
+
+@codeDeps(ProtoLeaf, SplitInfo, assert_allclose, d.DecisionTreeLeaf,
+    d.DecisionTreeNode, d.EstimationError, d.addAcc, d.sumValuedRats, timed
 )
-def decisionTreeCluster(labelList, accForLabel, createAcc, questionGroups,
-                        thresh, minCount, maxCount = None, mdlFactor = 1.0,
-                        estimateTotAux = d.getDefaultEstimateTotAux(),
-                        paramSpec = d.getDefaultParamSpec(),
-                        verbosity = 2):
-    root = createAcc()
-    for label in labelList:
-        d.addAcc(root, accForLabel(label))
-    countRoot = root.count()
-    distRoot, (auxRoot, auxRootRat) = estimateTotAux(root)
-    if thresh is None:
-        numParamsPerLeaf = len(paramSpec.params(distRoot))
-        thresh = 0.5 * mdlFactor * numParamsPerLeaf * math.log(countRoot + 1.0)
-        if verbosity >= 1:
-            print 'cluster: setting thresh using MDL: mdlFactor =', mdlFactor, 'and numParamsPerLeaf =', numParamsPerLeaf, 'and count =', countRoot
-    if verbosity >= 1:
-        print 'cluster: decision tree clustering with thresh =', thresh, 'and minCount =', minCount, 'and maxCount =', maxCount
-    dist, aux = decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups, thresh, minCount, maxCount, [], distRoot, auxRoot, countRoot, estimateTotAux, verbosity)
-    if verbosity >= 1:
-        print 'cluster: %s leaves' % dist.countLeaves()
-        print 'cluster: aux root = %s (%s) -> aux tree = %s (%s count)' % (auxRoot / countRoot, d.Rat.toString(auxRootRat), aux / countRoot, countRoot)
-    return dist
+class DecisionTreeClusterer(object):
+    def __init__(self, accForLabel, questionGroups, createAcc, estimateTotAux,
+                 verbosity):
+        self.accForLabel = accForLabel
+        self.questionGroups = questionGroups
+        self.createAcc = createAcc
+        self.estimateTotAux = estimateTotAux
+        self.verbosity = verbosity
 
-@codeDeps(assert_allclose, d.DecisionTreeLeaf, d.DecisionTreeNode,
-    ForwardRef(lambda: decisionTreeGetBestSplit), timed
-)
-def decisionTreeSubCluster(labelList, accForLabel, createAcc, questionGroups,
-                           thresh, minCount, maxCount, isYesList, distLeaf,
-                           auxLeaf, countNode, estimateTotAux, verbosity):
-    if verbosity >= 2:
-        indent = '    '+''.join([ ('|  ' if isYes else '   ') for isYes in isYesList[:-1] ])
-        if not isYesList:
-            extra1 = ''
-            extra2 = ''
-        elif isYesList[-1]:
-            extra1 = '|->'
-            extra2 = '|  '
-        else:
-            extra1 = '\->'
-            extra2 = '   '
-        print 'cluster:'+indent+extra1+'node ( count =', countNode, ', remaining labels =', len(labelList), ')'
-        indent += extra2
+    def getAccFromLabels(self, labels):
+        accForLabel = self.accForLabel
+        accTot = self.createAcc()
+        for label in labels:
+            d.addAcc(accTot, accForLabel(label))
+        return accTot
 
-    getBestSplit = timed(decisionTreeGetBestSplit, msg = 'cluster:'+indent+'choose split took') if verbosity >= 3 else decisionTreeGetBestSplit
-    bestFullQuestion, bestAux, bestEstimatedYes, bestEstimatedNo = getBestSplit(labelList, accForLabel, createAcc, questionGroups, minCount, auxLeaf, estimateTotAux)
+    def getProto(self, acc):
+        try:
+            dist, (aux, auxRat) = self.estimateTotAux(acc)
+        except d.EstimationError:
+            return None
+        count = acc.count()
+        return ProtoLeaf(dist, aux, auxRat, count)
 
-    if bestFullQuestion is not None and (bestAux - auxLeaf > thresh or maxCount is not None and countNode > maxCount):
-        bestLabelValuer, bestQuestion = bestFullQuestion
-        if verbosity >= 2:
-            print 'cluster:'+indent+'question (', bestLabelValuer.shortRepr()+' '+bestQuestion.shortRepr(), ')', '( delta =', bestAux - auxLeaf, ')'
-        labelListYes = []
-        labelListNo = []
-        for label in labelList:
-            if bestQuestion(bestLabelValuer(label)):
-                labelListYes.append(label)
-            else:
-                labelListNo.append(label)
-        distYesLeaf, auxYesLeaf, countYes = bestEstimatedYes
-        distNoLeaf, auxNoLeaf, countNo = bestEstimatedNo
-        assert_allclose(countYes + countNo, countNode)
-        distYes, auxYes = decisionTreeSubCluster(labelListYes, accForLabel, createAcc, questionGroups, thresh, minCount, maxCount, isYesList + [True], distYesLeaf, auxYesLeaf, countYes, estimateTotAux, verbosity)
-        distNo, auxNo = decisionTreeSubCluster(labelListNo, accForLabel, createAcc, questionGroups, thresh, minCount, maxCount, isYesList + [False], distNoLeaf, auxNoLeaf, countNo, estimateTotAux, verbosity)
-        aux = auxYes + auxNo
-        return d.DecisionTreeNode(bestFullQuestion, distYes, distNo), aux
-    else:
-        if maxCount is not None and countNode > maxCount:
-            assert bestFullQuestion is None
-            logging.warning('decision tree leaf has count = %s > maxCount = %s, but no further splitting possible' % (countNode, maxCount))
-        if verbosity >= 2:
-            print 'cluster:'+indent+'leaf'
-        return d.DecisionTreeLeaf(distLeaf), auxLeaf
-
-@codeDeps(d.EstimationError, d.addAcc)
-def decisionTreeGetBestSplit(labelList, accForLabel, createAcc, questionGroups,
-                             minCount, auxLeaf, estimateTotAux):
-    bestFullQuestion = None
-    bestAux = auxLeaf
-    bestEstimatedYes = None
-    bestEstimatedNo = None
-    labelValueToAccs = [ defaultdict(createAcc) for questionGroup in questionGroups ]
-    for label in labelList:
-        acc = accForLabel(label)
-        for labelValueToAcc, (labelValuer, questions) in zip(labelValueToAccs, questionGroups):
-            d.addAcc(labelValueToAcc[labelValuer(label)], acc)
-    for labelValueToAcc, (labelValuer, questions) in zip(labelValueToAccs, questionGroups):
-        for question in questions:
-            yes = createAcc()
-            no = createAcc()
+    def getBestSplit(self, labels, grower, questionGroups):
+        def getProtosForQuestion(labelValueToAcc, question):
+            accYes = self.createAcc()
+            accNo = self.createAcc()
             for labelValue, acc in labelValueToAcc.iteritems():
                 if question(labelValue):
-                    d.addAcc(yes, acc)
+                    d.addAcc(accYes, acc)
                 else:
-                    d.addAcc(no, acc)
-            if yes.count() > minCount and no.count() > minCount:
-                try:
-                    distYesLeaf, (auxYesLeaf, auxYesLeafRat) = estimateTotAux(yes)
-                    distNoLeaf, (auxNoLeaf, auxNoLeafRat) = estimateTotAux(no)
-                except d.EstimationError:
-                    pass
+                    d.addAcc(accNo, acc)
+
+            return self.getProto(accYes), self.getProto(accNo)
+
+        accForLabel = self.accForLabel
+        labelValuers = [ labelValuer
+                         for labelValuer, questions in questionGroups ]
+        labelValueToAccs = [ defaultdict(self.createAcc)
+                             for questionGroup in questionGroups ]
+        labelValueToAccAndLabelValuers = zip(labelValueToAccs, labelValuers)
+        for label in labels:
+            acc = accForLabel(label)
+            for labelValueToAcc, labelValuer in labelValueToAccAndLabelValuers:
+                d.addAcc(labelValueToAcc[labelValuer(label)], acc)
+
+        bestSplitInfo = None
+        for labelValueToAcc, (labelValuer, questions) in zip(labelValueToAccs,
+                                                             questionGroups):
+            for question in questions:
+                protoYes, protoNo = getProtosForQuestion(labelValueToAcc,
+                                                         question)
+                if grower.allowSplit(protoYes, protoNo):
+                    fullQuestion = labelValuer, question
+                    splitInfo = SplitInfo(fullQuestion, protoYes, protoNo)
+                    if bestSplitInfo is None or (splitInfo.score() >
+                                                 bestSplitInfo.score()):
+                        bestSplitInfo = splitInfo
+        return bestSplitInfo
+
+    def clusterSub(self, labels, isYesList, protoNoSplit, grower):
+        if self.verbosity >= 2:
+            indent = '    '+''.join([ ('|  ' if isYes else '   ')
+                                      for isYes in isYesList[:-1] ])
+            if not isYesList:
+                extra1 = ''
+                extra2 = ''
+            elif isYesList[-1]:
+                extra1 = '|->'
+                extra2 = '|  '
+            else:
+                extra1 = '\->'
+                extra2 = '   '
+            print ('cluster:%s%snode ( count = %s , remaining labels = %s )' %
+                   (indent, extra1, protoNoSplit.count, len(labels)))
+            indent += extra2
+
+        if self.verbosity >= 3:
+            splitInfo = timed(
+                self.getBestSplit,
+                msg = 'cluster:%schoose split took' % indent
+            )(labels, grower, self.questionGroups)
+        else:
+            splitInfo = self.getBestSplit(labels, grower, self.questionGroups)
+
+        if grower.useSplit(protoNoSplit, splitInfo):
+            fullQuestion = splitInfo.fullQuestion
+            labelValuer, question = fullQuestion
+            if self.verbosity >= 2:
+                print ('cluster:%squestion ( %s %s ) ( delta = %s )' %
+                       (indent, labelValuer.shortRepr(), question.shortRepr(),
+                        splitInfo.score() - protoNoSplit.score()))
+            labelsYes = []
+            labelsNo = []
+            for label in labels:
+                if question(labelValuer(label)):
+                    labelsYes.append(label)
                 else:
-                    aux = auxYesLeaf + auxNoLeaf
-                    if bestFullQuestion is None or aux > bestAux:
-                        bestFullQuestion = labelValuer, question
-                        bestAux = aux
-                        bestEstimatedYes = distYesLeaf, auxYesLeaf, yes.count()
-                        bestEstimatedNo = distNoLeaf, auxNoLeaf, no.count()
-    return bestFullQuestion, bestAux, bestEstimatedYes, bestEstimatedNo
+                    labelsNo.append(label)
+            protoYes = splitInfo.protoYes
+            protoNo = splitInfo.protoNo
+            assert_allclose(protoYes.count + protoNo.count, protoNoSplit.count)
+            distYes, auxValuedRatYes = self.clusterSub(labelsYes,
+                                                       isYesList + [True],
+                                                       protoYes, grower)
+            distNo, auxValuedRatNo = self.clusterSub(labelsNo,
+                                                     isYesList + [False],
+                                                     protoNo, grower)
+            auxValuedRat = d.sumValuedRats([auxValuedRatYes, auxValuedRatNo])
+            distNew = d.DecisionTreeNode(fullQuestion, distYes, distNo)
+            return distNew, auxValuedRat
+        else:
+            if self.verbosity >= 2:
+                print 'cluster:'+indent+'leaf'
+            auxValuedRat = protoNoSplit.aux, protoNoSplit.auxRat
+            return d.DecisionTreeLeaf(protoNoSplit.dist), auxValuedRat
+
+@codeDeps(Grower)
+class SimpleGrower(Grower):
+    def __init__(self, thresh, minCount, maxCount = None):
+        self.thresh = thresh
+        self.minCount = minCount
+        self.maxCount = maxCount
+
+    def allowSplit(self, protoYes, protoNo):
+        return (protoYes is not None and
+                protoNo is not None and
+                protoYes.count > self.minCount and
+                protoNo.count > self.minCount)
+
+    def useSplit(self, protoNoSplit, splitInfo):
+        allowNoSplit = (self.maxCount is None or
+                        protoNoSplit.count <= self.maxCount)
+
+        if splitInfo is not None and (
+            not allowNoSplit or
+            splitInfo.score() - protoNoSplit.score() > self.thresh
+        ):
+            return True
+        else:
+            if not allowNoSplit:
+                assert splitInfo is None
+                logging.warning('not splitting decision tree node even though'
+                                ' count = %s > maxCount = %s, since no further'
+                                ' splitting allowed' %
+                                (protoNoSplit.count, self.maxCount))
+            return False
+
+@codeDeps(DecisionTreeClusterer, SimpleGrower, d.Rat,
+    d.getDefaultEstimateTotAuxNoRevert, d.getDefaultParamSpec
+)
+def decisionTreeCluster(labels, accForLabel, createAcc, questionGroups,
+                        thresh, minCount, maxCount = None, mdlFactor = 1.0,
+                        estimateTotAux = d.getDefaultEstimateTotAuxNoRevert(),
+                        paramSpec = d.getDefaultParamSpec(),
+                        verbosity = 2):
+    clusterer = DecisionTreeClusterer(accForLabel, questionGroups, createAcc,
+                                      estimateTotAux, verbosity)
+
+    protoRoot = clusterer.getProto(clusterer.getAccFromLabels(labels))
+    countRoot = protoRoot.count
+    if thresh is None:
+        numParamsPerLeaf = len(paramSpec.params(protoRoot.dist))
+        thresh = 0.5 * mdlFactor * numParamsPerLeaf * math.log(countRoot + 1.0)
+        if verbosity >= 1:
+            print ('cluster: setting thresh using MDL: mdlFactor = %s and'
+                   ' numParamsPerLeaf = %s and count = %s' %
+                   (mdlFactor, numParamsPerLeaf, countRoot))
+    grower = SimpleGrower(thresh, minCount, maxCount)
+    if verbosity >= 1:
+        print ('cluster: decision tree clustering with thresh = %s and'
+               ' minCount = %s and maxCount = %s' %
+               (thresh, minCount, maxCount))
+    dist, (aux, auxRat) = clusterer.clusterSub(labels, [], protoRoot, grower)
+    if verbosity >= 1:
+        print 'cluster: %s leaves' % dist.countLeaves()
+        print ('cluster: aux root = %s (%s) -> aux tree = %s (%s) (%s count)' %
+               (protoRoot.aux / countRoot, d.Rat.toString(protoRoot.auxRat),
+                aux / countRoot, d.Rat.toString(auxRat),
+                countRoot))
+    return dist
