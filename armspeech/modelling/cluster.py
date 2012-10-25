@@ -23,40 +23,43 @@ class ProtoLeaf(object):
         self.auxRat = auxRat
         self.count = count
 
-    def score(self):
-        """Returns a score for this proto-leaf.
-
-        A score is an abstract quantity that is only used when choosing which
-        question to use for a potential split and whether to split at all.
-        """
-        return self.aux
-
-@codeDeps()
+@codeDeps(assert_allclose)
 class SplitInfo(object):
     """Collected information for a (potential or actual) split."""
-    def __init__(self, fullQuestion, protoYes, protoNo):
+    def __init__(self, protoNoSplit, fullQuestion, protoYes, protoNo):
+        self.protoNoSplit = protoNoSplit
         self.fullQuestion = fullQuestion
         self.protoYes = protoYes
         self.protoNo = protoNo
 
-    def score(self):
-        """Returns a score for this split.
+        assert self.protoNoSplit is not None
+        if self.fullQuestion is None:
+            assert self.protoYes is None and self.protoNo is None
+        if self.protoYes is not None and self.protoNo is not None:
+            assert_allclose(self.protoYes.count + self.protoNo.count,
+                            self.protoNoSplit.count)
 
-        A score is an abstract quantity that is only used when choosing which
-        question to use for a potential split and whether to split at all.
+    def delta(self):
+        """Returns the delta for this split.
+
+        The delta is used to choose which question to use to split a given node
+        and to decide whether to split at all.
         """
-        return self.protoYes.score() + self.protoNo.score()
+        if self.protoYes is None or self.protoNo is None:
+            return float('-inf')
+        else:
+            return self.protoYes.aux + self.protoNo.aux - self.protoNoSplit.aux
 
 @codeDeps()
 class Grower(object):
-    def allowSplit(self, protoYes, protoNo):
+    def allowSplit(self, splitInfo):
         abstract
 
-    def useSplit(self, protoNoSplit, splitInfo):
+    def useSplit(self, splitInfo):
         abstract
 
-@codeDeps(ProtoLeaf, SplitInfo, assert_allclose, d.DecisionTreeLeaf,
-    d.DecisionTreeNode, d.EstimationError, d.addAcc, d.sumValuedRats, timed
+@codeDeps(ProtoLeaf, SplitInfo, d.DecisionTreeLeaf, d.DecisionTreeNode,
+    d.EstimationError, d.addAcc, d.sumValuedRats, timed
 )
 class DecisionTreeClusterer(object):
     def __init__(self, accForLabel, questionGroups, createAcc, estimateTotAux,
@@ -82,16 +85,14 @@ class DecisionTreeClusterer(object):
         count = acc.count()
         return ProtoLeaf(dist, aux, auxRat, count)
 
-    def findBestSplit(self, splitInfos):
-        bestSplitInfo = None
+    def findBestSplit(self, protoNoSplit, splitInfos):
+        bestSplitInfo = SplitInfo(protoNoSplit, None, None, None)
         for splitInfo in splitInfos:
-            if splitInfo is not None:
-                if bestSplitInfo is None or (splitInfo.score() >
-                                             bestSplitInfo.score()):
-                    bestSplitInfo = splitInfo
+            if splitInfo.delta() > bestSplitInfo.delta():
+                bestSplitInfo = splitInfo
         return bestSplitInfo
 
-    def getBestSplit(self, labels, grower, questionGroups):
+    def getBestSplit(self, labels, protoNoSplit, grower, questionGroups):
         def getProtosForQuestion(labelValueToAcc, question):
             accYes = self.createAcc()
             accNo = self.createAcc()
@@ -121,9 +122,14 @@ class DecisionTreeClusterer(object):
                 for question in questions:
                     protoYes, protoNo = getProtosForQuestion(labelValueToAcc,
                                                              question)
-                    if grower.allowSplit(protoYes, protoNo):
-                        fullQuestion = labelValuer, question
-                        yield SplitInfo(fullQuestion, protoYes, protoNo)
+                    fullQuestion = labelValuer, question
+                    splitInfo = SplitInfo(protoNoSplit, fullQuestion,
+                                          protoYes, protoNo)
+                    if grower.allowSplit(splitInfo):
+                        yield splitInfo
+
+        splitInfos = getSplitInfos(labelValueToAccs, questionGroups)
+        return self.findBestSplit(protoNoSplit, splitInfos)
 
     def clusterSub(self, labels, isYesList, protoNoSplit, grower):
         if self.verbosity >= 2:
@@ -146,17 +152,18 @@ class DecisionTreeClusterer(object):
             splitInfo = timed(
                 self.getBestSplit,
                 msg = 'cluster:%schoose split took' % indent
-            )(labels, grower, self.questionGroups)
+            )(labels, protoNoSplit, grower, self.questionGroups)
         else:
-            splitInfo = self.getBestSplit(labels, grower, self.questionGroups)
+            splitInfo = self.getBestSplit(labels, protoNoSplit, grower,
+                                          self.questionGroups)
 
-        if grower.useSplit(protoNoSplit, splitInfo):
+        if grower.useSplit(splitInfo):
             fullQuestion = splitInfo.fullQuestion
             labelValuer, question = fullQuestion
             if self.verbosity >= 2:
                 print ('cluster:%squestion ( %s %s ) ( delta = %s )' %
                        (indent, labelValuer.shortRepr(), question.shortRepr(),
-                        splitInfo.score() - protoNoSplit.score()))
+                        splitInfo.delta()))
             labelsYes = []
             labelsNo = []
             for label in labels:
@@ -166,7 +173,6 @@ class DecisionTreeClusterer(object):
                     labelsNo.append(label)
             protoYes = splitInfo.protoYes
             protoNo = splitInfo.protoNo
-            assert_allclose(protoYes.count + protoNo.count, protoNoSplit.count)
             distYes, auxValuedRatYes = self.clusterSub(labelsYes,
                                                        isYesList + [True],
                                                        protoYes, grower)
@@ -189,24 +195,26 @@ class SimpleGrower(Grower):
         self.minCount = minCount
         self.maxCount = maxCount
 
-    def allowSplit(self, protoYes, protoNo):
+    def allowSplit(self, splitInfo):
+        protoYes = splitInfo.protoYes
+        protoNo = splitInfo.protoNo
         return (protoYes is not None and
                 protoNo is not None and
                 protoYes.count >= self.minCount and
                 protoNo.count >= self.minCount)
 
-    def useSplit(self, protoNoSplit, splitInfo):
+    def useSplit(self, splitInfo):
+        protoNoSplit = splitInfo.protoNoSplit
         allowNoSplit = (self.maxCount is None or
                         protoNoSplit.count <= self.maxCount)
 
-        if splitInfo is not None and (
-            not allowNoSplit or
-            splitInfo.score() - protoNoSplit.score() > self.thresh
+        if splitInfo.fullQuestion is not None and (
+            not allowNoSplit or splitInfo.delta() > self.thresh
         ):
             return True
         else:
             if not allowNoSplit:
-                assert splitInfo is None
+                assert splitInfo.fullQuestion is None
                 logging.warning('not splitting decision tree node even though'
                                 ' count = %s > maxCount = %s, since no further'
                                 ' splitting allowed' %
