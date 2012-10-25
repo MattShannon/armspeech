@@ -2,8 +2,10 @@
 
 # Copyright 2011, 2012 Matt Shannon
 # The follow copyrights may apply to the list of questions:
-#     Copyright 2001-2008 Nagoya Institute of Technology, Department of Computer Science
-#     Copyright 2001-2008 Tokyo Institute of Technology, Interdisciplinary Graduate School of Science and Engineering
+#     Copyright 2001-2008 Nagoya Institute of Technology, Department of
+#                         Computer Science
+#     Copyright 2001-2008 Tokyo Institute of Technology, Interdisciplinary
+#                         Graduate School of Science and Engineering
 
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
@@ -17,17 +19,24 @@ from codedep import codeDeps
 
 @codeDeps(ques.AttrLabelValuer, ques.getSubsetQuestions)
 def getSubsetQG(labelKey, namedSubsets):
-    return (ques.AttrLabelValuer(labelKey), ques.getSubsetQuestions(namedSubsets))
+    return (ques.AttrLabelValuer(labelKey),
+            ques.getSubsetQuestions(namedSubsets))
+
 @codeDeps(ques.AttrLabelValuer, ques.getEqualityQuestions)
 def getEqualityQG(labelKey, values):
-    return (ques.AttrLabelValuer(labelKey), ques.getEqualityQuestions(values))
+    return (ques.AttrLabelValuer(labelKey),
+            ques.getEqualityQuestions(values))
+
 @codeDeps(ques.AttrLabelValuer, ques.getThreshQuestions)
 def getThreshQG(labelKey, threshes):
-    return (ques.AttrLabelValuer(labelKey), ques.getThreshQuestions(threshes))
+    return (ques.AttrLabelValuer(labelKey),
+            ques.getThreshQuestions(threshes))
+
 @codeDeps(ques.AttrLabelValuer, ques.getSubsetQuestions)
 def getSubsetQGs(labelKeys, namedSubsets):
     questions = ques.getSubsetQuestions(namedSubsets)
-    return [ (ques.AttrLabelValuer(labelKey), questions) for labelKey in labelKeys ]
+    return [ (ques.AttrLabelValuer(labelKey), questions)
+             for labelKey in labelKeys ]
 
 @codeDeps(getSubsetQGs)
 def getMonophoneQuestionGroups(phoneset):
@@ -35,18 +44,21 @@ def getMonophoneQuestionGroups(phoneset):
         ['phone'],
         phoneset.namedPhoneSubsets
     )
+
 @codeDeps(getSubsetQGs)
 def getTriphoneQuestionGroups(phoneset):
     return getSubsetQGs(
         ['l_phone', 'phone', 'r_phone'],
         phoneset.namedPhoneSubsets
     )
+
 @codeDeps(getSubsetQGs)
 def getQuinphoneQuestionGroups(phoneset):
     return getSubsetQGs(
         ['ll_phone', 'l_phone', 'phone', 'r_phone', 'rr_phone'],
         phoneset.namedPhoneSubsets
     )
+
 @codeDeps(getEqualityQG, getQuinphoneQuestionGroups, getThreshQG,
     labels_hts_demo.getGposList, labels_hts_demo.getTobiList,
     ques.AttrLabelValuer, ques.EqualityQuestion, ques.getSubsetQuestions
