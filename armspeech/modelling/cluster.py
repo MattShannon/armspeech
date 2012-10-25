@@ -107,14 +107,16 @@ class DecisionTreeClusterer(object):
             return self.getProto(accYes), self.getProto(accNo)
 
         accForLabel = self.accForLabel
-        labelValuers = [ labelValuer
-                         for labelValuer, questions in questionGroups ]
-        labelValueToAccs = [ defaultdict(self.createAcc)
-                             for questionGroup in questionGroups ]
-        labelValueToAccAndLabelValuers = zip(labelValueToAccs, labelValuers)
+        labelToValueToAccs = [
+            (labelValuer, defaultdict(self.createAcc))
+            for labelValuer, questions in questionGroups
+        ]
+        labelValueToAccs = [ labelValueToAcc
+                             for labelValuer, labelValueToAcc
+                             in labelToValueToAccs ]
         for label in labels:
             acc = accForLabel(label)
-            for labelValueToAcc, labelValuer in labelValueToAccAndLabelValuers:
+            for labelValuer, labelValueToAcc in labelToValueToAccs:
                 d.addAcc(labelValueToAcc[labelValuer(label)], acc)
 
         def getSplitInfos(labelValueToAccs, questionGroups):
