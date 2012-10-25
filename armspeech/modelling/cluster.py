@@ -82,6 +82,15 @@ class DecisionTreeClusterer(object):
         count = acc.count()
         return ProtoLeaf(dist, aux, auxRat, count)
 
+    def findBestSplit(self, splitInfos):
+        bestSplitInfo = None
+        for splitInfo in splitInfos:
+            if splitInfo is not None:
+                if bestSplitInfo is None or (splitInfo.score() >
+                                             bestSplitInfo.score()):
+                    bestSplitInfo = splitInfo
+        return bestSplitInfo
+
     def getBestSplit(self, labels, grower, questionGroups):
         def getProtosForQuestion(labelValueToAcc, question):
             accYes = self.createAcc()
@@ -105,19 +114,16 @@ class DecisionTreeClusterer(object):
             for labelValueToAcc, labelValuer in labelValueToAccAndLabelValuers:
                 d.addAcc(labelValueToAcc[labelValuer(label)], acc)
 
-        bestSplitInfo = None
-        for labelValueToAcc, (labelValuer, questions) in zip(labelValueToAccs,
-                                                             questionGroups):
-            for question in questions:
-                protoYes, protoNo = getProtosForQuestion(labelValueToAcc,
-                                                         question)
-                if grower.allowSplit(protoYes, protoNo):
-                    fullQuestion = labelValuer, question
-                    splitInfo = SplitInfo(fullQuestion, protoYes, protoNo)
-                    if bestSplitInfo is None or (splitInfo.score() >
-                                                 bestSplitInfo.score()):
-                        bestSplitInfo = splitInfo
-        return bestSplitInfo
+        def getSplitInfos(labelValueToAccs, questionGroups):
+            for (
+                labelValueToAcc, (labelValuer, questions)
+            ) in zip(labelValueToAccs, questionGroups):
+                for question in questions:
+                    protoYes, protoNo = getProtosForQuestion(labelValueToAcc,
+                                                             question)
+                    if grower.allowSplit(protoYes, protoNo):
+                        fullQuestion = labelValuer, question
+                        yield SplitInfo(fullQuestion, protoYes, protoNo)
 
     def clusterSub(self, labels, isYesList, protoNoSplit, grower):
         if self.verbosity >= 2:
