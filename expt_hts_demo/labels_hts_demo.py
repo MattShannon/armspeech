@@ -14,9 +14,19 @@ from __future__ import division
 import armspeech.speech.labels as lab
 from codedep import codeDeps, codedepEvalThunk
 
+import re
 import collections
 
 @codeDeps()
+def getGposList():
+    return ['aux', 'cc', 'content', 'det', 'in', 'md', 'pps', 'punc', 'to',
+            'wp']
+
+@codeDeps()
+def getTobiList():
+    return ['L-L%', 'L-H%', 'H-H%', 'NONE']
+
+@codeDeps(getGposList, getTobiList)
 def getLabelFormat():
     phonePat = r'[a-z]+'
     phoneOrNonePat = r'(x|[a-z]+)'
@@ -24,9 +34,15 @@ def getLabelFormat():
     numOrNonePat = r'(x|[0-9]+)'
     boolPat = r'[01]'
     boolOrNonePat = r'[x01]'
-    gposOrNonePat = r'(x|aux|cc|content|det|in|md|pps|punc|to|wp)'
-    gposOrZeroPat = r'(0|aux|cc|content|det|in|md|pps|punc|to|wp)'
-    tobiOrZeroPat = r'(0|L-L%|L-H%|H-H%|NONE)'
+    gposOrNonePat = r'(x|'+(
+        r'|'.join([ re.escape(gpos) for gpos in getGposList() ])
+    )+r')'
+    gposOrZeroPat = r'(0|'+(
+        r'|'.join([ re.escape(gpos) for gpos in getGposList() ])
+    )+r')'
+    tobiOrZeroPat = r'(0|'+(
+        r'|'.join([ re.escape(tobi) for tobi in getTobiList() ])
+    )+r')'
 
     def orNoneDecode(s):
         return None if s == 'x' else s
