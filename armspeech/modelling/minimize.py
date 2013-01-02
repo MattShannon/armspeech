@@ -1,6 +1,6 @@
 """Function minimization using conjugate gradients."""
 
-# Copyright 2011, 2012 Matt Shannon
+# Copyright 2011, 2012, 2013 Matt Shannon
 # Copyright 2005-2010 Carl Edward Rasmussen and Hannes Nickisch
 
 # This file is part of armspeech.

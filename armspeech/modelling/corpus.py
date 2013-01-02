@@ -1,6 +1,6 @@
 """General-purpose corpus abstraction."""
 
-# Copyright 2011, 2012 Matt Shannon
+# Copyright 2011, 2012, 2013 Matt Shannon
 
 # This file is part of armspeech.
 # See `License` for details of license and warranty.

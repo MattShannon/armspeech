@@ -5,7 +5,7 @@ third streams non-"multispace" vectors and second stream a 0/1-dimensional
 "multispace" vector.
 """
 
-# Copyright 2011, 2012 Matt Shannon
+# Copyright 2011, 2012, 2013 Matt Shannon
 
 # This file is part of armspeech.
 # See `License` for details of license and warranty.

@@ -4,7 +4,7 @@ More specifically, metadata for the processed version of the CMU ARCTIC corpus
 that is produced by the HTS demo with STRAIGHT.
 """
 
-# Copyright 2011, 2012 Matt Shannon
+# Copyright 2011, 2012, 2013 Matt Shannon
 
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
