@@ -539,28 +539,28 @@ def reparse(dist, ps):
 def check_logProbDerivInput(dist, input, output, eps):
     inputDirection = randn(*np.shape(input))
     numericDeriv = (dist.logProb(input + inputDirection * eps, output) - dist.logProb(input, output)) / eps
-    analyticDeriv = np.dot(inputDirection, dist.logProbDerivInput(input, output))
+    analyticDeriv = np.sum(inputDirection * dist.logProbDerivInput(input, output))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 
 @codeDeps(assert_allclose)
 def check_logProbDerivInput_hasDiscrete(dist, (disc, input), output, eps):
     inputDirection = randn(*np.shape(input))
     numericDeriv = (dist.logProb((disc, input + inputDirection * eps), output) - dist.logProb((disc, input), output)) / eps
-    analyticDeriv = np.dot(inputDirection, dist.logProbDerivInput((disc, input), output))
+    analyticDeriv = np.sum(inputDirection * dist.logProbDerivInput((disc, input), output))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 
 @codeDeps(assert_allclose)
 def check_logProbDerivOutput(dist, input, output, eps):
     outputDirection = randn(*np.shape(output))
     numericDeriv = (dist.logProb(input, output + outputDirection * eps) - dist.logProb(input, output)) / eps
-    analyticDeriv = np.dot(outputDirection, dist.logProbDerivOutput(input, output))
+    analyticDeriv = np.sum(outputDirection * dist.logProbDerivOutput(input, output))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 
 @codeDeps(assert_allclose)
 def check_logProbDerivOutput_hasDiscrete(dist, input, (disc, output), eps):
     outputDirection = randn(*np.shape(output))
     numericDeriv = (dist.logProb(input, (disc, output + outputDirection * eps)) - dist.logProb(input, (disc, output))) / eps
-    analyticDeriv = np.dot(outputDirection, dist.logProbDerivOutput(input, (disc, output)))
+    analyticDeriv = np.sum(outputDirection * dist.logProbDerivOutput(input, (disc, output)))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 
 @codeDeps(assert_allclose, chunkList, d.addAcc, trainedAccG)
