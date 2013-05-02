@@ -257,8 +257,9 @@ def checkTransform(transform, shapeIn, invertible, hasDeriv, hasParams, is1D, ep
     gen_SumOfTanh1D, gen_TanhTransform1D, gen_TanhTransformLogParam1D,
     gen_genericInvertibleTransform, gen_genericInvertibleTransform1D,
     gen_genericTransform, gen_genericTransform1D, randBool, randTag, shapeRand,
-    xf.AddBias, xf.FrozenTransform, xf.IdentityTransform, xf.InvertedTransform,
-    xf.MinusPrev, xf.TransposeTransform, xf.VectorizeTransform
+    xf.AddBias, xf.AddBiasVec, xf.FrozenTransform, xf.IdentityTransform,
+    xf.InvertedTransform, xf.MinusPrev, xf.TransposeTransform,
+    xf.VectorizeTransform
 )
 class TestTransform(unittest.TestCase):
     def test_ConstantTransform(self, eps = 1e-8, its = 10, itsPerTransform = 10):
@@ -318,6 +319,12 @@ class TestTransform(unittest.TestCase):
             axf = xf.AddBias().withTag(randTag())
             shapeIn = [randint(0, 10)]
             checkTransform(axf, shapeIn, invertible = False, hasDeriv = True, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
+    def test_AddBiasVec(self, eps = 1e-8, its = 10, itsPerTransform = 10):
+        for it in range(its):
+            axf = xf.AddBiasVec().withTag(randTag())
+            shapeIn = [randint(0, 10), randint(0, 10)]
+            # FIXME : implement deriv and enable hasDeriv
+            checkTransform(axf, shapeIn, invertible = False, hasDeriv = False, hasParams = False, is1D = False, eps = eps, its = itsPerTransform)
     def test_MinusPrev(self, eps = 1e-8, its = 10, itsPerTransform = 10):
         for it in range(its):
             axf = xf.MinusPrev().withTag(randTag())

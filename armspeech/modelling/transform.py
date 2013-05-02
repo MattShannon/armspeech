@@ -301,6 +301,18 @@ class AddBias(Transform):
         return np.eye(n, n + 1)
 
 @codeDeps(Transform)
+class AddBiasVec(Transform):
+    def __init__(self, tag = None):
+        self.tag = tag
+    def __repr__(self):
+        return 'AddBiasVec(tag = '+repr(self.tag)+')'
+    def __call__(self, x):
+        inputLength, order = np.shape(x)
+        return np.concatenate((x, np.ones((1, order))), axis = 0)
+    def deriv(self, x):
+        notyetimplemented
+
+@codeDeps(Transform)
 class MinusPrev(Transform):
     def __init__(self, tag = None):
         self.tag = tag
