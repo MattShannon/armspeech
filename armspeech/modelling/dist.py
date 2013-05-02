@@ -8,7 +8,7 @@
 
 from __future__ import division
 
-from armspeech.util.mathhelp import logSum, sigmoid, sampleDiscrete
+from armspeech.util.mathhelp import logSum, sigmoid, sampleDiscrete, reprArray
 import nodetree
 import semiring
 import wnet
@@ -43,7 +43,7 @@ def eval_local(reprString):
     from wnet import ConcreteNet
     from armspeech.util.mathhelp import AsArray
 
-    from numpy import array, eye, float64, Inf, inf
+    from numpy import array, zeros, dtype, eye, float64, Inf, inf
 
     return eval(reprString)
 
@@ -642,6 +642,153 @@ class LinearGaussianAcc(TermAcc):
         distNew = LinearGaussian(coeff, variance, self.varianceFloor,
                                  tag = self.tag)
         return distNew, self.auxFn(coeff, variance)
+
+@codeDeps(EstimationError, ForwardRef(lambda: LinearGaussianVec), Rat, TermAcc,
+    mla.pinv
+)
+class LinearGaussianVecAcc(TermAcc):
+    def __init__(self, distPrev, tag = None):
+        self.distPrev = distPrev
+        self.tag = tag
+
+        self.varianceFloorVec = self.distPrev.varianceFloorVec
+
+        order, inputLength = np.shape(self.distPrev.coeffVec)
+        self.occ = 0.0
+        self.sumOuter = np.zeros((order, inputLength + 1, inputLength + 1))
+
+        assert self.varianceFloorVec is not None
+        assert np.all(self.varianceFloorVec >= 0.0)
+
+    def add(self, input, output, occ = 1.0):
+        self.occ += occ
+        inputOutput = np.concatenate((input, np.reshape(output, (1, -1))),
+                                     axis = 0)
+        self.sumOuter += np.einsum(
+            inputOutput, [1, 0],
+            inputOutput, [2, 0],
+            [0, 1, 2]
+        ) * occ
+
+    # N.B. assumes distPrev (if present) is the same for self and acc (not
+    #   checked).
+    def addAccSingle(self, acc):
+        self.occ += acc.occ
+        self.sumOuter += acc.sumOuter
+
+    def auxFn(self, coeffVec, varianceVec):
+        # (FIXME : could make this a bit nicer?)
+
+        order, inputLength = np.shape(self.distPrev.coeffVec)
+        sumSqrVec = self.sumOuter[:, inputLength, inputLength]
+        sumTargetVec = self.sumOuter[:, inputLength, :inputLength]
+        sumOuterInputVec = self.sumOuter[:, :inputLength, :inputLength]
+
+        auxes = []
+        for vecIndex in range(order):
+            sumSqr = sumSqrVec[vecIndex]
+            sumTarget = sumTargetVec[vecIndex]
+            sumOuterInput = sumOuterInputVec[vecIndex]
+            coeff = coeffVec[vecIndex]
+            variance = varianceVec[vecIndex]
+
+            term = (sumSqr - 2.0 * np.dot(sumTarget, coeff) +
+                    np.dot(np.dot(sumOuterInput, coeff), coeff))
+            aux = (-0.5 * math.log(2.0 * math.pi) * self.occ +
+                   -0.5 * math.log(variance) * self.occ +
+                   -0.5 * term / variance)
+            auxes.append(aux)
+
+        return np.sum(auxes), Rat.Exact
+
+    def logLikeSingle(self):
+        return self.auxFn(self.distPrev.coeffVec, self.distPrev.varianceVec)[0]
+
+    def auxDerivParams(self, coeffVec, varianceVec):
+        # (FIXME : could make this a bit nicer?)
+
+        order, inputLength = np.shape(self.distPrev.coeffVec)
+        sumSqrVec = self.sumOuter[:, inputLength, inputLength]
+        sumTargetVec = self.sumOuter[:, inputLength, :inputLength]
+        sumOuterInputVec = self.sumOuter[:, :inputLength, :inputLength]
+
+        derivCoeffVec = []
+        derivLogPrecisionVec = []
+        for vecIndex in range(order):
+            sumSqr = sumSqrVec[vecIndex]
+            sumTarget = sumTargetVec[vecIndex]
+            sumOuterInput = sumOuterInputVec[vecIndex]
+            coeff = coeffVec[vecIndex]
+            variance = varianceVec[vecIndex]
+
+            term = (sumSqr - 2.0 * np.dot(sumTarget, coeff) +
+                    np.dot(np.dot(sumOuterInput, coeff), coeff))
+            derivCoeff = (sumTarget - np.dot(sumOuterInput, coeff)) / variance
+            derivLogPrecision = 0.5 * self.occ - 0.5 * term / variance
+            derivCoeffVec.append(derivCoeff)
+            derivLogPrecisionVec.append(derivLogPrecision)
+
+        return np.append(derivCoeffVec, derivLogPrecisionVec), Rat.Exact
+
+    def derivParamsSingle(self):
+        return self.auxDerivParams(self.distPrev.coeffVec,
+                                   self.distPrev.varianceVec)[0]
+
+    def estimateSingleAux(self):
+        if self.occ == 0.0:
+            raise EstimationError('require occ > 0')
+
+        # (FIXME : this is not quite equivalent to an array of LinearGaussian
+        #   objects in the case that EstimationError errors are thrown and
+        #   caught. Not sure this is a problem, though.)
+
+        # (FIXME : could make this a bit nicer?)
+
+        order, inputLength = np.shape(self.distPrev.coeffVec)
+        sumSqrVec = self.sumOuter[:, inputLength, inputLength]
+        sumTargetVec = self.sumOuter[:, inputLength, :inputLength]
+        sumOuterInputVec = self.sumOuter[:, :inputLength, :inputLength]
+
+        coeffVec = []
+        varianceVec = []
+        for vecIndex in range(order):
+            sumSqr = sumSqrVec[vecIndex]
+            sumTarget = sumTargetVec[vecIndex]
+            sumOuterInput = sumOuterInputVec[vecIndex]
+            varianceFloor = self.varianceFloorVec[vecIndex]
+
+            try:
+                sumOuterInv = mla.pinv(sumOuterInput)
+            except la.LinAlgError, detail:
+                raise EstimationError('could not compute pseudo-inverse: %s' %
+                                      detail)
+            coeff = np.dot(sumOuterInv, sumTarget)
+            variance = (sumSqr - np.dot(coeff, sumTarget)) / self.occ
+
+            if variance < varianceFloor:
+                variance = varianceFloor
+
+            if variance <= 0.0:
+                raise EstimationError('computed variance is zero or negative: %r' %
+                                      variance)
+            elif variance < 1e-10:
+                raise EstimationError('computed variance too miniscule (variances'
+                                      ' this small can lead to substantial loss of'
+                                      ' precision during accumulation): %r' %
+                                      variance)
+
+            coeffVec.append(coeff)
+            varianceVec.append(variance)
+        coeffVec = np.asarray(coeffVec)
+        varianceVec = np.asarray(varianceVec)
+        if coeffVec.size == 0:
+            coeffVec = np.zeros((order, inputLength))
+        if varianceVec.size == 0:
+            varianceVec = np.zeros((order,))
+
+        distNew = LinearGaussianVec(coeffVec, varianceVec,
+                                    self.varianceFloorVec, tag = self.tag)
+        return distNew, self.auxFn(coeffVec, varianceVec)
 
 @codeDeps(ForwardRef(lambda: ConstantClassifier), EstimationError, Rat, TermAcc,
     assert_allclose
@@ -1793,6 +1940,98 @@ class LinearGaussian(TermDist):
     def flooredSingle(self):
         return ((1, 1) if np.allclose(self.variance, self.varianceFloor)
                 else (0, 1))
+
+@codeDeps(InvalidParamsError, LinearGaussianVecAcc, SynthMethod, TermDist,
+    reprArray
+)
+class LinearGaussianVec(TermDist):
+    def __init__(self, coeffVec, varianceVec, varianceFloorVec, tag = None):
+        self.coeffVec = coeffVec
+        self.varianceVec = varianceVec
+        self.varianceFloorVec = varianceFloorVec
+        self.tag = tag
+
+        order, inputLength = np.shape(self.coeffVec)
+        assert np.shape(varianceVec) == (order,)
+        if self.varianceFloorVec is not None:
+            assert np.shape(varianceFloorVec) == (order,)
+
+        assert self.varianceFloorVec is not None
+        assert np.all(self.varianceFloorVec >= 0.0)
+        assert np.all(self.varianceVec >= self.varianceFloorVec)
+        assert np.all(self.varianceVec > 0.0)
+        if np.any(self.varianceVec < 1e-10):
+            raise RuntimeError('LinearGaussian variance too miniscule'
+                               ' (variances this small can lead to substantial'
+                               ' loss of precision during accumulation): %r' %
+                               self.varianceVec)
+
+    def __repr__(self):
+        return ('LinearGaussianVec(%s, %s, %s, tag=%r)' %
+                (reprArray(self.coeffVec), reprArray(self.varianceVec),
+                 reprArray(self.varianceFloorVec), self.tag))
+
+    def mapChildren(self, mapChild):
+        return LinearGaussianVec(self.coeffVec, self.varianceVec,
+                                 self.varianceFloorVec, tag = self.tag)
+
+    def logProb(self, input, output):
+        meanVec = np.sum(self.coeffVec * input.T, axis = 1)
+        lps = (
+            -0.5 * np.log(self.varianceVec) +
+            -0.5 * (output - meanVec) ** 2 / self.varianceVec +
+            -0.5 * math.log(2.0 * math.pi)
+        )
+        return np.sum(lps)
+
+    def logProbDerivInput(self, input, output):
+        meanVec = np.sum(self.coeffVec * input.T, axis = 1)
+        return self.coeffVec.T * (output - meanVec) / self.varianceVec
+
+    def logProbDerivOutput(self, input, output):
+        meanVec = np.sum(self.coeffVec * input.T, axis = 1)
+        return -(output - meanVec) / self.varianceVec
+
+    def residualVec(self, input, output):
+        meanVec = np.sum(self.coeffVec * input.T, axis = 1)
+        return (output - meanVec) / math.sqrt(self.varianceVec)
+
+    def createAccSingle(self):
+        return LinearGaussianVecAcc(distPrev = self, tag = self.tag)
+
+    def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
+        meanVec = np.sum(self.coeffVec * input.T, axis = 1)
+        if method == SynthMethod.Meanish:
+            return meanVec
+        elif method == SynthMethod.Sample:
+            return np.array([
+                random.gauss(mean, math.sqrt(variance))
+                for mean, variance in zip(meanVec, self.varianceVec)
+            ])
+        else:
+            raise RuntimeError('unknown SynthMethod %r' % method)
+
+    def paramsSingle(self):
+        return np.append(self.coeffVec, -np.log(self.varianceVec))
+
+    def parseSingle(self, params):
+        order, inputLength = np.shape(self.coeffVec)
+        n = order * inputLength
+        coeffVec = np.reshape(params[:n], np.shape(self.coeffVec))
+        varianceVec = np.exp(-params[n:(n + order)])
+        if np.any(varianceVec < self.varianceFloorVec):
+            raise InvalidParamsError('variance = %r < varianceFloor = %r'
+                                     ' during LinearGaussian parsing' %
+                                     (varianceVec, self.varianceFloorVec))
+        distNew = LinearGaussianVec(coeffVec, varianceVec,
+                                    self.varianceFloorVec, tag = self.tag)
+        return distNew, params[(n + order):]
+
+    def flooredSingle(self):
+        isClose = [ np.allclose(variance, varianceFloor)
+                    for variance, varianceFloor in zip(self.varianceVec,
+                                                       self.varianceFloorVec) ]
+        return (np.sum(isClose), np.size(isClose))
 
 @codeDeps(DerivTermAccG, SynthMethod, TermDist)
 class StudentDist(TermDist):

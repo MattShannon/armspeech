@@ -58,6 +58,14 @@ def simpleInputGen(dimIn, bias = False):
             ret[-1] = 1.0
         yield ret
 
+@codeDeps()
+def simpleVecInputGen(order, dimIn, bias = False):
+    while True:
+        ret = randn(dimIn, order)
+        if bias:
+            ret[-1] = 1.0
+        yield ret
+
 # (FIXME : add tests to test full range of shapes for transform stuff)
 # (FIXME : add tests for Transformed(Input|Output)Learn(Dist|Transform)AccEM (for the Transform ones, have to first add a transform that can be re-estimated using EM))
 # (FIXME : deep test for Transformed(Input|Output)Dist doesn't seem to converge to close to true dist in terms of parameters. Multiple local minima? Or just very insensitive to details? For more complicated transforms might the test procedure never converge?)
@@ -70,6 +78,19 @@ def gen_LinearGaussian(dimIn = 3, bias = False):
     dist = d.LinearGaussian(coeff, variance, varianceFloor).withTag(randTag())
     numFloored, numFlooredDenom = dist.flooredSingle()
     return dist, simpleInputGen(dimIn, bias = bias)
+
+@codeDeps(d.LinearGaussianVec, randBool, randTag, simpleVecInputGen)
+def gen_LinearGaussianVec(order = 10, dimIn = 3, bias = False):
+    coeffVec = randn(order, dimIn)
+    varianceFloorVec = np.array([
+        (0.0 if randBool() else math.exp(randn()) * 0.01)
+        for _ in range(order)
+    ])
+    varianceVec = np.exp(randn(order)) + varianceFloorVec
+    dist = d.LinearGaussianVec(coeffVec, varianceVec,
+                               varianceFloorVec).withTag(randTag())
+    numFloored, numFlooredDenom = dist.flooredSingle()
+    return dist, simpleVecInputGen(order, dimIn, bias = bias)
 
 @codeDeps(d.StudentDist, randTag, simpleInputGen)
 def gen_StudentDist(dimIn = 3):
@@ -838,10 +859,10 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
     gen_AutoregressiveSequenceDist, gen_BinaryLogisticClassifier,
     gen_ConstantClassifier, gen_CountFramesDist, gen_DebugDist,
     gen_DecisionTree_with_LinearGaussian_leaves, gen_DiscreteDist,
-    gen_IdentifiableMixtureDist, gen_LinearGaussian, gen_MappedInputDist,
-    gen_MappedOutputDist, gen_MixtureDist, gen_MixtureOfTwoExperts,
-    gen_PassThruDist, gen_StudentDist, gen_TransformedInputDist,
-    gen_TransformedOutputDist, gen_VectorDist,
+    gen_IdentifiableMixtureDist, gen_LinearGaussian, gen_LinearGaussianVec,
+    gen_MappedInputDist, gen_MappedOutputDist, gen_MixtureDist,
+    gen_MixtureOfTwoExperts, gen_PassThruDist, gen_StudentDist,
+    gen_TransformedInputDist, gen_TransformedOutputDist, gen_VectorDist,
     gen_constant_AutoregressiveNetDist, gen_inSeq_AutoregressiveNetDist,
     gen_nestedTransformDist, gen_shared_DiscreteDist, getTrainCG, getTrainEM,
     getTrainFromAcc, randBool, randTag, randomizeParams,
@@ -879,6 +900,18 @@ class TestDist(unittest.TestCase):
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
                 createAcc = lambda: d.LinearGaussianAcc(inputLength = dimIn, varianceFloor = 0.0).withTag(randTag())
                 check_est(dist, getTrainFromAcc(createAcc), inputGen, hasParams = True)
+
+    def test_LinearGaussianVec(self, eps = 1e-8, numDists = 30, numPoints = 100):
+        for distIndex in range(numDists):
+            bias = random.choice([True, False])
+            order = randint(0, 10)
+            dimIn = randint(1 if bias else 0, 5)
+            dist, inputGen = gen_LinearGaussianVec(order, dimIn, bias = bias)
+            checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivInputCheck = True, logProbDerivOutputCheck = True)
+            if self.deepTest:
+                initEstDist = gen_LinearGaussianVec(order, dimIn)[0]
+                check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
+                check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
 
     def test_StudentDist(self, eps = 1e-8, numDists = 50, numPoints = 100):
         def checkAdditional(dist, input, output, eps):
