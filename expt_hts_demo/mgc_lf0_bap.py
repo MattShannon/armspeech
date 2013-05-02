@@ -24,7 +24,8 @@ class BasicArModelInfo(object):
     def __init__(self, phoneset, subLabels,
                  mgcOrder, bapOrder,
                  mgcDepth, lf0Depth, bapDepth,
-                 mgcIndices, bapIndices):
+                 mgcIndices, bapIndices,
+                 mgcUseVec, bapUseVec):
         self.phoneset = phoneset
         self.subLabels = subLabels
         self.mgcOrder = mgcOrder
@@ -34,6 +35,8 @@ class BasicArModelInfo(object):
         self.bapDepth = bapDepth
         self.mgcIndices = mgcIndices
         self.bapIndices = bapIndices
+        self.mgcUseVec = mgcUseVec
+        self.bapUseVec = bapUseVec
 
         self.maxDepth = max(self.mgcDepth, self.lf0Depth, self.bapDepth)
         self.streamDepths = {0: self.mgcDepth,
@@ -52,6 +55,11 @@ class BasicArModelInfo(object):
             self.bapIndices, fromOffset = 0, toOffset = 0,
             order = self.bapOrder, depth = self.bapDepth
         )
+
+        if self.mgcUseVec:
+            assert self.mgcIndices == range(self.mgcOrder)
+        if self.bapUseVec:
+            assert self.bapIndices == range(self.bapOrder)
 
 @codeDeps()
 def getZeroFrame(mgcOrder, bapOrder):

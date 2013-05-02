@@ -324,6 +324,21 @@ def createLinearGaussianVectorDist(indexSpecSummarizer):
 
     return indexSpecSummarizer.createDist(False, distFor)
 
+@codeDeps(d.LinearGaussianVec, d.MappedInputDist, xf.AddBiasVec)
+def createLinearGaussianVecDist(order, vecLength):
+    """Creates a LinearGaussianVec dist.
+
+    Expects input acInput where acInput is a sequence of vectors.
+    Expects output a vector.
+    """
+    return d.MappedInputDist(xf.AddBiasVec(),
+        d.LinearGaussianVec(
+            coeffVec = np.zeros((order, vecLength + 1)),
+            varianceVec = np.ones((order,)),
+            varianceFloorVec = np.zeros((order,))
+        )
+    )
+
 @codeDeps(d.LinearGaussian, d.MappedInputDist, xf.AddBias)
 def createLinearGaussianWithTimingVectorDist(indexSpecSummarizer):
     """Creates a linear-Gaussian vector dist where input includes timing info.
@@ -465,8 +480,9 @@ def globalToFullCtxCreateAcc(dist, bmi):
                                d.defaultCreateAccPartial])(dist)
 
 @codeDeps(ElemGetter, align.AlignmentToPhoneticSeq, align.StandardizeAlignment,
-    createLinearGaussianVectorDist, d.AutoregressiveSequenceDist,
-    d.MappedInputDist, d.OracleDist, mgc_lf0_bap.computeFirstFrameAverage
+    createLinearGaussianVecDist, createLinearGaussianVectorDist,
+    d.AutoregressiveSequenceDist, d.MappedInputDist, d.OracleDist,
+    mgc_lf0_bap.computeFirstFrameAverage
 )
 def getInitDist1(bmi, corpus, alignmentSubLabels = 'sameAsBmi'):
     """Produces an initial dist.
@@ -488,7 +504,11 @@ def getInitDist1(bmi, corpus, alignmentSubLabels = 'sameAsBmi'):
         )
     )
     createLeafDists = [
-        lambda: createLinearGaussianVectorDist(bmi.mgcSummarizer),
+        (
+            (lambda: createLinearGaussianVecDist(bmi.mgcOrder, bmi.mgcDepth))
+            if bmi.mgcUseVec else
+            (lambda: createLinearGaussianVectorDist(bmi.mgcSummarizer))
+        ),
         d.OracleDist,
         d.OracleDist,
     ]
@@ -612,6 +632,8 @@ def getBmiForCorpus(corpus, subLabels = 'sameAsCorpus'):
         bapDepth = 3,
         mgcIndices = [0],
         bapIndices = [],
+        mgcUseVec = False,
+        bapUseVec = False,
     )
 
 @codeDeps()
