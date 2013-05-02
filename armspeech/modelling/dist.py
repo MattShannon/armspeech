@@ -3416,12 +3416,13 @@ class AutoregressiveNetDist(Dist):
                                         self.pruneSpec, tag = self.tag)
         return distNew, paramsLeft
 
-@codeDeps(LinearGaussianAcc, accNodeList)
+@codeDeps(LinearGaussianAcc, LinearGaussianVecAcc, accNodeList)
 class FloorSetter(object):
     """Helper class for setting floors.
 
     __call__ takes a root acc as input, and mutably sets floors of any sub-accs
-    which are of an appropriate type (currently just LinearGaussianAcc).
+    which are of an appropriate type (currently just LinearGaussianAcc and
+    LinearGaussianAccVec).
 
     The set of sub-nodes to consider is customizable by setting getNodes.
 
@@ -3457,6 +3458,22 @@ class FloorSetter(object):
         variance = accNew.estimateSingleAux()[0].variance
         return variance * self.lgFloorMult
 
+    def lgFloorVec(self, acc):
+        assert isinstance(acc, LinearGaussianVecAcc)
+        if self.htsStyle:
+            assert np.shape(acc.sumOuter)[1] >= 2
+            # weak check that last component of input (i.e. second last
+            #   component of combined inputOutput) is bias
+            assert np.allclose(acc.sumOuter[:, -2, -2], acc.occ)
+
+            accNew = LinearGaussianVecAcc(acc.distPrev)
+            accNew.occ = acc.occ
+            accNew.sumOuter = acc.sumOuter[-2:, -2:]
+        else:
+            accNew = acc
+        varianceVec = accNew.estimateSingleAux()[0].varianceVec
+        return varianceVec * self.lgFloorMult
+
     def __call__(self, accRoot):
         if self.verbosity >= 1:
             print ('flooring: setting floors with lgFloorMult = %s,'
@@ -3471,15 +3488,23 @@ class FloorSetter(object):
                            ' %s' % (acc.varianceFloor, varianceFloor))
                 acc.varianceFloor = varianceFloor
                 floorsSet += 1
+            elif isinstance(acc, LinearGaussianVecAcc):
+                varianceFloorVec = self.lgFloorVec(acc)
+                if self.verbosity >= 2:
+                    print ('flooring:    changing variance floors from %s to'
+                           ' %s' % (acc.varianceFloorVec, varianceFloorVec))
+                acc.varianceFloorVec = varianceFloorVec
+                floorsSet += len(varianceFloorVec)
         if self.verbosity >= 1:
             print 'flooring: set %s floors' % floorsSet
 
 @codeDeps(BinaryLogisticClassifier, ConstantClassifier, LinearGaussian,
-    distNodeList
+    LinearGaussianVec, distNodeList
 )
 def reportFloored(distRoot, rootTag):
     dists = distNodeList(distRoot)
     taggedDistTypes = [('LG', LinearGaussian),
+                       ('LGV', LinearGaussianVec),
                        ('CC', ConstantClassifier),
                        ('BLC', BinaryLogisticClassifier)]
     numFlooreds = [ np.array([0, 0]) for dtIndex, (dtTag, dt)
