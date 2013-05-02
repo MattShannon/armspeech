@@ -10,7 +10,7 @@ Transforms are essentially functions with learnable parameters."""
 
 from __future__ import division
 
-from armspeech.util.mathhelp import logDet
+from armspeech.util.mathhelp import logDet, reprArray
 from minimize import solveByMinimize
 from armspeech.util.lazy import lazyproperty
 from codedep import codeDeps, ForwardRef
@@ -26,7 +26,7 @@ import armspeech.util.mylinalg as mla
 # FIXME : some of the asserts below should really be exceptions?
 
 def eval_local(reprString):
-    from numpy import array, eye, float64
+    from numpy import array, zeros, dtype, float64
 
     return eval(reprString)
 
@@ -162,19 +162,14 @@ class DotProductTransform(Transform):
         assert x.ndim == 1
         return x
 
-@codeDeps(Transform, lazyproperty, logDet, mla.inv)
+@codeDeps(Transform, lazyproperty, logDet, mla.inv, reprArray)
 class LinearTransform(Transform):
     def __init__(self, mat, tag = None):
         assert mat.ndim == 2
         self.mat = mat
         self.tag = tag
     def __repr__(self):
-        dimIn, dimOut = np.shape(self.mat)
-        if dimIn == 0 or dimOut == 0:
-            reprMat = 'eye('+str(dimIn)+', '+str(dimOut)+')'
-        else:
-            reprMat = repr(self.mat)
-        return 'LinearTransform('+reprMat+', tag = '+repr(self.tag)+')'
+        return 'LinearTransform(%s, tag=%r)' % (reprArray(self.mat), self.tag)
     @property
     def params(self):
         return np.reshape(self.mat, (-1,))

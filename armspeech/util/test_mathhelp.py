@@ -16,6 +16,7 @@ import unittest
 import numpy as np
 import armspeech.numpy_settings
 import numpy.linalg as la
+import random
 from numpy.random import randn, randint
 
 @codeDeps()
@@ -25,8 +26,14 @@ def randLogProb():
     else:
         return 5.0 * randn()
 
-@codeDeps(assert_allclose, mathhelp.logAdd, mathhelp.logDet, mathhelp.logSum,
-    mathhelp.sampleDiscrete, randLogProb
+@codeDeps()
+def shapeRand(ranks = [0, 1], allDimsNonZero = False):
+    rank = random.choice(ranks)
+    return [ randint(1 if allDimsNonZero else 0, 10) for i in range(rank) ]
+
+@codeDeps(assert_allclose, mathhelp.logAdd, mathhelp.logDet,
+    mathhelp.logDetPosDef, mathhelp.logSum, mathhelp.reprArray,
+    mathhelp.sampleDiscrete, randLogProb, shapeRand
 )
 class TestMathHelp(unittest.TestCase):
     def test_logAdd(self, numPoints = 200):
@@ -77,6 +84,18 @@ class TestMathHelp(unittest.TestCase):
                 sample = mathhelp.sampleDiscrete(valueProbList)
                 count[sample] += 1
             assert_allclose(count / numSamples, probs, rtol = 1e-2, atol = 1e-2)
+
+    def test_reprArray(self, numPoints = 200):
+        def evalArray(arrRepr):
+            from numpy import array, zeros, dtype
+            return eval(arrRepr)
+
+        for _ in range(numPoints):
+            shape = shapeRand(ranks = [0, 1, 2, 3])
+            arr = randn(*shape)
+            arrRepr = mathhelp.reprArray(arr)
+            arrAgain = evalArray(arrRepr)
+            assert_allclose(arrAgain, arr)
 
 @codeDeps(TestMathHelp)
 def suite():

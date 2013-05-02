@@ -129,3 +129,15 @@ class AsArray(object):
         return 'AsArray()'
     def __call__(self, x):
         return np.asarray(x)
+
+@codeDeps()
+def reprArray(arr):
+    """Returns a repr of a numpy ndarray suitable for reading with eval.
+
+    Default repr function provided by numpy sometimes includes an erroneous
+    shape keyword that messes things up.
+    """
+    if np.size(arr) == 0:
+        return 'zeros(%r, dtype = %r)' % (np.shape(arr), arr.dtype)
+    else:
+        return repr(arr)
