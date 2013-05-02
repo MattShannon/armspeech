@@ -3416,7 +3416,9 @@ class AutoregressiveNetDist(Dist):
                                         self.pruneSpec, tag = self.tag)
         return distNew, paramsLeft
 
-@codeDeps(LinearGaussianAcc, LinearGaussianVecAcc, accNodeList)
+@codeDeps(LinearGaussianAcc, LinearGaussianVec, LinearGaussianVecAcc,
+    accNodeList
+)
 class FloorSetter(object):
     """Helper class for setting floors.
 
@@ -3466,9 +3468,15 @@ class FloorSetter(object):
             #   component of combined inputOutput) is bias
             assert np.allclose(acc.sumOuter[:, -2, -2], acc.occ)
 
-            accNew = LinearGaussianVecAcc(acc.distPrev)
+            accNew = LinearGaussianVecAcc(
+                distPrev = LinearGaussianVec(
+                    acc.distPrev.coeffVec[:, -1:],
+                    acc.distPrev.varianceVec,
+                    acc.distPrev.varianceFloorVec
+                )
+            )
             accNew.occ = acc.occ
-            accNew.sumOuter = acc.sumOuter[-2:, -2:]
+            accNew.sumOuter = acc.sumOuter[:, -2:, -2:]
         else:
             accNew = acc
         varianceVec = accNew.estimateSingleAux()[0].varianceVec
