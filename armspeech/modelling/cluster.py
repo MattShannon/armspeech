@@ -50,6 +50,14 @@ class SplitInfo(object):
         else:
             return self.protoYes.aux + self.protoNo.aux - self.protoNoSplit.aux
 
+@codeDeps(SplitInfo)
+def maxSplit(protoNoSplit, splitInfos):
+    bestSplitInfo = SplitInfo(protoNoSplit, None, None, None)
+    for splitInfo in splitInfos:
+        if splitInfo.delta() > bestSplitInfo.delta():
+            bestSplitInfo = splitInfo
+    return bestSplitInfo
+
 @codeDeps()
 class Grower(object):
     def allowSplit(self, splitInfo):
@@ -59,7 +67,7 @@ class Grower(object):
         abstract
 
 @codeDeps(ProtoLeaf, SplitInfo, d.DecisionTreeLeaf, d.DecisionTreeNode,
-    d.EstimationError, d.addAcc, d.sumValuedRats, timed
+    d.EstimationError, d.addAcc, d.sumValuedRats, maxSplit, timed
 )
 class DecisionTreeClusterer(object):
     def __init__(self, accForLabel, questionGroups, createAcc, estimateTotAux,
@@ -70,14 +78,44 @@ class DecisionTreeClusterer(object):
         self.estimateTotAux = estimateTotAux
         self.verbosity = verbosity
 
-    def getAccFromLabels(self, labels):
+    def sumAccs(self, labels):
         accForLabel = self.accForLabel
         accTot = self.createAcc()
         for label in labels:
             d.addAcc(accTot, accForLabel(label))
         return accTot
 
-    def getProto(self, acc):
+    def sumAccsFirstLevel(self, labels, questionGroups):
+        accForLabel = self.accForLabel
+        numQuestionGroups = len(questionGroups)
+
+        labelValuers = [ labelValuer
+                         for labelValuer, questions in questionGroups ]
+        labelValueToAccs = [ defaultdict(self.createAcc)
+                             for _ in range(numQuestionGroups) ]
+
+        for label in labels:
+            acc = accForLabel(label)
+            for qgIndex in range(numQuestionGroups):
+                labelValuer = labelValuers[qgIndex]
+                labelValueToAcc = labelValueToAccs[qgIndex]
+                d.addAcc(labelValueToAcc[labelValuer(label)], acc)
+
+        # list contains one labelValueToAcc for each questionGroup
+        return labelValueToAccs
+
+    def sumAccsSecondLevel(self, labelValueToAcc, question):
+        accYes = self.createAcc()
+        accNo = self.createAcc()
+        for labelValue, acc in labelValueToAcc.iteritems():
+            if question(labelValue):
+                d.addAcc(accYes, acc)
+            else:
+                d.addAcc(accNo, acc)
+
+        return accYes, accNo
+
+    def getProtoLeaf(self, acc):
         try:
             dist, (aux, auxRat) = self.estimateTotAux(acc)
         except d.EstimationError:
@@ -85,55 +123,41 @@ class DecisionTreeClusterer(object):
         count = acc.count()
         return ProtoLeaf(dist, aux, auxRat, count)
 
-    def findBestSplit(self, protoNoSplit, splitInfos):
-        bestSplitInfo = SplitInfo(protoNoSplit, None, None, None)
-        for splitInfo in splitInfos:
-            if splitInfo.delta() > bestSplitInfo.delta():
-                bestSplitInfo = splitInfo
-        return bestSplitInfo
+    def splitInfosIter(self, state, grower, questionGroups):
+        """Returns an iterator with one SplitInfo for each allowed question.
+
+        A clustering state is a proto-leaf together with info about its
+        position in the tree and enough info about the initial parts of the
+        tree to allow clustering of the sub-tree with the proto-leaf as root.
+        (This initial tree info is just the labels remaining).
+
+        For a given state and list of questionGroups, this function returns an
+        iterator over splits, one for each allowed question.
+        """
+        labels, isYesList, protoNoSplit = state
+
+        labelValueToAccs = self.sumAccsFirstLevel(labels, questionGroups)
+
+        for (
+            labelValueToAcc, (labelValuer, questions)
+        ) in zip(labelValueToAccs, questionGroups):
+            for question in questions:
+                accYes, accNo = self.sumAccsSecondLevel(labelValueToAcc,
+                                                        question)
+                protoYes = self.getProtoLeaf(accYes)
+                protoNo = self.getProtoLeaf(accNo)
+                fullQuestion = labelValuer, question
+                splitInfo = SplitInfo(protoNoSplit, fullQuestion,
+                                      protoYes, protoNo)
+                if grower.allowSplit(splitInfo):
+                    yield splitInfo
 
     def computeBestSplit(self, state, grower, questionGroups):
         labels, isYesList, protoNoSplit = state
 
-        def getProtosForQuestion(labelValueToAcc, question):
-            accYes = self.createAcc()
-            accNo = self.createAcc()
-            for labelValue, acc in labelValueToAcc.iteritems():
-                if question(labelValue):
-                    d.addAcc(accYes, acc)
-                else:
-                    d.addAcc(accNo, acc)
+        splitInfos = self.splitInfosIter(state, grower, questionGroups)
 
-            return self.getProto(accYes), self.getProto(accNo)
-
-        accForLabel = self.accForLabel
-        labelToValueToAccs = [
-            (labelValuer, defaultdict(self.createAcc))
-            for labelValuer, questions in questionGroups
-        ]
-        labelValueToAccs = [ labelValueToAcc
-                             for labelValuer, labelValueToAcc
-                             in labelToValueToAccs ]
-        for label in labels:
-            acc = accForLabel(label)
-            for labelValuer, labelValueToAcc in labelToValueToAccs:
-                d.addAcc(labelValueToAcc[labelValuer(label)], acc)
-
-        def getSplitInfos(labelValueToAccs, questionGroups):
-            for (
-                labelValueToAcc, (labelValuer, questions)
-            ) in zip(labelValueToAccs, questionGroups):
-                for question in questions:
-                    protoYes, protoNo = getProtosForQuestion(labelValueToAcc,
-                                                             question)
-                    fullQuestion = labelValuer, question
-                    splitInfo = SplitInfo(protoNoSplit, fullQuestion,
-                                          protoYes, protoNo)
-                    if grower.allowSplit(splitInfo):
-                        yield splitInfo
-
-        splitInfos = getSplitInfos(labelValueToAccs, questionGroups)
-        return self.findBestSplit(protoNoSplit, splitInfos)
+        return maxSplit(protoNoSplit, splitInfos)
 
     def decideSplit(self, labels, isYesList, splitInfo, grower):
         if self.verbosity >= 2:
@@ -160,10 +184,10 @@ class DecisionTreeClusterer(object):
                 print 'cluster:'+indent+'leaf'
             return None, None
 
-    def findBestSplitAndDecide(self, state, grower, *splitInfos):
+    def maxSplitAndDecide(self, state, grower, *splitInfos):
         labels, isYesList, protoNoSplit = state
 
-        splitInfo = self.findBestSplit(protoNoSplit, splitInfos)
+        splitInfo = maxSplit(protoNoSplit, splitInfos)
         splitInfoDict = dict()
         splitInfoDict[tuple(isYesList)] = splitInfo
         stateYes, stateNo = self.decideSplit(labels, isYesList, splitInfo,
@@ -293,7 +317,7 @@ def decisionTreeCluster(labels, accForLabel, createAcc, questionGroups,
     clusterer = DecisionTreeClusterer(accForLabel, questionGroups, createAcc,
                                       estimateTotAux, verbosity)
 
-    protoRoot = clusterer.getProto(clusterer.getAccFromLabels(labels))
+    protoRoot = clusterer.getProtoLeaf(clusterer.sumAccs(labels))
     countRoot = protoRoot.count
     if thresh is None:
         numParamsPerLeaf = len(paramSpec.params(protoRoot.dist))
