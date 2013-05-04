@@ -1952,16 +1952,14 @@ class LinearGaussianVec(TermDist):
         self.tag = tag
 
         order, inputLength = np.shape(self.coeffVec)
-        assert np.shape(varianceVec) == (order,)
-        if self.varianceFloorVec is not None:
-            assert np.shape(varianceFloorVec) == (order,)
-
+        assert np.shape(self.varianceVec) == (order,)
         assert self.varianceFloorVec is not None
+        assert np.shape(self.varianceFloorVec) == (order,)
         assert np.all(self.varianceFloorVec >= 0.0)
         assert np.all(self.varianceVec >= self.varianceFloorVec)
         assert np.all(self.varianceVec > 0.0)
         if np.any(self.varianceVec < 1e-10):
-            raise RuntimeError('LinearGaussian variance too miniscule'
+            raise RuntimeError('LinearGaussianVec variance too miniscule'
                                ' (variances this small can lead to substantial'
                                ' loss of precision during accumulation): %r' %
                                self.varianceVec)
@@ -2021,7 +2019,7 @@ class LinearGaussianVec(TermDist):
         varianceVec = np.exp(-params[n:(n + order)])
         if np.any(varianceVec < self.varianceFloorVec):
             raise InvalidParamsError('variance = %r < varianceFloor = %r'
-                                     ' during LinearGaussian parsing' %
+                                     ' during LinearGaussianVec parsing' %
                                      (varianceVec, self.varianceFloorVec))
         distNew = LinearGaussianVec(coeffVec, varianceVec,
                                     self.varianceFloorVec, tag = self.tag)
@@ -3424,7 +3422,7 @@ class FloorSetter(object):
 
     __call__ takes a root acc as input, and mutably sets floors of any sub-accs
     which are of an appropriate type (currently just LinearGaussianAcc and
-    LinearGaussianAccVec).
+    LinearGaussianVecAcc).
 
     The set of sub-nodes to consider is customizable by setting getNodes.
 
