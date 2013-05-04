@@ -92,6 +92,19 @@ def gen_LinearGaussianVec(order = 10, dimIn = 3, bias = False):
     numFloored, numFlooredDenom = dist.flooredSingle()
     return dist, simpleVecInputGen(order, dimIn, bias = bias)
 
+@codeDeps(d.GaussianVec, randBool, randTag, simpleInputGen)
+def gen_GaussianVec(order = 10):
+    meanVec = randn(order)
+    varianceFloorVec = np.array([
+        (0.0 if randBool() else math.exp(randn()) * 0.01)
+        for _ in range(order)
+    ])
+    varianceVec = np.exp(randn(order)) + varianceFloorVec
+    dist = d.GaussianVec(meanVec, varianceVec,
+                         varianceFloorVec).withTag(randTag())
+    numFloored, numFlooredDenom = dist.flooredSingle()
+    return dist, simpleInputGen(order)
+
 @codeDeps(d.StudentDist, randTag, simpleInputGen)
 def gen_StudentDist(dimIn = 3):
     df = math.exp(randn() + 1.0)
@@ -859,9 +872,9 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
     gen_AutoregressiveSequenceDist, gen_BinaryLogisticClassifier,
     gen_ConstantClassifier, gen_CountFramesDist, gen_DebugDist,
     gen_DecisionTree_with_LinearGaussian_leaves, gen_DiscreteDist,
-    gen_IdentifiableMixtureDist, gen_LinearGaussian, gen_LinearGaussianVec,
-    gen_MappedInputDist, gen_MappedOutputDist, gen_MixtureDist,
-    gen_MixtureOfTwoExperts, gen_PassThruDist, gen_StudentDist,
+    gen_GaussianVec, gen_IdentifiableMixtureDist, gen_LinearGaussian,
+    gen_LinearGaussianVec, gen_MappedInputDist, gen_MappedOutputDist,
+    gen_MixtureDist, gen_MixtureOfTwoExperts, gen_PassThruDist, gen_StudentDist,
     gen_TransformedInputDist, gen_TransformedOutputDist, gen_VectorDist,
     gen_constant_AutoregressiveNetDist, gen_inSeq_AutoregressiveNetDist,
     gen_nestedTransformDist, gen_shared_DiscreteDist, getTrainCG, getTrainEM,
@@ -910,6 +923,16 @@ class TestDist(unittest.TestCase):
             checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivInputCheck = True, logProbDerivOutputCheck = True)
             if self.deepTest:
                 initEstDist = gen_LinearGaussianVec(order, dimIn)[0]
+                check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
+                check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
+
+    def test_GaussianVec(self, eps = 1e-8, numDists = 30, numPoints = 100):
+        for distIndex in range(numDists):
+            order = randint(0, 10)
+            dist, inputGen = gen_GaussianVec(order)
+            checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivOutputCheck = True)
+            if self.deepTest:
+                initEstDist = gen_GaussianVec(order)[0]
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
                 check_est(dist, getTrainCG(initEstDist), inputGen, hasParams = True)
 

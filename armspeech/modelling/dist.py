@@ -790,6 +790,81 @@ class LinearGaussianVecAcc(TermAcc):
                                     self.varianceFloorVec, tag = self.tag)
         return distNew, self.auxFn(coeffVec, varianceVec)
 
+@codeDeps(EstimationError, ForwardRef(lambda: GaussianVec), Rat, TermAcc)
+class GaussianVecAcc(TermAcc):
+    def __init__(self, distPrev, tag = None):
+        self.distPrev = distPrev
+        self.tag = tag
+
+        self.varianceFloorVec = self.distPrev.varianceFloorVec
+
+        order = len(self.distPrev.meanVec)
+        self.occ = 0.0
+        self.sumVec = np.zeros((order,))
+        self.sumSqrVec = np.zeros((order,))
+
+        assert self.varianceFloorVec is not None
+        assert np.all(self.varianceFloorVec >= 0.0)
+
+    def add(self, input, output, occ = 1.0):
+        self.occ += occ
+        self.sumVec += output * occ
+        self.sumSqrVec += output * output * occ
+
+    # N.B. assumes distPrev (if present) is the same for self and acc (not
+    #   checked).
+    def addAccSingle(self, acc):
+        self.occ += acc.occ
+        self.sumVec += acc.sumVec
+        self.sumSqrVec += acc.sumSqrVec
+
+    def auxFn(self, meanVec, varianceVec):
+        termVec = (self.sumSqrVec - self.sumVec * meanVec * 2.0 +
+                   meanVec * meanVec * self.occ)
+        auxVec = (
+            -0.5 * np.log(varianceVec) * self.occ +
+            -0.5 * termVec / varianceVec +
+            -0.5 * math.log(2.0 * math.pi) * self.occ
+        )
+        return np.sum(auxVec), Rat.Exact
+
+    def logLikeSingle(self):
+        return self.auxFn(self.distPrev.meanVec, self.distPrev.varianceVec)[0]
+
+    def auxDerivParams(self, meanVec, varianceVec):
+        termVec = (self.sumSqrVec - self.sumVec * meanVec * 2.0 +
+                   meanVec * meanVec * self.occ)
+        derivMeanVec = (self.sumVec - meanVec * self.occ) / varianceVec
+        derivLogPrecisionVec = -0.5 * termVec / varianceVec + 0.5 * self.occ
+        return np.append(derivMeanVec, derivLogPrecisionVec), Rat.Exact
+
+    def derivParamsSingle(self):
+        return self.auxDerivParams(self.distPrev.meanVec,
+                                   self.distPrev.varianceVec)[0]
+
+    def estimateSingleAux(self):
+        if self.occ == 0.0:
+            raise EstimationError('require occ > 0')
+
+        meanVec = self.sumVec / self.occ
+        varianceVec = self.sumSqrVec / self.occ - meanVec * meanVec
+
+        varianceVec = np.maximum(varianceVec, self.varianceFloorVec)
+
+        # (N.B. these estimation errors are per vector, not per component)
+        if np.any(varianceVec <= 0.0):
+            raise EstimationError('computed variance is zero or negative: %r' %
+                                  varianceVec)
+        elif np.any(varianceVec < 1e-10):
+            raise EstimationError('computed variance too miniscule (variances'
+                                  ' this small can lead to substantial loss of'
+                                  ' precision during accumulation): %r' %
+                                  varianceVec)
+
+        distNew = GaussianVec(meanVec, varianceVec, self.varianceFloorVec,
+                              tag = self.tag)
+        return distNew, self.auxFn(meanVec, varianceVec)
+
 @codeDeps(ForwardRef(lambda: ConstantClassifier), EstimationError, Rat, TermAcc,
     assert_allclose
 )
@@ -2024,6 +2099,83 @@ class LinearGaussianVec(TermDist):
         distNew = LinearGaussianVec(coeffVec, varianceVec,
                                     self.varianceFloorVec, tag = self.tag)
         return distNew, params[(n + order):]
+
+    def flooredSingle(self):
+        isClose = [ np.allclose(variance, varianceFloor)
+                    for variance, varianceFloor in zip(self.varianceVec,
+                                                       self.varianceFloorVec) ]
+        return (np.sum(isClose), np.size(isClose))
+
+@codeDeps(GaussianVecAcc, InvalidParamsError, SynthMethod, TermDist, reprArray)
+class GaussianVec(TermDist):
+    def __init__(self, meanVec, varianceVec, varianceFloorVec, tag = None):
+        self.meanVec = meanVec
+        self.varianceVec = varianceVec
+        self.varianceFloorVec = varianceFloorVec
+        self.tag = tag
+
+        order, = np.shape(self.meanVec)
+        assert np.shape(self.varianceVec) == (order,)
+        assert self.varianceFloorVec is not None
+        assert np.shape(self.varianceFloorVec) == (order,)
+        assert np.all(self.varianceFloorVec >= 0.0)
+        assert np.all(self.varianceVec >= self.varianceFloorVec)
+        assert np.all(self.varianceVec > 0.0)
+        if np.any(self.varianceVec < 1e-10):
+            # (haven't actually checked this is true in GaussianVec case)
+            raise RuntimeError('GaussianVec variance too miniscule'
+                               ' (variances this small can lead to substantial'
+                               ' loss of precision during accumulation): %r' %
+                               self.varianceVec)
+
+    def __repr__(self):
+        return ('GaussianVec(%s, %s, %s, tag=%r)' %
+                (reprArray(self.meanVec), reprArray(self.varianceVec),
+                 reprArray(self.varianceFloorVec), self.tag))
+
+    def mapChildren(self, mapChild):
+        return GaussianVec(self.meanVec, self.varianceVec,
+                           self.varianceFloorVec, tag = self.tag)
+
+    def logProb(self, input, output):
+        lps = (
+            -0.5 * np.log(self.varianceVec) +
+            -0.5 * (output - self.meanVec) ** 2 / self.varianceVec +
+            -0.5 * math.log(2.0 * math.pi)
+        )
+        return np.sum(lps)
+
+    def logProbDerivOutput(self, input, output):
+        return -(output - self.meanVec) / self.varianceVec
+
+    def createAccSingle(self):
+        return GaussianVecAcc(distPrev = self, tag = self.tag)
+
+    def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
+        if method == SynthMethod.Meanish:
+            return self.meanVec
+        elif method == SynthMethod.Sample:
+            return np.array([
+                random.gauss(mean, math.sqrt(variance))
+                for mean, variance in zip(self.meanVec, self.varianceVec)
+            ])
+        else:
+            raise RuntimeError('unknown SynthMethod %r' % method)
+
+    def paramsSingle(self):
+        return np.append(self.meanVec, -np.log(self.varianceVec))
+
+    def parseSingle(self, params):
+        order = len(self.meanVec)
+        meanVec = params[:order]
+        varianceVec = np.exp(-params[order:(order * 2)])
+        if np.any(varianceVec < self.varianceFloorVec):
+            raise InvalidParamsError('variance = %r < varianceFloor = %r'
+                                     ' during GaussianVec parsing' %
+                                     (varianceVec, self.varianceFloorVec))
+        distNew = GaussianVec(meanVec, varianceVec, self.varianceFloorVec,
+                              tag = self.tag)
+        return distNew, params[(order * 2):]
 
     def flooredSingle(self):
         isClose = [ np.allclose(variance, varianceFloor)
@@ -3414,15 +3566,15 @@ class AutoregressiveNetDist(Dist):
                                         self.pruneSpec, tag = self.tag)
         return distNew, paramsLeft
 
-@codeDeps(LinearGaussianAcc, LinearGaussianVec, LinearGaussianVecAcc,
-    accNodeList
+@codeDeps(GaussianVecAcc, LinearGaussianAcc, LinearGaussianVec,
+    LinearGaussianVecAcc, accNodeList
 )
 class FloorSetter(object):
     """Helper class for setting floors.
 
     __call__ takes a root acc as input, and mutably sets floors of any sub-accs
-    which are of an appropriate type (currently just LinearGaussianAcc and
-    LinearGaussianVecAcc).
+    which are of an appropriate type (currently just LinearGaussianAcc,
+    LinearGaussianVecAcc and GaussianVecAcc).
 
     The set of sub-nodes to consider is customizable by setting getNodes.
 
@@ -3435,16 +3587,17 @@ class FloorSetter(object):
     If lgHtsStyle is True then it is assumed that the last component of the
     input vector is the bias (this is weakly checked).
     """
-    def __init__(self, lgFloorMult = None, lgHtsStyle = False, getNodes = accNodeList,
-                 verbosity = 1):
+    def __init__(self, lgFloorMult = None, lgHtsStyle = False,
+                 gFloorMult = None, getNodes = accNodeList, verbosity = 1):
         self.lgFloorMult = lgFloorMult
         self.lgHtsStyle = lgHtsStyle
+        self.gFloorMult = gFloorMult
         self.getNodes = getNodes
         self.verbosity = verbosity
 
     def info(self):
-        return ('lgFloorMult = %r, lgHtsStyle = %r' %
-                (self.lgFloorMult, self.lgHtsStyle))
+        return ('lgFloorMult = %r, lgHtsStyle = %r, gFloorMult = %r' %
+                (self.lgFloorMult, self.lgHtsStyle, self.gFloorMult))
 
     def lgFloor(self, acc):
         assert isinstance(acc, LinearGaussianAcc)
@@ -3486,6 +3639,12 @@ class FloorSetter(object):
         varianceVec = accNew.estimateSingleAux()[0].varianceVec
         return varianceVec * self.lgFloorMult
 
+    def gFloorVec(self, acc):
+        assert isinstance(acc, GaussianVecAcc)
+        assert self.gFloorMult is not None
+        varianceVec = acc.estimateSingleAux()[0].varianceVec
+        return varianceVec * self.gFloorMult
+
     def __call__(self, accRoot):
         if self.verbosity >= 1:
             print ('flooring: setting floors with %s' % self.info())
@@ -3506,16 +3665,24 @@ class FloorSetter(object):
                            ' %s' % (acc.varianceFloorVec, varianceFloorVec))
                 acc.varianceFloorVec = varianceFloorVec
                 floorsSet += len(varianceFloorVec)
+            elif isinstance(acc, GaussianVecAcc):
+                varianceFloorVec = self.gFloorVec(acc)
+                if self.verbosity >= 2:
+                    print ('flooring:    changing variance floors from %s to'
+                           ' %s' % (acc.varianceFloorVec, varianceFloorVec))
+                acc.varianceFloorVec = varianceFloorVec
+                floorsSet += len(varianceFloorVec)
         if self.verbosity >= 1:
             print 'flooring: set %s floors' % floorsSet
 
-@codeDeps(BinaryLogisticClassifier, ConstantClassifier, LinearGaussian,
-    LinearGaussianVec, distNodeList
+@codeDeps(BinaryLogisticClassifier, ConstantClassifier, GaussianVec,
+    LinearGaussian, LinearGaussianVec, distNodeList
 )
 def reportFloored(distRoot, rootTag):
     dists = distNodeList(distRoot)
     taggedDistTypes = [('LG', LinearGaussian),
                        ('LGV', LinearGaussianVec),
+                       ('GV', GaussianVec),
                        ('CC', ConstantClassifier),
                        ('BLC', BinaryLogisticClassifier)]
     numFlooreds = [ np.array([0, 0]) for dtIndex, (dtTag, dt)
