@@ -3426,25 +3426,30 @@ class FloorSetter(object):
 
     The set of sub-nodes to consider is customizable by setting getNodes.
 
-    If htsStyle is False then the variance floor of each LinearGaussianAcc is
+    If lgHtsStyle is False then the variance floor of each LinearGaussianAcc is
     set to lgFloorMult times the variance of the dist estimated from that acc.
 
-    If htsStyle is True then the variance floor of each LinearGaussianAcc is
+    If lgHtsStyle is True then the variance floor of each LinearGaussianAcc is
     set to lgFloorMult times the variance of the output.
 
-    If htsStyle is True then it is assumed that the last component of the input
-    vector is the bias (this is weakly checked).
+    If lgHtsStyle is True then it is assumed that the last component of the
+    input vector is the bias (this is weakly checked).
     """
-    def __init__(self, lgFloorMult, htsStyle = False, getNodes = accNodeList,
+    def __init__(self, lgFloorMult = None, lgHtsStyle = False, getNodes = accNodeList,
                  verbosity = 1):
         self.lgFloorMult = lgFloorMult
-        self.htsStyle = htsStyle
+        self.lgHtsStyle = lgHtsStyle
         self.getNodes = getNodes
         self.verbosity = verbosity
 
+    def info(self):
+        return ('lgFloorMult = %r, lgHtsStyle = %r' %
+                (self.lgFloorMult, self.lgHtsStyle))
+
     def lgFloor(self, acc):
         assert isinstance(acc, LinearGaussianAcc)
-        if self.htsStyle:
+        assert self.lgFloorMult is not None
+        if self.lgHtsStyle:
             assert len(acc.sumTarget) >= 1
             # weak check that last component of input is bias
             assert np.allclose(acc.sumOuter[-1, -1], acc.occ)
@@ -3460,7 +3465,8 @@ class FloorSetter(object):
 
     def lgFloorVec(self, acc):
         assert isinstance(acc, LinearGaussianVecAcc)
-        if self.htsStyle:
+        assert self.lgFloorMult is not None
+        if self.lgHtsStyle:
             assert np.shape(acc.sumOuter)[1] >= 2
             # weak check that last component of input (i.e. second last
             #   component of combined inputOutput) is bias
@@ -3482,8 +3488,7 @@ class FloorSetter(object):
 
     def __call__(self, accRoot):
         if self.verbosity >= 1:
-            print ('flooring: setting floors with lgFloorMult = %s,'
-                   ' htsStyle = %s' % (self.lgFloorMult, self.htsStyle))
+            print ('flooring: setting floors with %s' % self.info())
         floorsSet = 0
         # (FIXME : slightly dodgy to change accs like this, but not too bad)
         for acc in self.getNodes(accRoot):
