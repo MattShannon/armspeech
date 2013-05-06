@@ -15,6 +15,17 @@ import logging
 import math
 from collections import defaultdict
 
+def partitionLabels(labels, fullQuestion):
+    labelValuer, question = fullQuestion
+    labelsYes = []
+    labelsNo = []
+    for label in labels:
+        if question(labelValuer(label)):
+            labelsYes.append(label)
+        else:
+            labelsNo.append(label)
+    return labelsYes, labelsNo
+
 @codeDeps()
 class ProtoLeaf(object):
     def __init__(self, dist, aux, auxRat, count):
@@ -130,7 +141,7 @@ class DecisionTreeClusterer(object):
         count = acc.count()
         return ProtoLeaf(dist, aux, auxRat, count)
 
-    def splitInfosIter(self, state, questionGroups):
+    def getPossSplitIter(self, state, questionGroups):
         """Returns an iterator with one SplitInfo for each allowed question.
 
         A clustering state is a proto-leaf together with info about its
@@ -173,13 +184,7 @@ class DecisionTreeClusterer(object):
                 print ('cluster:%squestion ( %s %s ) ( delta = %s )' %
                        (indent, labelValuer.shortRepr(), question.shortRepr(),
                         splitInfo.delta()))
-            labelsYes = []
-            labelsNo = []
-            for label in labels:
-                if question(labelValuer(label)):
-                    labelsYes.append(label)
-                else:
-                    labelsNo.append(label)
+            labelsYes, labelsNo = partitionLabels(labels, splitInfo.fullQuestion)
 
             return splitInfo, [
                 (labelsYes, isYesList + [True], splitInfo.protoYes),
@@ -211,7 +216,7 @@ class DecisionTreeClusterer(object):
         else:
             decideSplit = self.decideSplit
 
-        splitInfos = self.splitInfosIter(state, self.questionGroups)
+        splitInfos = self.getPossSplitIter(state, self.questionGroups)
         splitInfo, nextStates = decideSplit(state, splitInfos)
         splitInfoDict = dict()
         splitInfoDict[tuple(isYesList)] = splitInfo
