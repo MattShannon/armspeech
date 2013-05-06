@@ -170,10 +170,8 @@ class DecisionTreeClusterer(object):
                 if self.grower.allowSplit(splitInfo):
                     yield splitInfo
 
-    def decideSplit(self, state, splitInfos):
+    def getNextStates(self, state, splitInfo):
         labels, isYesList, protoNoSplit = state
-
-        splitInfo = maxSplit(protoNoSplit, splitInfos)
 
         if self.verbosity >= 2:
             indent = '    '+''.join([ ('|  ' if isYes else '   ')
@@ -186,22 +184,21 @@ class DecisionTreeClusterer(object):
                         splitInfo.delta()))
             labelsYes, labelsNo = partitionLabels(labels, splitInfo.fullQuestion)
 
-            return splitInfo, [
-                (labelsYes, isYesList + [True], splitInfo.protoYes),
-                (labelsNo, isYesList + [False], splitInfo.protoNo),
+            return [
+                (labelsYes, isYesList + (True,), splitInfo.protoYes),
+                (labelsNo, isYesList + (False,), splitInfo.protoNo),
             ]
         else:
             if self.verbosity >= 2:
                 print 'cluster:'+indent+'leaf'
-            return splitInfo, []
+            return []
 
     def maxSplitAndDecide(self, state, *splitInfos):
         labels, isYesList, protoNoSplit = state
 
-        splitInfo, nextStates = self.decideSplit(state, splitInfos)
-        splitInfoDict = dict()
-        splitInfoDict[tuple(isYesList)] = splitInfo
-        return splitInfoDict, nextStates
+        splitInfo = maxSplit(protoNoSplit, splitInfos)
+        nextStates = self.getNextStates(state, splitInfo)
+        return splitInfo, nextStates
 
     def computeBestSplitAndDecide(self, state):
         labels, isYesList, protoNoSplit = state
@@ -209,18 +206,17 @@ class DecisionTreeClusterer(object):
         if self.verbosity >= 3:
             indent = '    '+''.join([ ('|  ' if isYes else '   ')
                                       for isYes in isYesList ])
-            decideSplit = timed(
-                self.decideSplit,
+            maxSplitHere = timed(
+                maxSplit,
                 msg = 'cluster:%schoose split took' % indent
             )
         else:
-            decideSplit = self.decideSplit
+            maxSplitHere = maxSplit
 
         splitInfos = self.getPossSplitIter(state, self.questionGroups)
-        splitInfo, nextStates = decideSplit(state, splitInfos)
-        splitInfoDict = dict()
-        splitInfoDict[tuple(isYesList)] = splitInfo
-        return splitInfoDict, nextStates
+        splitInfo = maxSplitHere(protoNoSplit, splitInfos)
+        nextStates = self.getNextStates(state, splitInfo)
+        return splitInfo, nextStates
 
     def printNodeInfo(self, state):
         labels, isYesList, protoNoSplit = state
@@ -236,21 +232,16 @@ class DecisionTreeClusterer(object):
         print ('cluster:%s%snode ( count = %s , remaining labels = %s )' %
                (indent, extra, protoNoSplit.count, len(labels)))
 
-    def subTreeSplitInfoDict(self, stateInit):
-        splitInfoDict = dict()
+    def subTreeSplitInfoIter(self, stateInit):
         agenda = [stateInit]
         while agenda:
             state = agenda.pop()
+            labels, isYesList, protoNoSplit = state
             if self.verbosity >= 2:
                 self.printNodeInfo(state)
-            splitInfoDictOne, nextStates = (
-                self.computeBestSplitAndDecide(state)
-            )
-            assert all([ path not in splitInfoDict
-                         for path in splitInfoDictOne ])
-            splitInfoDict.update(splitInfoDictOne)
+            splitInfo, nextStates = self.computeBestSplitAndDecide(state)
             agenda.extend(reversed(nextStates))
-        return splitInfoDict
+            yield isYesList, splitInfo
 
     def combineSplitInfoDicts(self, splitInfoDicts):
         splitInfoDictTot = dict()
@@ -260,12 +251,12 @@ class DecisionTreeClusterer(object):
                 splitInfoDictTot[path] = splitInfo
         return splitInfoDictTot
 
-    def growTree(self, splitInfoDict):
-        def grow(isYesList):
-            splitInfo = splitInfoDict[tuple(isYesList)]
+    def constructTree(self, splitInfoDict):
+        def construct(isYesList):
+            splitInfo = splitInfoDict[isYesList]
             if self.grower.useSplit(splitInfo):
-                distYes, auxValuedRatYes = grow(isYesList + [True])
-                distNo, auxValuedRatNo = grow(isYesList + [False])
+                distYes, auxValuedRatYes = construct(isYesList + (True,))
+                distNo, auxValuedRatNo = construct(isYesList + (False,))
                 auxValuedRat = d.sumValuedRats([auxValuedRatYes,
                                                 auxValuedRatNo])
                 distNew = d.DecisionTreeNode(splitInfo.fullQuestion,
@@ -276,7 +267,7 @@ class DecisionTreeClusterer(object):
                 auxValuedRat = protoNoSplit.aux, protoNoSplit.auxRat
                 return d.DecisionTreeLeaf(protoNoSplit.dist), auxValuedRat
 
-        return grow([])
+        return construct(())
 
 @codeDeps(Grower)
 class SimpleGrower(Grower):
@@ -339,8 +330,10 @@ def decisionTreeCluster(labels, accForLabel, createAcc, questionGroups,
                ' minCount = %s and maxCount = %s' %
                (thresh, minCount, maxCount))
 
-    splitInfoDict = clusterer.subTreeSplitInfoDict((labels, [], protoRoot))
-    dist, (aux, auxRat) = clusterer.growTree(splitInfoDict)
+    splitInfoDict = dict(
+        clusterer.subTreeSplitInfoIter((labels, (), protoRoot))
+    )
+    dist, (aux, auxRat) = clusterer.constructTree(splitInfoDict)
 
     if verbosity >= 1:
         print 'cluster: %s leaves' % dist.countLeaves()
