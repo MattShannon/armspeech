@@ -269,7 +269,7 @@ class MdlGrowerSpec(object):
         return SimpleGrower(thresh, self.minCount, self.maxCount)
 
 @codeDeps(SimpleGrower, SplitInfo, d.DecisionTreeLeaf, d.DecisionTreeNode,
-    d.sumValuedRats, maxSplit, partitionLabels, removeTrivialQuestions, timed
+    d.sumValuedRats, maxSplit, partitionLabels, timed
 )
 class DecisionTreeClusterer(object):
     def __init__(self, accSummer, leafEstimator, grower, verbosity):
@@ -352,10 +352,8 @@ class DecisionTreeClusterer(object):
                         splitInfo.delta()))
             labelsYes, labelsNo = partitionLabels(labels,
                                                   splitInfo.fullQuestion)
-            questionGroupsYes = removeTrivialQuestions(labelsYes,
-                                                       questionGroups)
-            questionGroupsNo = removeTrivialQuestions(labelsNo,
-                                                      questionGroups)
+            questionGroupsYes = questionGroups
+            questionGroupsNo = questionGroups
 
             return [
                 (labelsYes, questionGroupsYes, isYesList + (True,),
