@@ -351,10 +351,12 @@ class DecisionTreeClusterer(object):
             extra = '|->'
         else:
             extra = '\->'
-        print ('cluster:%s%snode ( count = %s , remaining labels = %s ,'
-               ' remaining question groups = %s )' %
-               (indent, extra, protoNoSplit.count, len(labels),
-                len(questionGroups)))
+        print ('cluster:%s%snode ( count = %s ,'
+               ' remaining labels/QGs/Qs = %s/%s/%s )' %
+               (indent, extra, protoNoSplit.count,
+                len(labels), len(questionGroups),
+                sum([ len(questions)
+                      for _, questions in questionGroups ])))
 
     def subTreeSplitInfoIter(self, stateInit):
         agenda = [stateInit]
