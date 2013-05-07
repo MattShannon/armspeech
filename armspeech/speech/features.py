@@ -48,7 +48,17 @@ def readParamFile(paramFile, paramOrder, decode = None):
 #   than readParamFile!)
 @codeDeps()
 def readParamFileAlt(paramFile, paramOrder):
-    return np.reshape(np.fromfile(paramFile, dtype = np.float32), (-1, paramOrder)).astype(np.float64)
+    return np.reshape(
+        np.fromfile(paramFile, dtype = np.float32),
+        (-1, paramOrder)
+    ).astype(np.float64)
+
+@codeDeps()
+def readParamFileDoubleAlt(paramFile, paramOrder):
+    return np.reshape(
+        np.fromfile(paramFile, dtype = np.float64),
+        (-1, paramOrder)
+    )
 
 @codeDeps()
 def writeParamFile(outSeq, paramFile, paramOrder, encode = None):
@@ -58,6 +68,14 @@ def writeParamFile(outSeq, paramFile, paramOrder, encode = None):
             curr = out if encode is None else encode(out)
             bytes = floatLittleEndian.pack(*curr)
             f.write(bytes)
+
+@codeDeps()
+def writeParamFileAlt(outSeq, paramFile):
+    outSeq.astype(np.float32).tofile(paramFile)
+
+@codeDeps()
+def writeParamFileDoubleAlt(outSeq, paramFile):
+    outSeq.astype(np.float64).tofile(paramFile)
 
 @codeDeps()
 class NoneEncoder(object):
