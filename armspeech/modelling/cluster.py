@@ -119,6 +119,23 @@ class AccSummer(object):
                 fullQuestion = labelValuer, question
                 yield fullQuestion, accYes, accNo
 
+    def sumAccsForQuestionGroups(self, labels, questionGroups):
+        """Returns an iterator with yes and no accs for each question."""
+        labelValueToAccs = self.sumAccsFirstLevel(labels, questionGroups)
+
+        accsForQuestionGroups = []
+        for (
+            labelValueToAcc, (labelValuer, questions)
+        ) in zip(labelValueToAccs, questionGroups):
+            accsForQuestions = []
+            for question in questions:
+                accYes, accNo = self.sumAccsSecondLevel(labelValueToAcc,
+                                                        question)
+                accsForQuestions.append((question, accYes, accNo))
+            accsForQuestionGroups.append((labelValuer, accsForQuestions))
+
+        return accsForQuestionGroups
+
 @codeDeps()
 class ProtoLeaf(object):
     def __init__(self, dist, aux, auxRat, count):
@@ -251,8 +268,8 @@ class MdlGrowerSpec(object):
                    (self.mdlFactor, numParamsPerLeaf, countRoot))
         return SimpleGrower(thresh, self.minCount, self.maxCount)
 
-@codeDeps(SplitInfo, d.DecisionTreeLeaf, d.DecisionTreeNode, d.sumValuedRats,
-    maxSplit, partitionLabels, removeTrivialQuestions, timed
+@codeDeps(SimpleGrower, SplitInfo, d.DecisionTreeLeaf, d.DecisionTreeNode,
+    d.sumValuedRats, maxSplit, partitionLabels, removeTrivialQuestions, timed
 )
 class DecisionTreeClusterer(object):
     def __init__(self, accSummer, leafEstimator, grower, verbosity):
@@ -284,6 +301,42 @@ class DecisionTreeClusterer(object):
                                   protoYes, protoNo)
             if self.grower.allowSplit(splitInfo):
                 yield splitInfo
+
+    def getPossSplitsWithPrunedQuestionGroups(self, state, questionGroups):
+        """Returns a list of possible splits (and an updated questionGroups).
+
+        This method is like getPossSplitIter but returns a list rather than an
+        iterator, and returns an updated questionGroups with certain questions
+        that can never be selected in future (that is, lower in the tree)
+        removed.
+        """
+        labels, questionGroupsRemaining, isYesList, protoNoSplit = state
+
+        # this method makes assumptions about how allowSplit uses minCount
+        assert isinstance(self.grower, SimpleGrower)
+        minCount = self.grower.minCount
+
+        questionGroupsOut = []
+        splitInfos = []
+        for (
+            labelValuer, accsForQuestions
+        ) in self.accSummer.sumAccsForQuestionGroups(labels, questionGroups):
+            questionsOut = []
+            for question, accYes, accNo in accsForQuestions:
+                if accYes.count() >= minCount and accNo.count() >= minCount:
+                    questionsOut.append(question)
+
+                    protoYes = self.leafEstimator.estOrNone(accYes)
+                    protoNo = self.leafEstimator.estOrNone(accNo)
+                    fullQuestion = labelValuer, question
+                    splitInfo = SplitInfo(protoNoSplit, fullQuestion,
+                                          protoYes, protoNo)
+                    if self.grower.allowSplit(splitInfo):
+                        splitInfos.append(splitInfo)
+            if questionsOut:
+                questionGroupsOut.append((labelValuer, questionsOut))
+
+        return splitInfos, questionGroupsOut
 
     def getNextStates(self, state, splitInfo):
         labels, questionGroups, isYesList, protoNoSplit = state
