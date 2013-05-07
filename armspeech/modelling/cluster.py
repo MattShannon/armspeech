@@ -229,7 +229,7 @@ class ThreshGrowerSpec(object):
         self.maxCount = maxCount
 
     def __call__(self, distRoot, countRoot, verbosity = 1):
-        return SimpleGrower(thresh, self.minCount, self.maxCount)
+        return SimpleGrower(self.thresh, self.minCount, self.maxCount)
 
 @codeDeps(SimpleGrower, d.getDefaultParamSpec)
 class MdlGrowerSpec(object):
