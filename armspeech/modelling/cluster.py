@@ -223,7 +223,7 @@ class SimpleGrower(Grower):
 
 @codeDeps(SimpleGrower)
 class ThreshGrowerSpec(object):
-    def __init__(self, thresh, minCount, maxCount):
+    def __init__(self, thresh, minCount, maxCount = None):
         self.thresh = thresh
         self.minCount = minCount
         self.maxCount = maxCount
@@ -233,7 +233,7 @@ class ThreshGrowerSpec(object):
 
 @codeDeps(SimpleGrower, d.getDefaultParamSpec)
 class MdlGrowerSpec(object):
-    def __init__(self, mdlFactor, minCount, maxCount,
+    def __init__(self, mdlFactor, minCount, maxCount = None,
                  paramSpec = d.getDefaultParamSpec()):
         self.mdlFactor = mdlFactor
         self.minCount = minCount
