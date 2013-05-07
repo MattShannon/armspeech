@@ -3681,8 +3681,8 @@ class FloorSetter(object):
 def reportFloored(distRoot, rootTag):
     dists = distNodeList(distRoot)
     taggedDistTypes = [('LG', LinearGaussian),
-                       ('LGV', LinearGaussianVec),
-                       ('GV', GaussianVec),
+                       ('LG (vec)', LinearGaussianVec),
+                       ('G (vec)', GaussianVec),
                        ('CC', ConstantClassifier),
                        ('BLC', BinaryLogisticClassifier)]
     numFlooreds = [ np.array([0, 0]) for dtIndex, (dtTag, dt)
