@@ -367,14 +367,6 @@ class DecisionTreeClusterer(object):
             agenda.extend(reversed(nextStates))
             yield isYesList, splitInfo
 
-    def combineSplitInfoDicts(self, splitInfoDicts):
-        splitInfoDictTot = dict()
-        for splitInfoDict in splitInfoDicts:
-            for path, splitInfo in splitInfoDict.iteritems():
-                assert path not in splitInfoDictTot
-                splitInfoDictTot[path] = splitInfo
-        return splitInfoDictTot
-
     def constructTree(self, splitInfoDict):
         def construct(isYesList):
             splitInfo = splitInfoDict[isYesList]
