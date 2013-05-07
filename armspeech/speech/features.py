@@ -41,7 +41,7 @@ def readParamFile(paramFile, paramOrder, decode = None):
             bytes = f.read(paramOrder * 4)
             if bytes == '':
                 break
-            curr = list(floatLittleEndian.unpack(bytes))
+            curr = np.array(floatLittleEndian.unpack(bytes))
             yield curr if decode is None else decode(curr)
 # (FIXME : use instead of above??)
 # (N.B. perhaps surprisingly, it seems quite a bit slower (43 sec vs 60 sec in one test)
