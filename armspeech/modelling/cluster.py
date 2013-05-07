@@ -27,6 +27,27 @@ def partitionLabels(labels, fullQuestion):
             labelsNo.append(label)
     return labelsYes, labelsNo
 
+@codeDeps()
+def removeTrivialQuestions(labels, questionGroups):
+    if not labels:
+        return []
+    else:
+        questionGroupsOut = []
+        for labelValuer, questions in questionGroups:
+            questionsOut = []
+            for question in questions:
+                answerFirst = question(labelValuer(labels[0]))
+                trivial = True
+                for label in labels:
+                    if question(labelValuer(label)) != answerFirst:
+                        trivial = False
+                        break
+                if not trivial:
+                    questionsOut.append(question)
+            if questionsOut:
+                questionGroupsOut.append((labelValuer, questionsOut))
+        return questionGroupsOut
+
 @codeDeps(d.addAcc)
 class AccSummer(object):
     def __init__(self, accForLabel, createAcc):
@@ -172,6 +193,8 @@ class SimpleGrower(Grower):
         self.minCount = minCount
         self.maxCount = maxCount
 
+        assert self.minCount > 0.0
+
     def allowSplit(self, splitInfo):
         protoYes = splitInfo.protoYes
         protoNo = splitInfo.protoNo
@@ -229,12 +252,10 @@ class MdlGrowerSpec(object):
         return SimpleGrower(thresh, self.minCount, self.maxCount)
 
 @codeDeps(SplitInfo, d.DecisionTreeLeaf, d.DecisionTreeNode, d.sumValuedRats,
-    maxSplit, partitionLabels, timed
+    maxSplit, partitionLabels, removeTrivialQuestions, timed
 )
 class DecisionTreeClusterer(object):
-    def __init__(self, questionGroups, accSummer, leafEstimator, grower,
-                 verbosity):
-        self.questionGroups = questionGroups
+    def __init__(self, accSummer, leafEstimator, grower, verbosity):
         self.accSummer = accSummer
         self.leafEstimator = leafEstimator
         self.grower = grower
@@ -246,12 +267,13 @@ class DecisionTreeClusterer(object):
         A clustering state is a proto-leaf together with info about its
         position in the tree and enough info about the initial parts of the
         tree to allow clustering of the sub-tree with the proto-leaf as root.
-        (This initial tree info is just the labels remaining).
+        (This initial tree info consists of the labels remaining and the
+        non-trivial question groups remaining).
 
         For a given state and list of questionGroups, this function returns an
         iterator over splits, one for each allowed question.
         """
-        labels, isYesList, protoNoSplit = state
+        labels, questionGroupsRemaining, isYesList, protoNoSplit = state
 
         for (
             fullQuestion, accYes, accNo
@@ -264,7 +286,7 @@ class DecisionTreeClusterer(object):
                 yield splitInfo
 
     def getNextStates(self, state, splitInfo):
-        labels, isYesList, protoNoSplit = state
+        labels, questionGroups, isYesList, protoNoSplit = state
 
         if self.verbosity >= 2:
             indent = '    '+''.join([ ('|  ' if isYes else '   ')
@@ -275,11 +297,18 @@ class DecisionTreeClusterer(object):
                 print ('cluster:%squestion ( %s %s ) ( delta = %s )' %
                        (indent, labelValuer.shortRepr(), question.shortRepr(),
                         splitInfo.delta()))
-            labelsYes, labelsNo = partitionLabels(labels, splitInfo.fullQuestion)
+            labelsYes, labelsNo = partitionLabels(labels,
+                                                  splitInfo.fullQuestion)
+            questionGroupsYes = removeTrivialQuestions(labelsYes,
+                                                       questionGroups)
+            questionGroupsNo = removeTrivialQuestions(labelsNo,
+                                                       questionGroups)
 
             return [
-                (labelsYes, isYesList + (True,), splitInfo.protoYes),
-                (labelsNo, isYesList + (False,), splitInfo.protoNo),
+                (labelsYes, questionGroupsYes, isYesList + (True,),
+                 splitInfo.protoYes),
+                (labelsNo, questionGroupsNo, isYesList + (False,),
+                 splitInfo.protoNo),
             ]
         else:
             if self.verbosity >= 2:
@@ -287,14 +316,14 @@ class DecisionTreeClusterer(object):
             return []
 
     def maxSplitAndDecide(self, state, *splitInfos):
-        labels, isYesList, protoNoSplit = state
+        labels, questionGroups, isYesList, protoNoSplit = state
 
         splitInfo = maxSplit(protoNoSplit, splitInfos)
         nextStates = self.getNextStates(state, splitInfo)
         return splitInfo, nextStates
 
     def computeBestSplitAndDecide(self, state):
-        labels, isYesList, protoNoSplit = state
+        labels, questionGroups, isYesList, protoNoSplit = state
 
         if self.verbosity >= 3:
             indent = '    '+''.join([ ('|  ' if isYes else '   ')
@@ -306,13 +335,13 @@ class DecisionTreeClusterer(object):
         else:
             maxSplitHere = maxSplit
 
-        splitInfos = self.getPossSplitIter(state, self.questionGroups)
+        splitInfos = self.getPossSplitIter(state, questionGroups)
         splitInfo = maxSplitHere(protoNoSplit, splitInfos)
         nextStates = self.getNextStates(state, splitInfo)
         return splitInfo, nextStates
 
     def printNodeInfo(self, state):
-        labels, isYesList, protoNoSplit = state
+        labels, questionGroups, isYesList, protoNoSplit = state
 
         indent = '    '+''.join([ ('|  ' if isYes else '   ')
                                   for isYes in isYesList[:-1] ])
@@ -322,14 +351,16 @@ class DecisionTreeClusterer(object):
             extra = '|->'
         else:
             extra = '\->'
-        print ('cluster:%s%snode ( count = %s , remaining labels = %s )' %
-               (indent, extra, protoNoSplit.count, len(labels)))
+        print ('cluster:%s%snode ( count = %s , remaining labels = %s ,'
+               ' remaining question groups = %s )' %
+               (indent, extra, protoNoSplit.count, len(labels),
+                len(questionGroups)))
 
     def subTreeSplitInfoIter(self, stateInit):
         agenda = [stateInit]
         while agenda:
             state = agenda.pop()
-            labels, isYesList, protoNoSplit = state
+            labels, questionGroups, isYesList, protoNoSplit = state
             if self.verbosity >= 2:
                 self.printNodeInfo(state)
             splitInfo, nextStates = self.computeBestSplitAndDecide(state)
@@ -372,7 +403,9 @@ class ClusteringSpec(object):
         self.estimateTotAux = estimateTotAux
         self.verbosity = verbosity
 
-@codeDeps(AccSummer, DecisionTreeClusterer, LeafEstimator, d.Rat)
+@codeDeps(AccSummer, DecisionTreeClusterer, LeafEstimator, d.Rat,
+    removeTrivialQuestions
+)
 def decisionTreeCluster(clusteringSpec, labels, accForLabel, createAcc):
     verbosity = clusteringSpec.verbosity
     accSummer = AccSummer(accForLabel, createAcc)
@@ -380,16 +413,17 @@ def decisionTreeCluster(clusteringSpec, labels, accForLabel, createAcc):
     protoRoot = leafEstimator.est(accSummer.sumAccs(labels))
     grower = clusteringSpec.growerSpec(protoRoot.dist, protoRoot.count,
                                        verbosity = verbosity)
-    clusterer = DecisionTreeClusterer(clusteringSpec.questionGroups, accSummer,
-                                      leafEstimator, grower,
+    clusterer = DecisionTreeClusterer(accSummer, leafEstimator, grower,
                                       verbosity = verbosity)
     if verbosity >= 1:
         print ('cluster: decision tree clustering with thresh = %s and'
                ' minCount = %s and maxCount = %s' %
                (grower.thresh, grower.minCount, grower.maxCount))
 
+    questionGroups = removeTrivialQuestions(labels,
+                                            clusteringSpec.questionGroups)
     splitInfoDict = dict(
-        clusterer.subTreeSplitInfoIter((labels, (), protoRoot))
+        clusterer.subTreeSplitInfoIter((labels, questionGroups, (), protoRoot))
     )
     dist, (aux, auxRat) = clusterer.constructTree(splitInfoDict)
 
