@@ -15,6 +15,7 @@ import logging
 import math
 from collections import defaultdict
 
+@codeDeps()
 def partitionLabels(labels, fullQuestion):
     labelValuer, question = fullQuestion
     labelsYes = []
@@ -26,6 +27,77 @@ def partitionLabels(labels, fullQuestion):
             labelsNo.append(label)
     return labelsYes, labelsNo
 
+@codeDeps(d.addAcc)
+class AccSummer(object):
+    def __init__(self, accForLabel, createAcc):
+        self.accForLabel = accForLabel
+        self.createAcc = createAcc
+
+    def sumAccs(self, labels):
+        accForLabel = self.accForLabel
+        accTot = self.createAcc()
+        for label in labels:
+            d.addAcc(accTot, accForLabel(label))
+        return accTot
+
+    def sumAccsForQuestion(self, labels, fullQuestion):
+        labelValuer, question = fullQuestion
+        accForLabel = self.accForLabel
+
+        accYes = self.createAcc()
+        accNo = self.createAcc()
+        for label in labels:
+            acc = accForLabel(label)
+            if question(labelValuer(label)):
+                d.addAcc(accYes, acc)
+            else:
+                d.addAcc(accNo, acc)
+
+        return accYes, accNo
+
+    def sumAccsFirstLevel(self, labels, questionGroups):
+        accForLabel = self.accForLabel
+        numQuestionGroups = len(questionGroups)
+
+        labelValuers = [ labelValuer
+                         for labelValuer, questions in questionGroups ]
+        labelValueToAccs = [ defaultdict(self.createAcc)
+                             for _ in range(numQuestionGroups) ]
+
+        for label in labels:
+            acc = accForLabel(label)
+            for qgIndex in range(numQuestionGroups):
+                labelValuer = labelValuers[qgIndex]
+                labelValueToAcc = labelValueToAccs[qgIndex]
+                d.addAcc(labelValueToAcc[labelValuer(label)], acc)
+
+        # list contains one labelValueToAcc for each questionGroup
+        return labelValueToAccs
+
+    def sumAccsSecondLevel(self, labelValueToAcc, question):
+        accYes = self.createAcc()
+        accNo = self.createAcc()
+        for labelValue, acc in labelValueToAcc.iteritems():
+            if question(labelValue):
+                d.addAcc(accYes, acc)
+            else:
+                d.addAcc(accNo, acc)
+
+        return accYes, accNo
+
+    def sumAccsForQuestions(self, labels, questionGroups):
+        """Returns an iterator with yes and no accs for each question."""
+        labelValueToAccs = self.sumAccsFirstLevel(labels, questionGroups)
+
+        for (
+            labelValueToAcc, (labelValuer, questions)
+        ) in zip(labelValueToAccs, questionGroups):
+            for question in questions:
+                accYes, accNo = self.sumAccsSecondLevel(labelValueToAcc,
+                                                        question)
+                fullQuestion = labelValuer, question
+                yield fullQuestion, accYes, accNo
+
 @codeDeps()
 class ProtoLeaf(object):
     def __init__(self, dist, aux, auxRat, count):
@@ -33,6 +105,22 @@ class ProtoLeaf(object):
         self.aux = aux
         self.auxRat = auxRat
         self.count = count
+
+@codeDeps(ProtoLeaf, d.EstimationError)
+class LeafEstimator(object):
+    def __init__(self, estimateTotAux):
+        self.estimateTotAux = estimateTotAux
+
+    def est(self, acc):
+        dist, (aux, auxRat) = self.estimateTotAux(acc)
+        count = acc.count()
+        return ProtoLeaf(dist, aux, auxRat, count)
+
+    def estOrNone(self, acc):
+        try:
+            return self.est(acc)
+        except d.EstimationError:
+            return None
 
 @codeDeps(assert_allclose)
 class SplitInfo(object):
@@ -77,69 +165,80 @@ class Grower(object):
     def useSplit(self, splitInfo):
         abstract
 
-@codeDeps(ProtoLeaf, SplitInfo, d.DecisionTreeLeaf, d.DecisionTreeNode,
-    d.EstimationError, d.addAcc, d.sumValuedRats, maxSplit, timed
+@codeDeps(Grower)
+class SimpleGrower(Grower):
+    def __init__(self, thresh, minCount, maxCount = None):
+        self.thresh = thresh
+        self.minCount = minCount
+        self.maxCount = maxCount
+
+    def allowSplit(self, splitInfo):
+        protoYes = splitInfo.protoYes
+        protoNo = splitInfo.protoNo
+        return (protoYes is not None and
+                protoNo is not None and
+                protoYes.count >= self.minCount and
+                protoNo.count >= self.minCount)
+
+    def useSplit(self, splitInfo):
+        protoNoSplit = splitInfo.protoNoSplit
+        allowNoSplit = (self.maxCount is None or
+                        protoNoSplit.count <= self.maxCount)
+
+        if splitInfo.fullQuestion is not None and (
+            not allowNoSplit or splitInfo.delta() > self.thresh
+        ):
+            return True
+        else:
+            if not allowNoSplit:
+                assert splitInfo.fullQuestion is None
+                logging.warning('not splitting decision tree node even though'
+                                ' count = %s > maxCount = %s, since no further'
+                                ' splitting allowed' %
+                                (protoNoSplit.count, self.maxCount))
+            return False
+
+@codeDeps(SimpleGrower)
+class ThreshGrowerSpec(object):
+    def __init__(self, thresh, minCount, maxCount):
+        self.thresh = thresh
+        self.minCount = minCount
+        self.maxCount = maxCount
+
+    def __call__(self, distRoot, countRoot, verbosity = 1):
+        return SimpleGrower(thresh, self.minCount, self.maxCount)
+
+@codeDeps(SimpleGrower, d.getDefaultParamSpec)
+class MdlGrowerSpec(object):
+    def __init__(self, mdlFactor, minCount, maxCount,
+                 paramSpec = d.getDefaultParamSpec()):
+        self.mdlFactor = mdlFactor
+        self.minCount = minCount
+        self.maxCount = maxCount
+        self.paramSpec = paramSpec
+
+    def __call__(self, distRoot, countRoot, verbosity = 1):
+        numParamsPerLeaf = len(self.paramSpec.params(distRoot))
+        thresh = (
+            0.5 * self.mdlFactor * numParamsPerLeaf * math.log(countRoot + 1.0)
+        )
+        if verbosity >= 1:
+            print ('cluster: setting thresh using MDL: mdlFactor = %s and'
+                   ' numParamsPerLeaf = %s and count = %s' %
+                   (self.mdlFactor, numParamsPerLeaf, countRoot))
+        return SimpleGrower(thresh, self.minCount, self.maxCount)
+
+@codeDeps(SplitInfo, d.DecisionTreeLeaf, d.DecisionTreeNode, d.sumValuedRats,
+    maxSplit, partitionLabels, timed
 )
 class DecisionTreeClusterer(object):
-    def __init__(self, accForLabel, questionGroups, createAcc, estimateTotAux,
-                 grower, verbosity):
-        self.accForLabel = accForLabel
+    def __init__(self, questionGroups, accSummer, leafEstimator, grower,
+                 verbosity):
         self.questionGroups = questionGroups
-        self.createAcc = createAcc
-        self.estimateTotAux = estimateTotAux
+        self.accSummer = accSummer
+        self.leafEstimator = leafEstimator
         self.grower = grower
         self.verbosity = verbosity
-
-    def withGrower(self, grower):
-        return DecisionTreeClusterer(
-            self.accForLabel, self.questionGroups, self.createAcc,
-            self.estimateTotAux, grower, self.verbosity
-        )
-
-    def sumAccs(self, labels):
-        accForLabel = self.accForLabel
-        accTot = self.createAcc()
-        for label in labels:
-            d.addAcc(accTot, accForLabel(label))
-        return accTot
-
-    def sumAccsFirstLevel(self, labels, questionGroups):
-        accForLabel = self.accForLabel
-        numQuestionGroups = len(questionGroups)
-
-        labelValuers = [ labelValuer
-                         for labelValuer, questions in questionGroups ]
-        labelValueToAccs = [ defaultdict(self.createAcc)
-                             for _ in range(numQuestionGroups) ]
-
-        for label in labels:
-            acc = accForLabel(label)
-            for qgIndex in range(numQuestionGroups):
-                labelValuer = labelValuers[qgIndex]
-                labelValueToAcc = labelValueToAccs[qgIndex]
-                d.addAcc(labelValueToAcc[labelValuer(label)], acc)
-
-        # list contains one labelValueToAcc for each questionGroup
-        return labelValueToAccs
-
-    def sumAccsSecondLevel(self, labelValueToAcc, question):
-        accYes = self.createAcc()
-        accNo = self.createAcc()
-        for labelValue, acc in labelValueToAcc.iteritems():
-            if question(labelValue):
-                d.addAcc(accYes, acc)
-            else:
-                d.addAcc(accNo, acc)
-
-        return accYes, accNo
-
-    def getProtoLeaf(self, acc):
-        try:
-            dist, (aux, auxRat) = self.estimateTotAux(acc)
-        except d.EstimationError:
-            return None
-        count = acc.count()
-        return ProtoLeaf(dist, aux, auxRat, count)
 
     def getPossSplitIter(self, state, questionGroups):
         """Returns an iterator with one SplitInfo for each allowed question.
@@ -154,21 +253,15 @@ class DecisionTreeClusterer(object):
         """
         labels, isYesList, protoNoSplit = state
 
-        labelValueToAccs = self.sumAccsFirstLevel(labels, questionGroups)
-
         for (
-            labelValueToAcc, (labelValuer, questions)
-        ) in zip(labelValueToAccs, questionGroups):
-            for question in questions:
-                accYes, accNo = self.sumAccsSecondLevel(labelValueToAcc,
-                                                        question)
-                protoYes = self.getProtoLeaf(accYes)
-                protoNo = self.getProtoLeaf(accNo)
-                fullQuestion = labelValuer, question
-                splitInfo = SplitInfo(protoNoSplit, fullQuestion,
-                                      protoYes, protoNo)
-                if self.grower.allowSplit(splitInfo):
-                    yield splitInfo
+            fullQuestion, accYes, accNo
+        ) in self.accSummer.sumAccsForQuestions(labels, questionGroups):
+            protoYes = self.leafEstimator.estOrNone(accYes)
+            protoNo = self.leafEstimator.estOrNone(accNo)
+            splitInfo = SplitInfo(protoNoSplit, fullQuestion,
+                                  protoYes, protoNo)
+            if self.grower.allowSplit(splitInfo):
+                yield splitInfo
 
     def getNextStates(self, state, splitInfo):
         labels, isYesList, protoNoSplit = state
@@ -269,66 +362,31 @@ class DecisionTreeClusterer(object):
 
         return construct(())
 
-@codeDeps(Grower)
-class SimpleGrower(Grower):
-    def __init__(self, thresh, minCount, maxCount = None):
-        self.thresh = thresh
-        self.minCount = minCount
-        self.maxCount = maxCount
+@codeDeps(d.getDefaultEstimateTotAuxNoRevert)
+class ClusteringSpec(object):
+    def __init__(self, growerSpec, questionGroups,
+                 estimateTotAux = d.getDefaultEstimateTotAuxNoRevert(),
+                 verbosity = 2):
+        self.growerSpec = growerSpec
+        self.questionGroups = questionGroups
+        self.estimateTotAux = estimateTotAux
+        self.verbosity = verbosity
 
-    def allowSplit(self, splitInfo):
-        protoYes = splitInfo.protoYes
-        protoNo = splitInfo.protoNo
-        return (protoYes is not None and
-                protoNo is not None and
-                protoYes.count >= self.minCount and
-                protoNo.count >= self.minCount)
-
-    def useSplit(self, splitInfo):
-        protoNoSplit = splitInfo.protoNoSplit
-        allowNoSplit = (self.maxCount is None or
-                        protoNoSplit.count <= self.maxCount)
-
-        if splitInfo.fullQuestion is not None and (
-            not allowNoSplit or splitInfo.delta() > self.thresh
-        ):
-            return True
-        else:
-            if not allowNoSplit:
-                assert splitInfo.fullQuestion is None
-                logging.warning('not splitting decision tree node even though'
-                                ' count = %s > maxCount = %s, since no further'
-                                ' splitting allowed' %
-                                (protoNoSplit.count, self.maxCount))
-            return False
-
-@codeDeps(DecisionTreeClusterer, SimpleGrower, d.Rat,
-    d.getDefaultEstimateTotAuxNoRevert, d.getDefaultParamSpec
-)
-def decisionTreeCluster(labels, accForLabel, createAcc, questionGroups,
-                        thresh, minCount, maxCount = None, mdlFactor = 1.0,
-                        estimateTotAux = d.getDefaultEstimateTotAuxNoRevert(),
-                        paramSpec = d.getDefaultParamSpec(),
-                        verbosity = 2):
-    grower = SimpleGrower(thresh, minCount, maxCount)
-    clusterer = DecisionTreeClusterer(accForLabel, questionGroups, createAcc,
-                                      estimateTotAux, grower, verbosity)
-
-    protoRoot = clusterer.getProtoLeaf(clusterer.sumAccs(labels))
-    countRoot = protoRoot.count
-    if thresh is None:
-        numParamsPerLeaf = len(paramSpec.params(protoRoot.dist))
-        thresh = 0.5 * mdlFactor * numParamsPerLeaf * math.log(countRoot + 1.0)
-        if verbosity >= 1:
-            print ('cluster: setting thresh using MDL: mdlFactor = %s and'
-                   ' numParamsPerLeaf = %s and count = %s' %
-                   (mdlFactor, numParamsPerLeaf, countRoot))
-        grower = SimpleGrower(thresh, minCount, maxCount)
-        clusterer = clusterer.withGrower(grower)
+@codeDeps(AccSummer, DecisionTreeClusterer, LeafEstimator, d.Rat)
+def decisionTreeCluster(clusteringSpec, labels, accForLabel, createAcc):
+    verbosity = clusteringSpec.verbosity
+    accSummer = AccSummer(accForLabel, createAcc)
+    leafEstimator = LeafEstimator(clusteringSpec.estimateTotAux)
+    protoRoot = leafEstimator.est(accSummer.sumAccs(labels))
+    grower = clusteringSpec.growerSpec(protoRoot.dist, protoRoot.count,
+                                       verbosity = verbosity)
+    clusterer = DecisionTreeClusterer(clusteringSpec.questionGroups, accSummer,
+                                      leafEstimator, grower,
+                                      verbosity = verbosity)
     if verbosity >= 1:
         print ('cluster: decision tree clustering with thresh = %s and'
                ' minCount = %s and maxCount = %s' %
-               (thresh, minCount, maxCount))
+               (grower.thresh, grower.minCount, grower.maxCount))
 
     splitInfoDict = dict(
         clusterer.subTreeSplitInfoIter((labels, (), protoRoot))
@@ -336,6 +394,7 @@ def decisionTreeCluster(labels, accForLabel, createAcc, questionGroups,
     dist, (aux, auxRat) = clusterer.constructTree(splitInfoDict)
 
     if verbosity >= 1:
+        countRoot = protoRoot.count
         print 'cluster: %s leaves' % dist.countLeaves()
         print ('cluster: aux root = %s (%s) -> aux tree = %s (%s) (%s count)' %
                (protoRoot.aux / countRoot, d.Rat.toString(protoRoot.auxRat),

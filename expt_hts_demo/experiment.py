@@ -466,15 +466,18 @@ def globalToFullCtxCreateAcc(dist, bmi):
     """
     def globalToFullCtxCreateAccPartial(dist, createAccChild):
         if getElem(dist.tag, 0, 2) == 'stream':
+            _, streamName = dist.tag
             acVecDist = nodetree.findTaggedNode(dist,
                                                 lambda tag: tag == 'acVec')
             def createAcc():
                 return d.getDefaultCreateAcc()(acVecDist)
             return d.MappedInputAcc(tupleMap1,
                 d.createDiscreteAcc(bmi.subLabels, lambda subLabel:
-                    d.AutoGrowingDiscreteAcc(createAcc)
+                    d.AutoGrowingDiscreteAcc(createAcc).withTag(
+                        ('agAcc', streamName, subLabel)
+                    )
                 )
-            ).withTag(dist.tag)
+            ).withTag(('stream', streamName))
 
     return nodetree.getDagMap([globalToFullCtxCreateAccPartial,
                                d.defaultCreateAccPartial])(dist)
@@ -932,7 +935,8 @@ def doTimingInfoSystem(synthOutDir, figOutDir):
 
     printTime('finished timingInfo')
 
-@codeDeps(cluster.decisionTreeCluster, d.AutoGrowingDiscreteAcc, d.FloorSetter,
+@codeDeps(cluster.ClusteringSpec, cluster.MdlGrowerSpec,
+    cluster.decisionTreeCluster, d.AutoGrowingDiscreteAcc, d.FloorSetter,
     d.defaultEstimatePartial, evaluateVarious, getBmiForCorpus,
     getCorpusWithSubLabels, getInitDist1, globalToFullCtxCreateAcc, mixup,
     nodetree.getDagMap, printTime,
@@ -960,19 +964,33 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
     )
 
     print 'DEBUG: converting global dist to full ctx acc'
-    acc = globalToFullCtxCreateAcc(dist, bmi)
+    accOverall = globalToFullCtxCreateAcc(dist, bmi)
 
     print 'DEBUG: accumulating for decision tree clustering'
-    timed(corpus.accumulate)(acc)
+    timed(corpus.accumulate)(accOverall)
 
     questionGroups = questions_hts_demo.getFullContextQuestionGroups(bmi.phoneset)
 
+    clusteringSpecDict = dict()
+    for stream in corpus.streams:
+        for subLabel in bmi.subLabels:
+            tag = ('agAcc', stream.name, subLabel)
+            growerSpec = cluster.MdlGrowerSpec(
+                mdlFactor, minCount = 10.0, maxCount = None
+            )
+            clusteringSpecDict[tag] = cluster.ClusteringSpec(
+                growerSpec, questionGroups, verbosity = 3
+            )
+
     def decisionTreeClusterEstimatePartial(acc, estimateChild):
         if isinstance(acc, d.AutoGrowingDiscreteAcc):
-            return timed(cluster.decisionTreeCluster)(acc.accDict.keys(), lambda label: acc.accDict[label], acc.createAcc, questionGroups, thresh = None, mdlFactor = mdlFactor, minCount = 10.0, maxCount = None, verbosity = 3)
+            return timed(cluster.decisionTreeCluster)(
+                clusteringSpecDict[acc.tag], acc.accDict.keys(),
+                lambda label: acc.accDict[label], acc.createAcc
+            )
     decisionTreeClusterEstimate = nodetree.getDagMap([decisionTreeClusterEstimatePartial, d.defaultEstimatePartial])
 
-    dist = decisionTreeClusterEstimate(acc)
+    dist = decisionTreeClusterEstimate(accOverall)
     print
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'clustered')
 
