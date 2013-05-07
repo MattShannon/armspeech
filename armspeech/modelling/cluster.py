@@ -302,7 +302,7 @@ class DecisionTreeClusterer(object):
             questionGroupsYes = removeTrivialQuestions(labelsYes,
                                                        questionGroups)
             questionGroupsNo = removeTrivialQuestions(labelsNo,
-                                                       questionGroups)
+                                                      questionGroups)
 
             return [
                 (labelsYes, questionGroupsYes, isYesList + (True,),
