@@ -556,7 +556,7 @@ class OracleAcc(TermAcc):
         return OracleDist(tag = self.tag), (0.0, Rat.Exact)
 
 @codeDeps(EstimationError, ForwardRef(lambda: LinearGaussian), Rat, TermAcc,
-    mla.pinv
+    mla.solve
 )
 class LinearGaussianAcc(TermAcc):
     def __init__(self, distPrev = None, inputLength = None,
@@ -621,11 +621,12 @@ class LinearGaussianAcc(TermAcc):
         if self.occ == 0.0:
             raise EstimationError('require occ > 0')
         try:
-            sumOuterInv = mla.pinv(self.sumOuter)
-        except la.LinAlgError, detail:
-            raise EstimationError('could not compute pseudo-inverse: %s' %
-                                  detail)
-        coeff = np.dot(sumOuterInv, self.sumTarget)
+            coeff = mla.solve(self.sumOuter, self.sumTarget)
+        except la.LinAlgError:
+            try:
+                coeff = la.lstsq(self.sumOuter, self.sumTarget)[0]
+            except la.LinAlgError, detail:
+                raise EstimationError('could not solve: %s' % detail)
         variance = (self.sumSqr - np.dot(coeff, self.sumTarget)) / self.occ
 
         if variance < self.varianceFloor:
@@ -644,7 +645,7 @@ class LinearGaussianAcc(TermAcc):
         return distNew, self.auxFn(coeff, variance)
 
 @codeDeps(EstimationError, ForwardRef(lambda: LinearGaussianVec), Rat, TermAcc,
-    mla.pinv
+    mla.solve
 )
 class LinearGaussianVecAcc(TermAcc):
     def __init__(self, distPrev, tag = None):
@@ -758,11 +759,12 @@ class LinearGaussianVecAcc(TermAcc):
             varianceFloor = self.varianceFloorVec[vecIndex]
 
             try:
-                sumOuterInv = mla.pinv(sumOuterInput)
-            except la.LinAlgError, detail:
-                raise EstimationError('could not compute pseudo-inverse: %s' %
-                                      detail)
-            coeff = np.dot(sumOuterInv, sumTarget)
+                coeff = mla.solve(sumOuterInput, sumTarget)
+            except la.LinAlgError:
+                try:
+                    coeff = la.lstsq(sumOuterInput, sumTarget)[0]
+                except la.LinAlgError, detail:
+                    raise EstimationError('could not solve: %s' % detail)
             variance = (sumSqr - np.dot(coeff, sumTarget)) / self.occ
 
             if variance < varianceFloor:
@@ -948,7 +950,7 @@ class ConstantClassifierAcc(TermAcc):
         return distNew, self.auxFn(probs)
 
 @codeDeps(ForwardRef(lambda: BinaryLogisticClassifier), EstimationError, Rat,
-    TermAcc, mla.pinv
+    TermAcc, mla.solve
 )
 class BinaryLogisticClassifierAcc(TermAcc):
     def __init__(self, distPrev, tag = None):
@@ -1013,11 +1015,12 @@ class BinaryLogisticClassifierAcc(TermAcc):
         if self.occ == 0.0:
             raise EstimationError('require occ > 0')
         try:
-            sumOuterInv = mla.pinv(self.sumOuter)
-        except la.LinAlgError, detail:
-            raise EstimationError('could not compute pseudo-inverse: %s' %
-                                  detail)
-        coeffDelta = -np.dot(sumOuterInv, self.sumTarget)
+            coeffDelta = -mla.solve(self.sumOuter, self.sumTarget)
+        except la.LinAlgError:
+            try:
+                coeffDelta = -la.lstsq(self.sumOuter, self.sumTarget)[0]
+            except la.LinAlgError, detail:
+                raise EstimationError('could not solve: %s' % detail)
 
         # approximate constrained maximum likelihood
         step = 0.7
