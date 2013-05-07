@@ -366,14 +366,14 @@ class DecisionTreeClusterer(object):
                 print 'cluster:'+indent+'leaf'
             return []
 
-    def maxSplitAndDecide(self, state, *splitInfos):
+    def maxSplitAndNextStates(self, state, *splitInfos):
         labels, questionGroups, isYesList, protoNoSplit = state
 
         splitInfo = maxSplit(protoNoSplit, splitInfos)
         nextStates = self.getNextStates(state, splitInfo)
         return splitInfo, nextStates
 
-    def computeBestSplitAndDecide(self, state):
+    def computeBestSplitAndNextStates(self, state):
         labels, questionGroups, isYesList, protoNoSplit = state
 
         splitInfos, questionGroupsOut = (
@@ -412,13 +412,13 @@ class DecisionTreeClusterer(object):
             if self.verbosity >= 3:
                 indent = '    '+''.join([ ('|  ' if isYes else '   ')
                                           for isYes in isYesList ])
-                computeBestSplitAndDecide = timed(
-                    self.computeBestSplitAndDecide,
+                computeBestSplit = timed(
+                    self.computeBestSplitAndNextStates,
                     msg = 'cluster:%schoose and perform split took' % indent
                 )
             else:
-                computeBestSplitAndDecide = self.computeBestSplitAndDecide
-            splitInfo, nextStates = computeBestSplitAndDecide(state)
+                computeBestSplit = self.computeBestSplitAndNextStates
+            splitInfo, nextStates = computeBestSplit(state)
             agenda.extend(reversed(nextStates))
             yield isYesList, splitInfo
 
