@@ -48,7 +48,7 @@ def readParamFile(paramFile, paramOrder, decode = None):
 #   than readParamFile!)
 @codeDeps()
 def readParamFileAlt(paramFile, paramOrder):
-    return np.reshape(np.fromfile(paramFile, dtype = np.float32), (-1, paramOrder))
+    return np.reshape(np.fromfile(paramFile, dtype = np.float32), (-1, paramOrder)).astype(np.float64)
 
 @codeDeps()
 def writeParamFile(outSeq, paramFile, paramOrder, encode = None):
