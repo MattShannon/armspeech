@@ -866,7 +866,8 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
         if len(training) >= numPoints - 1:
             getTrainCG(dist, length = -2)(training)
 
-@codeDeps(assert_allclose, checkLots, check_est, cluster.decisionTreeCluster,
+@codeDeps(assert_allclose, checkLots, check_est, cluster.ClusteringSpec,
+    cluster.MdlGrowerSpec, cluster.decisionTreeCluster,
     d.AutoGrowingDiscreteAcc, d.ConstantClassifierAcc, d.LinearGaussianAcc,
     d.Memo, d.estimateInitialMixtureOfTwoExperts,
     gen_AutoregressiveSequenceDist, gen_BinaryLogisticClassifier,
@@ -1053,7 +1054,14 @@ class TestDist(unittest.TestCase):
                 acc = d.AutoGrowingDiscreteAcc(createAcc = lambda: d.LinearGaussianAcc(inputLength = dimIn, varianceFloor = 0.0))
                 for input, output, occ in training:
                     acc.add(input, output, occ)
-                return cluster.decisionTreeCluster(acc.accDict.keys(), lambda label: acc.accDict[label], acc.createAcc, questionGroups, thresh = None, minCount = 0.0, verbosity = 0)
+                growerSpec = cluster.MdlGrowerSpec(1.0, minCount = 0.1)
+                clusteringSpec = cluster.ClusteringSpec(
+                    growerSpec, questionGroups, verbosity = 0
+                )
+                return cluster.decisionTreeCluster(
+                    clusteringSpec, acc.accDict.keys(),
+                    lambda label: acc.accDict[label], acc.createAcc
+                )
             if True:
                 # check decision tree clustering runs at all
                 training = [ (input, dist.synth(input), math.exp(randn())) for input, index in zip(inputGen, range(numPoints)) ]
