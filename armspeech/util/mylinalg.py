@@ -43,7 +43,7 @@ def solve(*args, **kwargs):
     if np.shape(a) == (0, 0) and np.shape(b)[0] == 0:
         return np.zeros(np.shape(b))
     else:
-        return sla.solve(*args, **kwargs)
+        return la.solve(*args, **kwargs)
 
 @codeDeps()
 def cholesky(*args, **kwargs):
