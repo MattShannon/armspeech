@@ -378,9 +378,12 @@ class DecisionTreeClusterer(object):
     def computeBestSplitAndDecide(self, state):
         labels, questionGroups, isYesList, protoNoSplit = state
 
-        splitInfos = self.getPossSplitIter(state, questionGroups)
+        splitInfos, questionGroupsOut = (
+            self.getPossSplitsWithPrunedQuestionGroups(state, questionGroups)
+        )
         splitInfo = maxSplit(protoNoSplit, splitInfos)
-        nextStates = self.getNextStates(state, splitInfo)
+        stateNew = labels, questionGroupsOut, isYesList, protoNoSplit
+        nextStates = self.getNextStates(stateNew, splitInfo)
         return splitInfo, nextStates
 
     def printNodeInfo(self, state):
