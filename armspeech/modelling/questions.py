@@ -18,23 +18,29 @@ from codedep import codeDeps
 
 @codeDeps()
 class IdLabelValuer(object):
-    def __init__(self):
-        pass
+    def __init__(self, shortRepr = None):
+        if shortRepr is None:
+            shortRepr = 'label'
+        self._shortRepr = shortRepr
     def __repr__(self):
-        return 'IdLabelValuer()'
+        return 'IdLabelValuer(shortRepr=%r)' % self._shortRepr
     def shortRepr(self):
-        return 'label'
+        return self._shortRepr
     def __call__(self, label):
         return label
 
 @codeDeps()
 class AttrLabelValuer(object):
-    def __init__(self, labelKey):
+    def __init__(self, labelKey, shortRepr = None):
+        if shortRepr is None:
+            shortRepr = '%s' % labelKey
         self.labelKey = labelKey
+        self._shortRepr = shortRepr
     def __repr__(self):
-        return 'AttrLabelValuer('+repr(self.labelKey)+')'
+        return ('AttrLabelValuer(%r, shortRepr=%r)' %
+                (self.labelKey, self._shortRepr))
     def shortRepr(self):
-        return self.labelKey
+        return self._shortRepr
     def __call__(self, label):
         return getattr(label, self.labelKey)
 
