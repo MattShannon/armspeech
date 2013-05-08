@@ -438,21 +438,26 @@ def tupleMap1Phone(((label, subLabel), acInput)):
     nodetree.defaultMapPartial, nodetree.findTaggedNode, nodetree.getDagMap,
     tupleMap1Phone
 )
-def globalToMonophoneMap(dist, bmi):
+def globalToMonophoneMap(dist, bmi, tupleMap = tupleMap1Phone):
     """Converts a global dist to a monophone dist.
 
-    Expects stream tag to be ('stream', streamName) with input
-    ((label, subLabel), acInput).
-    Expects acoustic vector tag to be 'acVec' with input acInput.
+    Expects stream dist tag to be ('stream', streamName).
+    Expects acoustic vector dist tag to be 'acVec'.
+    There should be a single acoustic vector dist below each stream dist.
+    Input to stream dist should match input to tupleMap; in default
+    tupleMap1Phone case this input should be ((label, subLabel), acInput).
+    Output of tupleMap should be (subLabel, (phone, acInput)).
+    Input to acoustic vector dist should be acInput.
     Here acInput is arbitrary.
 
-    The returned dist maintains these properties.
+    The returned dist has the same tags and inputs for stream dists and
+    acoustic vector dists.
     """
     def globalToMonophoneMapPartial(dist, mapChild):
         if getElem(dist.tag, 0, 2) == 'stream':
             acVecDist = nodetree.findTaggedNode(dist,
                                                 lambda tag: tag == 'acVec')
-            return d.MappedInputDist(tupleMap1Phone,
+            return d.MappedInputDist(tupleMap,
                 d.createDiscreteDist(bmi.subLabels, lambda subLabel:
                     d.createDiscreteDist(bmi.phoneset.phoneList, lambda phone:
                         d.isolateDist(acVecDist)
@@ -467,15 +472,23 @@ def globalToMonophoneMap(dist, bmi):
     d.defaultCreateAccPartial, d.getDefaultCreateAcc, getElem,
     nodetree.findTaggedNode, nodetree.getDagMap, tupleMap1
 )
-def globalToFullCtxCreateAcc(dist, bmi):
+def globalToFullCtxCreateAcc(dist, bmi, tupleMap = tupleMap1):
     """Converts a global dist to a full context acc.
 
-    Expects stream tag to be ('stream', streamName) with input
-    ((label, subLabel), acInput).
-    Expects acoustic vector tag to be 'acVec' with input acInput.
+    Expects stream dist tag to be ('stream', streamName).
+    Expects acoustic vector dist tag to be 'acVec'.
+    There should be a single acoustic vector dist below each stream dist.
+    Input to stream dist should match input to tupleMap; in default
+    tupleMap1 case this input should be ((label, subLabel), acInput).
+    Output of tupleMap should be (subLabel, (phInput, acInput)).
+    Input to acoustic vector dist should be acInput.
     Here acInput is arbitrary.
+    Here phInput should be discrete and hashable but is otherwise arbitrary.
 
-    The returned dist maintains these properties.
+    The returned acc has the same tags and inputs for stream accs and
+    acoustic vector accs.
+    Below each stream acc an AutoGrowingDiscreteAcc is added with tag
+    ('agAcc', streamName, subLabel) and input (phInput, acInput).
     """
     def globalToFullCtxCreateAccPartial(dist, createAccChild):
         if getElem(dist.tag, 0, 2) == 'stream':
@@ -484,7 +497,7 @@ def globalToFullCtxCreateAcc(dist, bmi):
                                                 lambda tag: tag == 'acVec')
             def createAcc():
                 return d.getDefaultCreateAcc()(acVecDist)
-            return d.MappedInputAcc(tupleMap1,
+            return d.MappedInputAcc(tupleMap,
                 d.createDiscreteAcc(bmi.subLabels, lambda subLabel:
                     d.AutoGrowingDiscreteAcc(createAcc).withTag(
                         ('agAcc', streamName, subLabel)
