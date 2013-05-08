@@ -1017,9 +1017,7 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
 
     clusteringSpecDict = dict()
     for agTag in agTags:
-        growerSpec = cluster.MdlGrowerSpec(
-            mdlFactor, minCount = 10.0, maxCount = None
-        )
+        growerSpec = cluster.MdlGrowerSpec(mdlFactor, minCount = 10.0)
         clusteringSpecDict[agTag] = cluster.ClusteringSpec(
             growerSpec, questionGroups, verbosity = 3
         )
