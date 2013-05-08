@@ -982,7 +982,7 @@ def doTimingInfoSystem(synthOutDir, figOutDir):
     cluster.decisionTreeCluster, d.AutoGrowingDiscreteAcc, d.FloorSetter,
     d.defaultEstimatePartial, evaluateVarious, getBmiForCorpus,
     getCorpusWithSubLabels, getInitDist1, globalToFullCtxCreateAcc, mixup,
-    nodetree.getDagMap, printTime,
+    nodetree.findTaggedNode, nodetree.getDagMap, printTime,
     questions_hts_demo.getFullContextQuestionGroups, timed,
     trn.expectationMaximization
 )
@@ -1029,12 +1029,21 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
             growerSpec, questionGroups, verbosity = 3
         )
 
+    subDistDict = dict()
+    for agTag in agTags:
+        clusteringSpec = clusteringSpecDict[agTag]
+        agAcc = nodetree.findTaggedNode(accOverall, lambda tag: tag == agTag)
+        print 'cluster: clustering for tag %s' % (agTag,)
+        subDist = timed(cluster.decisionTreeCluster)(
+            clusteringSpec, agAcc.accDict.keys(),
+            lambda label: agAcc.accDict[label], agAcc.createAcc
+        )
+        subDistDict[agTag] = subDist
+
     def decisionTreeClusterEstimatePartial(acc, estimateChild):
         if isinstance(acc, d.AutoGrowingDiscreteAcc):
-            return timed(cluster.decisionTreeCluster)(
-                clusteringSpecDict[acc.tag], acc.accDict.keys(),
-                lambda label: acc.accDict[label], acc.createAcc
-            )
+            agTag = acc.tag
+            return subDistDict[agTag]
     decisionTreeClusterEstimate = nodetree.getDagMap([decisionTreeClusterEstimatePartial, d.defaultEstimatePartial])
 
     dist = decisionTreeClusterEstimate(accOverall)
