@@ -13,8 +13,10 @@ from codedep import codeDeps
 
 @codeDeps(d.SynthMethod)
 class Corpus(object):
-    def accumulate(self, acc):
-        for uttId in self.trainUttIds:
+    def accumulate(self, acc, uttIds = None):
+        if uttIds is None:
+            uttIds = self.trainUttIds
+        for uttId in uttIds:
             input, output = self.data(uttId)
             acc.add(input, output)
 
