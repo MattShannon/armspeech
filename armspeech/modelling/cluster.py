@@ -487,7 +487,11 @@ def decisionTreeCluster(clusteringSpec, labels, accForLabel, createAcc):
     verbosity = clusteringSpec.verbosity
     accSummer = AccSummer(accForLabel, createAcc)
     leafEstimator = LeafEstimator(clusteringSpec.estimateTotAux)
-    protoRoot = leafEstimator.est(accSummer.sumAccs(labels))
+    def getProtoRoot():
+        return leafEstimator.est(accSummer.sumAccs(labels))
+    if verbosity >= 3:
+        getProtoRoot = timed(getProtoRoot)
+    protoRoot = getProtoRoot()
     grower = clusteringSpec.growerSpec(protoRoot.dist, protoRoot.count,
                                        verbosity = verbosity)
     clusterer = DecisionTreeClusterer(accSummer, leafEstimator, grower,
