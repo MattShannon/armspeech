@@ -15,6 +15,7 @@ import armspeech.modelling.dist as d
 import armspeech.modelling.train as trn
 from armspeech.modelling import summarizer
 import armspeech.modelling.transform as xf
+import armspeech.modelling.questions as ques
 from armspeech.modelling import cluster
 from armspeech.modelling import wnet
 from armspeech.speech.features import stdCepDist, stdCepDistIncZero
@@ -434,6 +435,10 @@ def tupleMap1(((label, subLabel), acInput)):
 def tupleMap1Phone(((label, subLabel), acInput)):
     return subLabel, (label.phone, acInput)
 
+@codeDeps()
+def tupleMap2((((label, subLabel), framesLeft), acInput)):
+    return subLabel, ((label, framesLeft), acInput)
+
 @codeDeps(d.MappedInputDist, d.createDiscreteDist, d.isolateDist, getElem,
     nodetree.defaultMapPartial, nodetree.findTaggedNode, nodetree.getDagMap,
     tupleMap1Phone
@@ -616,6 +621,57 @@ def getInitDist2(bmi, corpus, alignmentSubLabels = 'sameAsBmi'):
                     createLeafDists[streamIndex]().withTag('acVec')
                 ).withTag(('stream', corpus.streams[streamIndex].name))
             )
+        )
+    )
+    return dist
+
+@codeDeps(ElemGetter, align.AlignmentToPhoneticSeqWithTiming,
+    align.StandardizeAlignment, createLinearGaussianVecDist,
+    createLinearGaussianVectorDist, d.AutoregressiveSequenceDist,
+    d.MappedInputDist, d.OracleDist, mgc_lf0_bap.computeFirstFrameAverage
+)
+def getInitDist3(bmi, corpus, alignmentSubLabels = 'sameAsBmi'):
+    """Produces an initial dist.
+
+    Expects input an alignment.
+    Expects output a sequence of acoustic frames.
+    Has stream tag ('stream', streamName) with input
+    ((phInput, framesLeft), acInput).
+    Has acoustic vector tag 'acVec' with input acInput.
+    Here phInput is typically a (label, subLabel) pair, acInput is typically
+    a sequence of vectors, and framesLeft is typically the number of frames
+    remaining in the current subLabel.
+    """
+    initialFrame = mgc_lf0_bap.computeFirstFrameAverage(corpus, bmi.mgcOrder,
+                                                        bmi.bapOrder)
+    if alignmentSubLabels == 'sameAsBmi':
+        alignmentSubLabels = bmi.subLabels
+    alignmentToPhoneticSeq = align.AlignmentToPhoneticSeqWithTiming(
+        mapAlignment = align.StandardizeAlignment(
+            corpus.subLabels, alignmentSubLabels
+        ),
+        # (framesBefore, framesAfter) -> framesAfter
+        mapTiming = ElemGetter(1, 2)
+    )
+    createLeafDists = [
+        (
+            (lambda: createLinearGaussianVecDist(bmi.mgcOrder, bmi.mgcDepth))
+            if bmi.mgcUseVec else
+            (lambda: createLinearGaussianVectorDist(bmi.mgcSummarizer))
+        ),
+        d.OracleDist,
+        d.OracleDist,
+    ]
+    getAcInput = ElemGetter(1, 2)
+    dist = d.AutoregressiveSequenceDist(
+        bmi.maxDepth,
+        alignmentToPhoneticSeq,
+        [ initialFrame for i in range(bmi.maxDepth) ],
+        bmi.frameSummarizer.createDist(True, lambda streamIndex:
+            # input is ((phInput, framesLeft), acInput)
+            d.MappedInputDist(getAcInput,
+                createLeafDists[streamIndex]().withTag('acVec')
+            ).withTag(('stream', corpus.streams[streamIndex].name))
         )
     )
     return dist
@@ -973,6 +1029,17 @@ def doTimingInfoSystem(synthOutDir, figOutDir):
 
     printTime('finished timingInfo')
 
+@codeDeps(ques.TupleIdLabelValuer, ques.getEqualityQuestions,
+    ques.getThreshQuestions
+)
+def getEqualityThreshQGFramesLeft(sortedValues, threshes = None):
+    values = sortedValues
+    if threshes is None:
+        threshes = sortedValues[1:]
+    return (ques.TupleIdLabelValuer(1, shortRepr = 'frames_left'),
+            (ques.getEqualityQuestions(values) +
+             ques.getThreshQuestions(threshes)))
+
 @codeDeps(cluster.ClusteringSpec, cluster.MdlGrowerSpec,
     cluster.decisionTreeCluster, d.AutoGrowingDiscreteAcc, d.FloorSetter,
     d.defaultEstimatePartial, evaluateVarious, getBmiForCorpus,
@@ -1050,6 +1117,100 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
     results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'clustered.4mix')
 
     printTime('finished clustered')
+
+@codeDeps(cluster.ClusteringSpec, cluster.MdlGrowerSpec,
+    cluster.decisionTreeCluster, d.AutoGrowingDiscreteAcc, d.FloorSetter,
+    d.defaultEstimatePartial, evaluateVarious, getBmiForCorpus,
+    getCorpusWithSubLabels, getEqualityThreshQGFramesLeft, getInitDist3,
+    globalToFullCtxCreateAcc, mixup, nodetree.findTaggedNode,
+    nodetree.getDagMap, printTime, ques.AttrLabelValuer,
+    ques.TupleAttrLabelValuer, questions_hts_demo.getFullContextQuestionGroups,
+    timed, trn.expectationMaximization, tupleMap2
+)
+def doDecisionTreeClusteredFramesRemainingSystem(synthOutDir, figOutDir,
+                                                 mdlFactor = 0.3,
+                                                 questionMaxDur = 20):
+    print
+    print 'DECISION TREE CLUSTERING WITH FRAMES REMAINING INFO'
+    printTime('started clustered_frames_remaining')
+
+    corpus = getCorpusWithSubLabels()
+    bmi = getBmiForCorpus(corpus)
+
+    print 'numSubLabels =', len(bmi.subLabels)
+
+    dist = getInitDist3(bmi, corpus)
+
+    # train global dist while setting floors
+    dist, _, _, _ = trn.expectationMaximization(
+        dist,
+        corpus.accumulate,
+        afterAcc = d.FloorSetter(lgFloorMult = 1e-3),
+        verbosity = 2,
+    )
+
+    labelQuestionGroups = questions_hts_demo.getFullContextQuestionGroups(
+        bmi.phoneset
+    )
+    questionGroups = []
+    for labelValuer, questions in labelQuestionGroups:
+        assert isinstance(labelValuer, ques.AttrLabelValuer)
+        labelValuerNew = ques.TupleAttrLabelValuer(
+            0, labelValuer.labelKey, shortRepr = labelValuer.labelKey
+        )
+        questionGroups.append((labelValuerNew, questions))
+    questionGroups.append(
+        getEqualityThreshQGFramesLeft(range(0, questionMaxDur))
+    )
+
+    agTags = [
+        ('agAcc', stream.name, subLabel)
+        for stream in corpus.streams
+        for subLabel in bmi.subLabels
+    ]
+
+    print 'DEBUG: converting global dist to full ctx acc'
+    accOverall = globalToFullCtxCreateAcc(dist, bmi, agTags = agTags,
+                                          tupleMap = tupleMap2)
+
+    print 'DEBUG: accumulating for decision tree clustering'
+    timed(corpus.accumulate)(accOverall)
+
+    clusteringSpecDict = dict()
+    for agTag in agTags:
+        growerSpec = cluster.MdlGrowerSpec(mdlFactor, minCount = 10.0)
+        clusteringSpecDict[agTag] = cluster.ClusteringSpec(
+            growerSpec, questionGroups, verbosity = 3
+        )
+
+    subDistDict = dict()
+    for agTag in agTags:
+        clusteringSpec = clusteringSpecDict[agTag]
+        agAcc = nodetree.findTaggedNode(accOverall, lambda tag: tag == agTag)
+        print 'cluster: clustering for tag %s' % (agTag,)
+        subDist = timed(cluster.decisionTreeCluster)(
+            clusteringSpec, agAcc.accDict.keys(),
+            lambda label: agAcc.accDict[label], agAcc.createAcc
+        )
+        subDistDict[agTag] = subDist
+
+    def decisionTreeClusterEstimatePartial(acc, estimateChild):
+        if isinstance(acc, d.AutoGrowingDiscreteAcc):
+            agTag = acc.tag
+            return subDistDict[agTag]
+    decisionTreeClusterEstimate = nodetree.getDagMap([decisionTreeClusterEstimatePartial, d.defaultEstimatePartial])
+
+    dist = decisionTreeClusterEstimate(accOverall)
+    print
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'clustered_frames_remaining')
+
+    dist = mixup(dist, corpus.accumulate)
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'clustered_frames_remaining.2mix')
+
+    dist = mixup(dist, corpus.accumulate)
+    results = evaluateVarious(dist, bmi, corpus, synthOutDir, figOutDir, exptTag = 'clustered_frames_remaining.4mix')
+
+    printTime('finished clustered_frames_remaining')
 
 @codeDeps(cluster.ClusteringSpec, cluster.MdlGrowerSpec,
     cluster.decisionTreeClusterInGreedyOrderWithTest, d.FloorSetter,
@@ -1528,7 +1689,8 @@ def doMonophoneNetSystemJobSet(synthOutDirArt, figOutDirArt):
 
     return resultsSeqArt, resultsNetArt
 
-@codeDeps(doDecisionTreeClusteredInvestigateMdl, doDecisionTreeClusteredSystem,
+@codeDeps(doDecisionTreeClusteredFramesRemainingSystem,
+    doDecisionTreeClusteredInvestigateMdl, doDecisionTreeClusteredSystem,
     doDumpCorpus, doFlatStartSystem, doGlobalSystem, doMonophoneNetSystem,
     doMonophoneSystem, doTimingInfoSystem, doTransformSystem
 )
@@ -1548,6 +1710,8 @@ def run(outDir):
     doTimingInfoSystem(synthOutDir, figOutDir)
 
     doDecisionTreeClusteredSystem(synthOutDir, figOutDir)
+
+    doDecisionTreeClusteredFramesRemainingSystem(synthOutDir, figOutDir)
 
     doDecisionTreeClusteredInvestigateMdl(synthOutDir, figOutDir,
                                           mdlFactor = 0.2)
