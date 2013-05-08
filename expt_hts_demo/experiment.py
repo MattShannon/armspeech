@@ -468,11 +468,11 @@ def globalToMonophoneMap(dist, bmi, tupleMap = tupleMap1Phone):
     return nodetree.getDagMap([globalToMonophoneMapPartial,
                                nodetree.defaultMapPartial])(dist)
 
-@codeDeps(d.AutoGrowingDiscreteAcc, d.MappedInputAcc, d.createDiscreteAcc,
-    d.defaultCreateAccPartial, d.getDefaultCreateAcc, getElem,
-    nodetree.findTaggedNode, nodetree.getDagMap, tupleMap1
+@codeDeps(ElemGetter, d.AutoGrowingDiscreteAcc, d.MappedInputAcc,
+    d.createDiscreteAcc, d.defaultCreateAccPartial, d.getDefaultCreateAcc,
+    getElem, nodetree.findTaggedNode, nodetree.getDagMap, tupleMap1
 )
-def globalToFullCtxCreateAcc(dist, bmi, tupleMap = tupleMap1):
+def globalToFullCtxCreateAcc(dist, bmi, agTags = None, tupleMap = tupleMap1):
     """Converts a global dist to a full context acc.
 
     Expects stream dist tag to be ('stream', streamName).
@@ -489,7 +489,15 @@ def globalToFullCtxCreateAcc(dist, bmi, tupleMap = tupleMap1):
     acoustic vector accs.
     Below each stream acc an AutoGrowingDiscreteAcc is added with tag
     ('agAcc', streamName, subLabel) and input (phInput, acInput).
+
+    If agTags is not None it should be a list of tags which are of the form
+    ('agAcc', streamName, subLabel).
+    In this case only the corresponding streams and subLabels have an
+    AutoGrowingDiscreteAcc created.
+    (This is mainly for debugging).
     """
+    getAcInput = ElemGetter(1, 2)
+
     def globalToFullCtxCreateAccPartial(dist, createAccChild):
         if getElem(dist.tag, 0, 2) == 'stream':
             _, streamName = dist.tag
@@ -499,8 +507,17 @@ def globalToFullCtxCreateAcc(dist, bmi, tupleMap = tupleMap1):
                 return d.getDefaultCreateAcc()(acVecDist)
             return d.MappedInputAcc(tupleMap,
                 d.createDiscreteAcc(bmi.subLabels, lambda subLabel:
-                    d.AutoGrowingDiscreteAcc(createAcc).withTag(
-                        ('agAcc', streamName, subLabel)
+                    (
+                        d.AutoGrowingDiscreteAcc(createAcc).withTag(
+                            ('agAcc', streamName, subLabel)
+                        )
+                    ) if (
+                        agTags is None or
+                        ('agAcc', streamName, subLabel) in agTags
+                    ) else (
+                        d.MappedInputAcc(getAcInput,
+                            createAcc()
+                        )
                     )
                 )
             ).withTag(('stream', streamName))
@@ -989,8 +1006,14 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
         verbosity = 2,
     )
 
+    agTags = [
+        ('agAcc', stream.name, subLabel)
+        for stream in corpus.streams
+        for subLabel in bmi.subLabels
+    ]
+
     print 'DEBUG: converting global dist to full ctx acc'
-    accOverall = globalToFullCtxCreateAcc(dist, bmi)
+    accOverall = globalToFullCtxCreateAcc(dist, bmi, agTags = agTags)
 
     print 'DEBUG: accumulating for decision tree clustering'
     timed(corpus.accumulate)(accOverall)
@@ -998,15 +1021,13 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
     questionGroups = questions_hts_demo.getFullContextQuestionGroups(bmi.phoneset)
 
     clusteringSpecDict = dict()
-    for stream in corpus.streams:
-        for subLabel in bmi.subLabels:
-            tag = ('agAcc', stream.name, subLabel)
-            growerSpec = cluster.MdlGrowerSpec(
-                mdlFactor, minCount = 10.0, maxCount = None
-            )
-            clusteringSpecDict[tag] = cluster.ClusteringSpec(
-                growerSpec, questionGroups, verbosity = 3
-            )
+    for agTag in agTags:
+        growerSpec = cluster.MdlGrowerSpec(
+            mdlFactor, minCount = 10.0, maxCount = None
+        )
+        clusteringSpecDict[agTag] = cluster.ClusteringSpec(
+            growerSpec, questionGroups, verbosity = 3
+        )
 
     def decisionTreeClusterEstimatePartial(acc, estimateChild):
         if isinstance(acc, d.AutoGrowingDiscreteAcc):
