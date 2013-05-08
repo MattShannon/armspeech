@@ -14,6 +14,8 @@ from codedep import codeDeps
 import logging
 import math
 from collections import defaultdict
+import itertools
+import heapq
 
 @codeDeps()
 def partitionLabels(labels, fullQuestion):
@@ -422,6 +424,34 @@ class DecisionTreeClusterer(object):
             agenda.extend(reversed(nextStates))
             yield isYesList, splitInfo
 
+    def subTreeSplitInfoIterInGreedyOrder(self, stateInit):
+        agenda = []
+
+        def agendaPush(state):
+            labels, questionGroups, isYesList, protoNoSplit = state
+            splitInfos, questionGroupsOut = (
+                self.getPossSplitsWithPrunedQuestionGroups(state,
+                                                           questionGroups)
+            )
+            splitInfo = maxSplit(protoNoSplit, splitInfos)
+            stateNew = labels, questionGroupsOut, isYesList, protoNoSplit
+            if self.grower.useSplit(splitInfo):
+                heapq.heappush(
+                    agenda,
+                    (-splitInfo.delta(), splitInfo, stateNew)
+                )
+
+        agendaPush(stateInit)
+        while agenda:
+            value, splitInfo, state = heapq.heappop(agenda)
+            labels, questionGroups, isYesList, protoNoSplit = state
+            if self.verbosity >= 2:
+                self.printNodeInfo(state)
+            nextStates = self.getNextStates(state, splitInfo)
+            for nextState in nextStates:
+                agendaPush(nextState)
+            yield isYesList, splitInfo
+
     def constructTree(self, splitInfoDict):
         def construct(isYesList):
             splitInfo = splitInfoDict[isYesList]
@@ -482,3 +512,70 @@ def decisionTreeCluster(clusteringSpec, labels, accForLabel, createAcc):
                 aux / countRoot, d.Rat.toString(auxRat),
                 countRoot))
     return dist
+
+@codeDeps(d.addAcc, d.getDefaultCreateAcc, partitionLabels)
+def getDeltaIter(labelsRoot, accForLabel, distRoot, splitIter,
+                 createAcc = d.getDefaultCreateAcc()):
+    def getLogProb(dist, labels):
+        acc = createAcc(dist)
+        for label in labels:
+            d.addAcc(acc, accForLabel(label))
+        return acc.logLike()
+
+    logProbDict = dict()
+    logProbDict[()] = getLogProb(distRoot, labelsRoot)
+    labelsDict = dict()
+    labelsDict[()] = labelsRoot
+
+    for isYesList, fullQuestion, distYes, distNo in splitIter:
+        logProb = logProbDict[isYesList]
+        labels = labelsDict[isYesList]
+
+        labelsYes, labelsNo = partitionLabels(labels, fullQuestion)
+        logProbYes = getLogProb(distYes, labelsYes)
+        logProbNo = getLogProb(distNo, labelsNo)
+
+        logProbDict[isYesList + (True,)] = logProbYes
+        logProbDict[isYesList + (False,)] = logProbNo
+        labelsDict[isYesList + (True,)] = labelsYes
+        labelsDict[isYesList + (False,)] = labelsNo
+
+        delta = logProbYes + logProbNo - logProb
+        yield delta
+
+@codeDeps(AccSummer, DecisionTreeClusterer, LeafEstimator, getDeltaIter,
+    removeTrivialQuestions
+)
+def decisionTreeClusterInGreedyOrderWithTest(clusteringSpec,
+                                             labels, labelsTest,
+                                             accForLabel, accForLabelTest,
+                                             createAcc):
+    verbosity = clusteringSpec.verbosity
+    accSummer = AccSummer(accForLabel, createAcc)
+    leafEstimator = LeafEstimator(clusteringSpec.estimateTotAux)
+    protoRoot = leafEstimator.est(accSummer.sumAccs(labels))
+    grower = clusteringSpec.growerSpec(protoRoot.dist, protoRoot.count,
+                                       verbosity = verbosity)
+    clusterer = DecisionTreeClusterer(accSummer, leafEstimator, grower,
+                                      verbosity = verbosity)
+    if verbosity >= 1:
+        print ('cluster: decision tree clustering with thresh = %s and'
+               ' minCount = %s and maxCount = %s' %
+               (grower.thresh, grower.minCount, grower.maxCount))
+
+    questionGroups = removeTrivialQuestions(labels,
+                                            clusteringSpec.questionGroups)
+
+    # (have to be a bit careful about iterators getting used up; not ideal)
+    splitInfoIter = clusterer.subTreeSplitInfoIterInGreedyOrder(
+        (labels, questionGroups, (), protoRoot)
+    )
+    splitInfoIter, splitInfoIter2 = itertools.tee(splitInfoIter, 2)
+    splitIter = ( (isYesList, splitInfo.fullQuestion,
+                   splitInfo.protoYes.dist, splitInfo.protoNo.dist)
+                  for isYesList, splitInfo in splitInfoIter2 )
+    deltaIterTrain = ( splitInfo.delta()
+                       for isYesList, splitInfo in splitInfoIter )
+    deltaIterTest = getDeltaIter(labelsTest, accForLabelTest, protoRoot.dist,
+                                 splitIter)
+    return itertools.izip(deltaIterTrain, deltaIterTest)

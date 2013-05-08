@@ -1051,6 +1051,90 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
 
     printTime('finished clustered')
 
+@codeDeps(cluster.ClusteringSpec, cluster.MdlGrowerSpec,
+    cluster.decisionTreeClusterInGreedyOrderWithTest, d.FloorSetter,
+    getBmiForCorpus, getCorpusWithSubLabels, getInitDist1,
+    globalToFullCtxCreateAcc, nodetree.findTaggedNode, printTime,
+    questions_hts_demo.getFullContextQuestionGroups, timed,
+    trn.expectationMaximization
+)
+def doDecisionTreeClusteredInvestigateMdl(synthOutDir, figOutDir,
+                                          mdlFactor = 0.3,
+                                          streamIndicesToUse = [0],
+                                          subLabelsToUse = None):
+    print
+    print 'DECISION TREE CLUSTERING INVESTIGATING MDL'
+    printTime('started clustered_investigate_mdl')
+
+    corpus = getCorpusWithSubLabels()
+    bmi = getBmiForCorpus(corpus)
+
+    print 'numSubLabels =', len(bmi.subLabels)
+
+    dist = getInitDist1(bmi, corpus)
+
+    # train global dist while setting floors
+    dist, _, _, _ = trn.expectationMaximization(
+        dist,
+        corpus.accumulate,
+        afterAcc = d.FloorSetter(lgFloorMult = 1e-3),
+        verbosity = 2,
+    )
+
+    if subLabelsToUse is None:
+        subLabelsToUse = bmi.subLabels
+    agTags = [
+        ('agAcc', corpus.streams[streamIndex].name, subLabel)
+        for streamIndex in streamIndicesToUse
+        for subLabel in subLabelsToUse
+    ]
+
+    print 'DEBUG: converting global dist to full ctx acc'
+    accOverall = globalToFullCtxCreateAcc(dist, bmi, agTags = agTags)
+
+    print 'DEBUG: accumulating for decision tree clustering'
+    timed(corpus.accumulate)(accOverall)
+
+    accTestOverall = globalToFullCtxCreateAcc(dist, bmi, agTags = agTags)
+    timed(corpus.accumulate)(accTestOverall, uttIds = corpus.testUttIds)
+
+    questionGroups = questions_hts_demo.getFullContextQuestionGroups(bmi.phoneset)
+
+    clusteringSpecDict = dict()
+    for agTag in agTags:
+        growerSpec = cluster.MdlGrowerSpec(mdlFactor, minCount = 10.0)
+        clusteringSpecDict[agTag] = cluster.ClusteringSpec(
+            growerSpec, questionGroups, verbosity = 0
+        )
+
+    for agTag in agTags:
+        clusteringSpec = clusteringSpecDict[agTag]
+        agAcc = nodetree.findTaggedNode(accOverall, lambda tag: tag == agTag)
+        agAccTest = nodetree.findTaggedNode(accTestOverall,
+                                            lambda tag: tag == agTag)
+        print
+        print 'cluster: clustering for tag %s' % (agTag,)
+
+        outMat = os.path.join(figOutDir, 'delta-%s-%s-s%s.mat' % agTag)
+        print '(writing output to %s)' % outMat
+        with open(outMat, 'w') as f:
+            for (
+                deltaTrain, deltaTest
+            ) in cluster.decisionTreeClusterInGreedyOrderWithTest(
+                clusteringSpec,
+                agAcc.accDict.keys(),
+                agAccTest.accDict.keys(),
+                lambda label: agAcc.accDict[label],
+                lambda label: agAccTest.accDict[label],
+                agAcc.createAcc
+            ):
+                print 'delta: %s %s' % (deltaTrain / agAcc.occ,
+                                        deltaTest / agAccTest.occ)
+                f.write('%s %s\n' % (deltaTrain / agAcc.occ,
+                                     deltaTest / agAccTest.occ))
+
+    printTime('finished clustered_investigate_mdl')
+
 @codeDeps(AttrGetter, ConstantFn, StandardizeAlignment,
     align.AlignmentToPhoneticSeq, convertToStudentResiduals,
     convertToTransformedGaussianResiduals, d.AutoregressiveSequenceDist,
@@ -1444,9 +1528,9 @@ def doMonophoneNetSystemJobSet(synthOutDirArt, figOutDirArt):
 
     return resultsSeqArt, resultsNetArt
 
-@codeDeps(doDecisionTreeClusteredSystem, doDumpCorpus, doFlatStartSystem,
-    doGlobalSystem, doMonophoneNetSystem, doMonophoneSystem, doTimingInfoSystem,
-    doTransformSystem
+@codeDeps(doDecisionTreeClusteredInvestigateMdl, doDecisionTreeClusteredSystem,
+    doDumpCorpus, doFlatStartSystem, doGlobalSystem, doMonophoneNetSystem,
+    doMonophoneSystem, doTimingInfoSystem, doTransformSystem
 )
 def run(outDir):
     synthOutDir = os.path.join(outDir, 'synth')
@@ -1464,6 +1548,9 @@ def run(outDir):
     doTimingInfoSystem(synthOutDir, figOutDir)
 
     doDecisionTreeClusteredSystem(synthOutDir, figOutDir)
+
+    doDecisionTreeClusteredInvestigateMdl(synthOutDir, figOutDir,
+                                          mdlFactor = 0.2)
 
     doTransformSystem(synthOutDir, figOutDir)
 
