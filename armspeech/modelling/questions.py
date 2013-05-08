@@ -45,6 +45,37 @@ class AttrLabelValuer(object):
         return getattr(label, self.labelKey)
 
 @codeDeps()
+class TupleIdLabelValuer(object):
+    def __init__(self, index, shortRepr = None):
+        if shortRepr is None:
+            shortRepr = '[%s]' % index
+        self.index = index
+        self._shortRepr = shortRepr
+    def __repr__(self):
+        return ('TupleIdLabelValuer(%r, shortRepr=%r)' %
+                (self.index, self._shortRepr))
+    def shortRepr(self):
+        return self._shortRepr
+    def __call__(self, label):
+        return label[self.index]
+
+@codeDeps()
+class TupleAttrLabelValuer(object):
+    def __init__(self, index, labelKey, shortRepr = None):
+        if shortRepr is None:
+            shortRepr = '[%s].%s' % (index, labelKey)
+        self.index = index
+        self.labelKey = labelKey
+        self._shortRepr = shortRepr
+    def __repr__(self):
+        return ('TupleAttrLabelValuer(%r, %r, shortRepr=%r)' %
+                (self.index, self.labelKey, self._shortRepr))
+    def shortRepr(self):
+        return self._shortRepr
+    def __call__(self, label):
+        return getattr(label[self.index], self.labelKey)
+
+@codeDeps()
 class Question(object):
     pass
 
