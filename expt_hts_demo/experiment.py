@@ -747,16 +747,11 @@ def doDumpCorpus(outDir):
         )
     )
 
-    def accumulate(acc, uttIds):
-        for uttId in uttIds:
-            input, output = corpus.data(uttId)
-            acc.add(input, output)
-
     trainAcc = d.getDefaultCreateAcc()(dist)
-    timed(accumulate)(trainAcc, corpus.trainUttIds)
+    timed(corpus.accumulate)(trainAcc, uttIds = corpus.trainUttIds)
 
     testAcc = d.getDefaultCreateAcc()(dist)
-    timed(accumulate)(testAcc, corpus.testUttIds)
+    timed(corpus.accumulate)(testAcc, uttIds = corpus.testUttIds)
 
     for desc, acc in [('train', trainAcc), ('test', testAcc)]:
         for outIndex in bmi.mgcSummarizer.outIndices:
