@@ -339,6 +339,19 @@ def createLinearGaussianVecDist(order, vecLength):
         )
     )
 
+@codeDeps(d.GaussianVec)
+def createGaussianVecDist(order):
+    """Creates a GaussianVec dist.
+
+    Expects input arbitrary.
+    Expects output a vector.
+    """
+    return d.GaussianVec(
+        meanVec = np.zeros((order,)),
+        varianceVec = np.ones((order,)),
+        varianceFloorVec = np.zeros((order,))
+    )
+
 @codeDeps(d.LinearGaussian, d.MappedInputDist, xf.AddBias)
 def createLinearGaussianWithTimingVectorDist(indexSpecSummarizer):
     """Creates a linear-Gaussian vector dist where input includes timing info.
