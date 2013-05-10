@@ -1279,6 +1279,11 @@ def doDecisionTreeClusteredInvestigateMdl(synthOutDir, figOutDir,
         outMat = os.path.join(figOutDir, 'delta-%s-%s-s%s.mat' % agTag)
         print '(writing output to %s)' % outMat
         with open(outMat, 'w') as f:
+            print ('(train frames = %s, test frames = %s)' %
+                   (agAcc.occ, agAccTest.occ))
+            f.write('# delta log probs due to splits\n')
+            f.write('# format: [train delta] [test delta] (both per frame)\n')
+            f.write('# frames: %s %s\n' % (agAcc.occ, agAccTest.occ))
             for (
                 deltaTrain, deltaTest
             ) in cluster.decisionTreeClusterInGreedyOrderWithTest(
