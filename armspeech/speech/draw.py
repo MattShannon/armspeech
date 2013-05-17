@@ -28,6 +28,7 @@ def partitionSeq(xs, numPartitions):
 def drawLabelledSeq(dataSeqs, labelSeqs, outPdf, figSizeRate = None,
                     fillBetween = [], xmin = None, xmax = None, ylims = None,
                     xlabel = None, ylabel = None, legend = None,
+                    lineStyles = None,
                     labelColors = ['red', 'purple', 'orange', 'blue']):
     import matplotlib.pyplot as plt
 
@@ -48,8 +49,9 @@ def drawLabelledSeq(dataSeqs, labelSeqs, outPdf, figSizeRate = None,
     for x, y1, y2 in fillBetween:
         ax.fill_between(x, y1, y2, color = 'blue', facecolor = 'blue',
                         linewidth = 0.2, alpha = 0.2)
-    for x, y in dataSeqs:
-        ax.plot(x, y, '-')
+    for dataSeqIndex, (x, y) in enumerate(dataSeqs):
+        lineStyle = None if lineStyles is None else lineStyles[dataSeqIndex]
+        ax.plot(x, y, '-' if lineStyle is None else lineStyle)
 
     trans = transforms.blended_transform_factory(ax.transData, ax.transAxes)
 
