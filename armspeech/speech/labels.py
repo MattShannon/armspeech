@@ -49,6 +49,18 @@ def readTwoLevelHtkLabFile(labFile, framePeriod, decodeHigh = lambda labelString
     return alignment
 
 @codeDeps()
+def writeHtkLabFile(alignment, labFile, framePeriod,
+                    encode = lambda label: label):
+    """Writes HTK-style label file."""
+    divisor = framePeriod * 1e7
+    with open(labFile, 'w') as f:
+        for startTime, endTime, label, subAlignment in alignment:
+            assert subAlignment is None
+            startTicks = int(startTime * divisor + 0.5)
+            endTicks = int(endTime * divisor + 0.5)
+            f.write('%s %s %s\n' % (startTicks, endTicks, encode(label)))
+
+@codeDeps()
 def getParseLabel(labelFormat, createLabel):
     labelReStrings = []
     decodeDict = dict()
