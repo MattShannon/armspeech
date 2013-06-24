@@ -191,7 +191,7 @@ def getDrawMgc(corpus, mgcIndices, figOutDir, ylims = None, includeGivenLabels =
             synthSeq = [ frame[streamIndex][mgcIndex] for frame in synthOutput ]
 
             outPdf = os.path.join(figOutDir, uttId+'-mgc'+str(mgcIndex)+'-'+exptTag+'.pdf')
-            draw.drawLabelledSeq([(trueSeqTime, trueSeq), (synthSeqTime, synthSeq)], partitionedLabelSeqs, outPdf = outPdf, figSizeRate = 10.0, ylims = ylims, colors = ['red', 'purple'])
+            draw.drawLabelledSeq([(trueSeqTime, trueSeq), (synthSeqTime, synthSeq)], partitionedLabelSeqs, outPdf = outPdf, figSizeRate = 10.0, ylims = ylims, labelColors = ['red', 'purple'])
     return drawMgc
 
 @codeDeps(evaluateLogProb, evaluateMgcArOutError, evaluateMgcOutError,
