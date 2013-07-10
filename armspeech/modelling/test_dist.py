@@ -160,7 +160,8 @@ def gen_MixtureOfTwoExperts(dimIn = 3, bias = False):
     blc, blcGen = gen_BinaryLogisticClassifier(dimIn, bias = bias)
     dist0 = gen_LinearGaussian(dimIn)[0]
     dist1 = gen_LinearGaussian(dimIn)[0]
-    dist = d.MixtureDist(blc, [dist0, dist1]).withTag(randTag())
+    dist = d.MixtureDist(blc, [dist0, dist1],
+                         hardMean = randBool()).withTag(randTag())
     return dist, blcGen
 
 @codeDeps(d.FixedValueDist, d.IdentifiableMixtureDist,

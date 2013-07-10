@@ -1079,7 +1079,9 @@ class MixtureAcc(Acc):
     def estimateAux(self, estimateChild):
         classDist = estimateChild(self.classAcc)
         regDists = [ estimateChild(regAcc) for regAcc in self.regAccs ]
-        distNew = MixtureDist(classDist, regDists, tag = self.tag)
+        distNew = MixtureDist(classDist, regDists,
+                              hardMean = self.distPrev.hardMean,
+                              tag = self.tag)
         return distNew, (self.entropy, Rat.LowerBound)
 
 @codeDeps(Acc, ForwardRef(lambda: IdentifiableMixtureDist), Rat)
@@ -2420,15 +2422,16 @@ class BinaryLogisticClassifier(TermDist):
 
 @codeDeps(Dist, MixtureAcc, SynthMethod, logSum, parseConcat)
 class MixtureDist(Dist):
-    def __init__(self, classDist, regDists, tag = None):
+    def __init__(self, classDist, regDists, hardMean, tag = None):
         self.numComps = len(regDists)
         self.classDist = classDist
         self.regDists = regDists
+        self.hardMean = hardMean
         self.tag = tag
 
     def __repr__(self):
-        return ('MixtureDist(%r, %r, tag=%r)' %
-                (self.classDist, self.regDists, self.tag))
+        return ('MixtureDist(%r, %r, hardMean=%r, tag=%r)' %
+                (self.classDist, self.regDists, self.hardMean, self.tag))
 
     def children(self):
         return [self.classDist] + self.regDists
@@ -2436,7 +2439,8 @@ class MixtureDist(Dist):
     def mapChildren(self, mapChild):
         classDist = mapChild(self.classDist)
         regDists = [ mapChild(regDist) for regDist in self.regDists ]
-        return MixtureDist(classDist, regDists, tag = self.tag)
+        return MixtureDist(classDist, regDists, hardMean = self.hardMean,
+                           tag = self.tag)
 
     def logProb(self, input, output):
         return logSum([ self.logProbComp(input, comp, output)
@@ -2470,11 +2474,19 @@ class MixtureDist(Dist):
 
     def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
         if method == SynthMethod.Meanish:
-            return np.sum([
-                regDist.synth(input, SynthMethod.Meanish, actualOutput) *
-                math.exp(self.classDist.logProb(input, comp))
-                for comp, regDist in enumerate(self.regDists)
-            ], axis = 0)
+            if self.hardMean:
+                # hard selection of mixture component
+                comp = np.argmax([ self.classDist.logProb(input, comp)
+                                   for comp in range(self.numComps) ])
+                regDist = self.regDists[comp]
+                return regDist.synth(input, SynthMethod.Meanish, actualOutput)
+            else:
+                # soft selection of mixture component
+                return np.sum([
+                    regDist.synth(input, SynthMethod.Meanish, actualOutput) *
+                    math.exp(self.classDist.logProb(input, comp))
+                    for comp, regDist in enumerate(self.regDists)
+                ], axis = 0)
         elif method == SynthMethod.Sample:
             comp = self.classDist.synth(input, method)
             output = self.regDists[comp].synth(input, method, actualOutput)
@@ -2490,7 +2502,9 @@ class MixtureDist(Dist):
 
     def parseChildren(self, params, parseChild):
         dists, paramsLeft = parseConcat(self.children(), params, parseChild)
-        return MixtureDist(dists[0], dists[1:], tag = self.tag), paramsLeft
+        distNew = MixtureDist(dists[0], dists[1:], hardMean = self.hardMean,
+                              tag = self.tag)
+        return distNew, paramsLeft
 
 @codeDeps(Dist, IdentifiableMixtureAcc, SynthMethod, parseConcat)
 class IdentifiableMixtureDist(Dist):
@@ -3705,7 +3719,7 @@ def reportFloored(distRoot, rootTag):
 @codeDeps(BinaryLogisticClassifier, LinearGaussian, LinearGaussianAcc,
     MixtureDist
 )
-def estimateInitialMixtureOfTwoExperts(acc):
+def estimateInitialMixtureOfTwoExperts(acc, hardMean = False):
     """Estimates an initial mixture of two experts from a LinearGaussianAcc.
 
     N.B. assumes last component of input vector is bias (only weakly checked).
@@ -3739,7 +3753,7 @@ def estimateInitialMixtureOfTwoExperts(acc):
                                variance, acc.varianceFloor)
         dist1 = LinearGaussian(np.array([mean + 0.2 * math.sqrt(variance)]),
                                variance, acc.varianceFloor)
-        return MixtureDist(blc, [dist0, dist1])
+        return MixtureDist(blc, [dist0, dist1], hardMean = hardMean)
     else:
         l, U = la.eigh(S - np.outer(mu, mu))
         eigVal, (index, eigVec) = max(zip(l, enumerate(np.transpose(U))))
@@ -3756,4 +3770,4 @@ def estimateInitialMixtureOfTwoExperts(acc):
         blc = BinaryLogisticClassifier(coeff, coeffFloor)
         dist0 = acc.estimateSingleAuxSafe()[0]
         dist1 = acc.estimateSingleAuxSafe()[0]
-        return MixtureDist(blc, [dist0, dist1])
+        return MixtureDist(blc, [dist0, dist1], hardMean = hardMean)
