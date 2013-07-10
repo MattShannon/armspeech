@@ -32,36 +32,35 @@ class TestPersist(unittest.TestCase):
         d = dict()
         d['a'] = l
         d['b'] = l
-        tempDir = TempDir()
-        def loc(suffix):
-            return os.path.join(tempDir.location, suffix)
-        location1 = loc('d1.pickle')
-        location2 = loc('d2.pickle')
-        persist.savePickle(location1, d)
-        persist.savePickle(location2, d)
-        dAgain1 = persist.loadPickle(location1)
-        dAgain2 = persist.loadPickle(location2)
-        assert d == dAgain1 == dAgain2
-        tempDir.remove()
+        with TempDir() as tempDir:
+            def loc(suffix):
+                return os.path.join(tempDir.location, suffix)
+            location1 = loc('d1.pickle')
+            location2 = loc('d2.pickle')
+            persist.savePickle(location1, d)
+            persist.savePickle(location2, d)
+            dAgain1 = persist.loadPickle(location1)
+            dAgain2 = persist.loadPickle(location2)
+            assert d == dAgain1 == dAgain2
     def test_shouldNotPickle(self):
-        tempDir = TempDir()
-        def loc(suffix):
-            return os.path.join(tempDir.location, suffix)
-        obj = self.createShouldNotPickle()
-        self.assertRaises(pickle.PicklingError, persist.savePickle, loc('obj.pickle'), obj)
-        tempDir.remove()
+        with TempDir() as tempDir:
+            def loc(suffix):
+                return os.path.join(tempDir.location, suffix)
+            obj = self.createShouldNotPickle()
+            self.assertRaises(pickle.PicklingError, persist.savePickle,
+                              loc('obj.pickle'), obj)
     def test_secHash_consistent(self):
         """Tests that secHashFile of a pickled object is the same as secHashObject of the object."""
         l = [1, 2, 3]
         d = dict()
         d['a'] = l
         d['b'] = l
-        tempDir = TempDir()
-        def loc(suffix):
-            return os.path.join(tempDir.location, suffix)
-        persist.savePickle(loc('d.pickle'), d)
-        assert persist.secHashFile(loc('d.pickle')) == persist.secHashObject(d)
-        tempDir.remove()
+        with TempDir() as tempDir:
+            def loc(suffix):
+                return os.path.join(tempDir.location, suffix)
+            persist.savePickle(loc('d.pickle'), d)
+            assert (persist.secHashFile(loc('d.pickle')) ==
+                    persist.secHashObject(d))
     def test_secHashString_characterization(self):
         """Simple characterization test for secHashString so we will know if it ever changes."""
         assert persist.secHashString('') == 'e69de29bb2d1d6434b8b29ae775ad8c2e48c5391'
