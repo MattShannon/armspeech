@@ -154,7 +154,7 @@ def gen_MixtureDist(dimIn):
     return gen_MixtureOfTwoExperts(dimIn = 3)
 
 @codeDeps(d.MixtureDist, gen_BinaryLogisticClassifier, gen_LinearGaussian,
-    randTag
+    randBool, randTag
 )
 def gen_MixtureOfTwoExperts(dimIn = 3, bias = False):
     blc, blcGen = gen_BinaryLogisticClassifier(dimIn, bias = bias)
