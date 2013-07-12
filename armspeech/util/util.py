@@ -40,6 +40,8 @@ class ElemGetter(object):
         self.index = index
         self.length = length
 
+        assert 0 <= self.index < self.length
+
     def __repr__(self):
         return 'ElemGetter(%r, %r)' % (self.index, self.length)
 
