@@ -12,6 +12,7 @@ from armspeech.util import persist
 from codedep import codeDeps, ForwardRef
 
 import os
+import random
 import tempfile
 import time
 
@@ -78,8 +79,14 @@ class LiveJob(object):
         else:
             return int(file(os.path.join(self.dir, 'status')).read().strip())
     def setStatus(self, status):
-        with open(os.path.join(self.dir, 'status'), 'w') as f:
+        statusFile = os.path.join(self.dir, 'status')
+        statusFileNew = os.path.join(
+            self.dir,
+            '.status.%s' % random.randint(0, 1000000)
+        )
+        with open(statusFileNew, 'w') as f:
             f.write(str(status)+'\n')
+        os.rename(statusFileNew, statusFile)
     def setStored(self):
         self.setStatus(0)
     def setSubmitted(self):
