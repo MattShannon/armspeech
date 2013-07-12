@@ -29,7 +29,8 @@ for pyFile in "$@"; do
     fi
 
     if [[ "`diff "$pyFile" "$pyFileNew"`" != "$diffExpected" ]]; then
-        vimdiff "$pyFile" "$pyFileNew"
+        # (below works around vim's "Input is not from a terminal" warning)
+        { echo "$pyFile"; echo "$pyFileNew"; } | xargs -d '\n' bash -c '</dev/tty vimdiff "$@"' ignoreme
     else
         echo "(no change)"
     fi

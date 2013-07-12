@@ -21,7 +21,8 @@ for pyFile in "$@"; do
     PYTHONPATH=. python check_codedep.py "$moduleName" > "$pyFileNew"
 
     if [[ "`diff -q "$pyFile" "$pyFileNew"`" != "" ]]; then
-        vimdiff "$pyFile" "$pyFileNew"
+        # (below works around vim's "Input is not from a terminal" warning)
+        { echo "$pyFile"; echo "$pyFileNew"; } | xargs -d '\n' bash -c '</dev/tty vimdiff "$@"' ignoreme
     else
         echo "(no change)"
     fi
