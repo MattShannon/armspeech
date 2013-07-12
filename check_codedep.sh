@@ -12,7 +12,7 @@ tmpDir=`mktemp -d`
 echo "(using temporary dir $tmpDir)"
 
 for pyFile in "$@"; do
-    moduleName="`echo "$pyFile" | sed -r 's%/%.%g;s/\.py$//'`"
+    moduleName="`echo "$pyFile" | sed -r 's%^\./%%;s%/%.%g;s/\.py$//'`"
     echo
     echo "(moduleName = $moduleName, pyFile = $pyFile)"
     echo
