@@ -203,10 +203,9 @@ class Grower(object):
 
 @codeDeps(Grower)
 class SimpleGrower(Grower):
-    def __init__(self, thresh, minCount, maxCount = None):
+    def __init__(self, thresh, minCount):
         self.thresh = thresh
         self.minCount = minCount
-        self.maxCount = maxCount
 
         assert self.minCount > 0.0
 
@@ -219,40 +218,26 @@ class SimpleGrower(Grower):
                 protoNo.count >= self.minCount)
 
     def useSplit(self, splitInfo):
-        protoNoSplit = splitInfo.protoNoSplit
-        allowNoSplit = (self.maxCount is None or
-                        protoNoSplit.count <= self.maxCount)
-
-        if splitInfo.fullQuestion is not None and (
-            not allowNoSplit or splitInfo.delta() > self.thresh
-        ):
-            return True
-        else:
-            if not allowNoSplit:
-                assert splitInfo.fullQuestion is None
-                logging.warning('not splitting decision tree node even though'
-                                ' count = %s > maxCount = %s, since no further'
-                                ' splitting allowed' %
-                                (protoNoSplit.count, self.maxCount))
-            return False
+        return (
+            splitInfo.fullQuestion is not None and
+            splitInfo.delta() > self.thresh
+        )
 
 @codeDeps(SimpleGrower)
 class ThreshGrowerSpec(object):
-    def __init__(self, thresh, minCount, maxCount = None):
+    def __init__(self, thresh, minCount):
         self.thresh = thresh
         self.minCount = minCount
-        self.maxCount = maxCount
 
     def __call__(self, distRoot, countRoot, verbosity = 1):
-        return SimpleGrower(self.thresh, self.minCount, self.maxCount)
+        return SimpleGrower(self.thresh, self.minCount)
 
 @codeDeps(SimpleGrower, d.getDefaultParamSpec)
 class MdlGrowerSpec(object):
-    def __init__(self, mdlFactor, minCount, maxCount = None,
+    def __init__(self, mdlFactor, minCount,
                  paramSpec = d.getDefaultParamSpec()):
         self.mdlFactor = mdlFactor
         self.minCount = minCount
-        self.maxCount = maxCount
         self.paramSpec = paramSpec
 
     def __call__(self, distRoot, countRoot, verbosity = 1):
@@ -264,7 +249,7 @@ class MdlGrowerSpec(object):
             print ('cluster: setting thresh using MDL: mdlFactor = %s and'
                    ' numParamsPerLeaf = %s and count = %s' %
                    (self.mdlFactor, numParamsPerLeaf, countRoot))
-        return SimpleGrower(thresh, self.minCount, self.maxCount)
+        return SimpleGrower(thresh, self.minCount)
 
 @codeDeps(SimpleGrower, SplitInfo, d.DecisionTreeLeaf, d.DecisionTreeNode,
     d.sumValuedRats, maxSplit, partitionLabels, timed
@@ -498,8 +483,8 @@ def decisionTreeCluster(clusteringSpec, labels, accForLabel, createAcc):
                                       verbosity = verbosity)
     if verbosity >= 1:
         print ('cluster: decision tree clustering with thresh = %s and'
-               ' minCount = %s and maxCount = %s' %
-               (grower.thresh, grower.minCount, grower.maxCount))
+               ' minCount = %s' %
+               (grower.thresh, grower.minCount))
 
     questionGroups = removeTrivialQuestions(labels,
                                             clusteringSpec.questionGroups)
@@ -564,8 +549,8 @@ def decisionTreeClusterInGreedyOrderWithTest(clusteringSpec,
                                       verbosity = verbosity)
     if verbosity >= 1:
         print ('cluster: decision tree clustering with thresh = %s and'
-               ' minCount = %s and maxCount = %s' %
-               (grower.thresh, grower.minCount, grower.maxCount))
+               ' minCount = %s' %
+               (grower.thresh, grower.minCount))
 
     questionGroups = removeTrivialQuestions(labels,
                                             clusteringSpec.questionGroups)
