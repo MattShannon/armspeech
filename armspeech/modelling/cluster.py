@@ -189,13 +189,9 @@ class SplitInfo(object):
         else:
             return self.protoYes.aux + self.protoNo.aux - self.protoNoSplit.aux
 
-@codeDeps(SplitInfo)
-def maxSplit(protoNoSplit, splitInfos):
-    bestSplitInfo = SplitInfo(protoNoSplit, None, None, None)
-    for splitInfo in splitInfos:
-        if splitInfo.delta() > bestSplitInfo.delta():
-            bestSplitInfo = splitInfo
-    return bestSplitInfo
+@codeDeps()
+def maxSplit(splitInfos):
+    return max(splitInfos, key = lambda splitInfo: splitInfo.delta())
 
 @codeDeps()
 class Grower(object):
@@ -371,7 +367,9 @@ class DecisionTreeClusterer(object):
     def maxSplitAndNextStates(self, state, *splitInfos):
         labels, questionGroups, isYesList, protoNoSplit = state
 
-        splitInfo = maxSplit(protoNoSplit, splitInfos)
+        splitInfos = list(splitInfos)
+        splitInfos.append(SplitInfo(protoNoSplit, None, None, None))
+        splitInfo = maxSplit(splitInfos)
         nextStates = self.getNextStates(state, splitInfo)
         return splitInfo, nextStates
 
@@ -381,7 +379,8 @@ class DecisionTreeClusterer(object):
         splitInfos, questionGroupsOut = (
             self.getPossSplitsWithPrunedQuestionGroups(state, questionGroups)
         )
-        splitInfo = maxSplit(protoNoSplit, splitInfos)
+        splitInfos.append(SplitInfo(protoNoSplit, None, None, None))
+        splitInfo = maxSplit(splitInfos)
         stateNew = labels, questionGroupsOut, isYesList, protoNoSplit
         nextStates = self.getNextStates(stateNew, splitInfo)
         return splitInfo, nextStates
@@ -433,7 +432,8 @@ class DecisionTreeClusterer(object):
                 self.getPossSplitsWithPrunedQuestionGroups(state,
                                                            questionGroups)
             )
-            splitInfo = maxSplit(protoNoSplit, splitInfos)
+            splitInfos.append(SplitInfo(protoNoSplit, None, None, None))
+            splitInfo = maxSplit(splitInfos)
             stateNew = labels, questionGroupsOut, isYesList, protoNoSplit
             if self.grower.useSplit(splitInfo):
                 heapq.heappush(
