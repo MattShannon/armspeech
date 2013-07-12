@@ -481,7 +481,7 @@ class ClusteringSpec(object):
         self.verbosity = verbosity
 
 @codeDeps(AccSummer, DecisionTreeClusterer, LeafEstimator, d.Rat,
-    removeTrivialQuestions
+    removeTrivialQuestions, timed
 )
 def decisionTreeCluster(clusteringSpec, labels, accForLabel, createAcc):
     verbosity = clusteringSpec.verbosity
