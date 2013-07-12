@@ -7,6 +7,8 @@
 
 
 import dist as d
+import transform as xf
+from armspeech.util.util import MapElem
 from armspeech.util.mathhelp import assert_allclose
 from armspeech.util.timing import timed
 from codedep import codeDeps
@@ -251,8 +253,8 @@ class MdlGrowerSpec(object):
                    (self.mdlFactor, numParamsPerLeaf, countRoot))
         return SimpleGrower(thresh, self.minCount)
 
-@codeDeps(SimpleGrower, SplitInfo, d.DecisionTreeLeaf, d.DecisionTreeNode,
-    d.sumValuedRats, maxSplit, partitionLabels, timed
+@codeDeps(MapElem, SimpleGrower, SplitInfo, d.DiscreteDist, d.MappedInputDist,
+    d.sumValuedRats, maxSplit, partitionLabels, timed, xf.DecisionTree
 )
 class DecisionTreeClusterer(object):
     def __init__(self, accSummer, leafEstimator, grower, verbosity):
@@ -438,22 +440,29 @@ class DecisionTreeClusterer(object):
             yield isYesList, splitInfo
 
     def constructTree(self, splitInfoDict):
+        leafProtos = []
         def construct(isYesList):
             splitInfo = splitInfoDict[isYesList]
             if self.grower.useSplit(splitInfo):
-                distYes, auxValuedRatYes = construct(isYesList + (True,))
-                distNo, auxValuedRatNo = construct(isYesList + (False,))
-                auxValuedRat = d.sumValuedRats([auxValuedRatYes,
-                                                auxValuedRatNo])
-                distNew = d.DecisionTreeNode(splitInfo.fullQuestion,
-                                             distYes, distNo)
-                return distNew, auxValuedRat
+                treeNo = construct(isYesList + (False,))
+                treeYes = construct(isYesList + (True,))
+                labelValuer, question = splitInfo.fullQuestion
+                return (splitInfo.fullQuestion, [treeNo, treeYes])
             else:
-                protoNoSplit = splitInfo.protoNoSplit
-                auxValuedRat = protoNoSplit.aux, protoNoSplit.auxRat
-                return d.DecisionTreeLeaf(protoNoSplit.dist), auxValuedRat
+                leafProtos.append(splitInfo.protoNoSplit)
+                return len(leafProtos) - 1
+        tree = construct(())
 
-        return construct(())
+        leafDists = [ leafProto.dist for leafProto in leafProtos ]
+        auxValuedRat = d.sumValuedRats([ (leafProto.aux, leafProto.auxRat)
+                                         for leafProto in leafProtos ])
+        decTree = xf.DecisionTree(tree, numLeaves = len(leafProtos))
+        dist = d.MappedInputDist(MapElem(0, 2, decTree),
+            d.DiscreteDist(range(decTree.numLeaves),
+                dict(enumerate(leafDists))
+            )
+        )
+        return dist, auxValuedRat
 
 @codeDeps(d.getDefaultEstimateTotAuxNoRevert)
 class ClusteringSpec(object):
@@ -495,7 +504,8 @@ def decisionTreeCluster(clusteringSpec, labels, accForLabel, createAcc):
 
     if verbosity >= 1:
         countRoot = protoRoot.count
-        print 'cluster: %s leaves' % dist.countLeaves()
+        # (FIXME : leaf computation relies on specific form of dist)
+        print 'cluster: %s leaves' % len(dist.dist.distDict)
         print ('cluster: aux root = %s (%s) -> aux tree = %s (%s) (%s count)' %
                (protoRoot.aux / countRoot, d.Rat.toString(protoRoot.auxRat),
                 aux / countRoot, d.Rat.toString(auxRat),

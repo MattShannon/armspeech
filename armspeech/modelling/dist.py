@@ -40,8 +40,10 @@ def eval_local(reprString):
     from transform import LinearTransform, ShiftOutputTransform
     from transform import VectorizeTransform, DotProductTransform
     from transform import PolynomialTransform1D
+    from transform import DecisionTree
     from wnet import ConcreteNet
     from armspeech.util.mathhelp import AsArray
+    from armspeech.util.util import MapElem
 
     from numpy import array, zeros, dtype, eye, float64, Inf, inf
 
@@ -1251,78 +1253,6 @@ class AutoGrowingDiscreteAcc(Acc):
                 self.accDict[label] = self.createAcc()
             ret.append((self.accDict[label], acc.accDict[label]))
         return ret
-
-@codeDeps(Acc)
-class DecisionTreeAcc(Acc):
-    pass
-
-@codeDeps(DecisionTreeAcc, ForwardRef(lambda: DecisionTreeNode), Rat)
-class DecisionTreeAccNode(DecisionTreeAcc):
-    def __init__(self, fullQuestion, accYes, accNo, tag = None):
-        self.fullQuestion = fullQuestion
-        self.accYes = accYes
-        self.accNo = accNo
-        self.tag = tag
-
-        self.occ = 0.0
-
-    def children(self):
-        return [self.accYes, self.accNo]
-
-    def add(self, input, output, occ = 1.0):
-        label, acInput = input
-        self.occ += occ
-        labelValuer, question = self.fullQuestion
-        if question(labelValuer(label)):
-            self.accYes.add(input, output, occ)
-        else:
-            self.accNo.add(input, output, occ)
-
-    def addAccSingle(self, acc):
-        assert self.fullQuestion == acc.fullQuestion
-        self.occ += acc.occ
-
-    def logLikeSingle(self):
-        return 0.0
-
-    def derivParamsSingle(self):
-        return []
-
-    def estimateAux(self, estimateChild):
-        distYes = estimateChild(self.accYes)
-        distNo = estimateChild(self.accNo)
-        distNew = DecisionTreeNode(self.fullQuestion, distYes, distNo,
-                                   tag = self.tag)
-        return distNew, (0.0, Rat.Exact)
-
-@codeDeps(DecisionTreeAcc, ForwardRef(lambda: DecisionTreeLeaf), Rat)
-class DecisionTreeAccLeaf(DecisionTreeAcc):
-    def __init__(self, acc, tag = None):
-        self.acc = acc
-        self.tag = tag
-
-        self.occ = 0.0
-
-    def children(self):
-        return [self.acc]
-
-    def add(self, input, output, occ = 1.0):
-        label, acInput = input
-        self.occ += occ
-        self.acc.add(acInput, output, occ)
-
-    def addAccSingle(self, acc):
-        self.occ += acc.occ
-
-    def logLikeSingle(self):
-        return 0.0
-
-    def derivParamsSingle(self):
-        return []
-
-    def estimateAux(self, estimateChild):
-        dist = estimateChild(self.acc)
-        return DecisionTreeLeaf(dist, tag = self.tag), (0.0, Rat.Exact)
 
 @codeDeps(Acc, ForwardRef(lambda: MappedInputDist), Rat)
 class MappedInputAcc(Acc):
@@ -2710,132 +2640,6 @@ class DiscreteDist(Dist):
         distNew = DiscreteDist(self.keys, dict(zip(self.keys, dists)),
                                tag = self.tag)
         return distNew, paramsLeft
-
-@codeDeps(Dist)
-class DecisionTree(Dist):
-    pass
-
-@codeDeps(DecisionTree, DecisionTreeAccNode, SynthMethod)
-class DecisionTreeNode(DecisionTree):
-    def __init__(self, fullQuestion, distYes, distNo, tag = None):
-        self.fullQuestion = fullQuestion
-        self.distYes = distYes
-        self.distNo = distNo
-        self.tag = tag
-
-    def __repr__(self):
-        return ('DecisionTreeNode(%r, %r, %r, tag=%r)' %
-                (self.fullQuestion, self.distYes, self.distNo, self.tag))
-
-    def children(self):
-        return [self.distYes, self.distNo]
-
-    def mapChildren(self, mapChild):
-        return DecisionTreeNode(self.fullQuestion, mapChild(self.distYes),
-                                mapChild(self.distNo), tag = self.tag)
-
-    def logProb(self, input, output):
-        label, acInput = input
-        labelValuer, question = self.fullQuestion
-        if question(labelValuer(label)):
-            return self.distYes.logProb(input, output)
-        else:
-            return self.distNo.logProb(input, output)
-
-    def logProbDerivInput(self, input, output):
-        label, acInput = input
-        labelValuer, question = self.fullQuestion
-        if question(labelValuer(label)):
-            return self.distYes.logProbDerivInput(input, output)
-        else:
-            return self.distNo.logProbDerivInput(input, output)
-
-    def logProbDerivOutput(self, input, output):
-        label, acInput = input
-        labelValuer, question = self.fullQuestion
-        if question(labelValuer(label)):
-            return self.distYes.logProbDerivOutput(input, output)
-        else:
-            return self.distNo.logProbDerivOutput(input, output)
-
-    def createAcc(self, createAccChild):
-        return DecisionTreeAccNode(self.fullQuestion,
-                                   createAccChild(self.distYes),
-                                   createAccChild(self.distNo),
-                                   tag = self.tag)
-
-    def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
-        label, acInput = input
-        labelValuer, question = self.fullQuestion
-        if question(labelValuer(label)):
-            return self.distYes.synth(input, method, actualOutput)
-        else:
-            return self.distNo.synth(input, method, actualOutput)
-
-    def countLeaves(self):
-        return self.distYes.countLeaves() + self.distNo.countLeaves()
-
-    def paramsSingle(self):
-        return []
-
-    def parseSingle(self, params):
-        return self, params
-
-    def parseChildren(self, params, parseChild):
-        paramsLeft = params
-        distYes, paramsLeft = parseChild(self.distYes, paramsLeft)
-        distNo, paramsLeft = parseChild(self.distNo, paramsLeft)
-        distNew = DecisionTreeNode(self.fullQuestion, distYes, distNo,
-                                   tag = self.tag)
-        return distNew, paramsLeft
-
-@codeDeps(DecisionTree, DecisionTreeAccLeaf, SynthMethod)
-class DecisionTreeLeaf(DecisionTree):
-    def __init__(self, dist, tag = None):
-        self.dist = dist
-        self.tag = tag
-
-    def __repr__(self):
-        return ('DecisionTreeLeaf(%r, tag=%r)' %
-                (self.dist, self.tag))
-
-    def children(self):
-        return [self.dist]
-
-    def mapChildren(self, mapChild):
-        return DecisionTreeLeaf(mapChild(self.dist), tag = self.tag)
-
-    def logProb(self, input, output):
-        label, acInput = input
-        return self.dist.logProb(acInput, output)
-
-    def logProbDerivInput(self, input, output):
-        label, acInput = input
-        return self.dist.logProbDerivInput(acInput, output)
-
-    def logProbDerivOutput(self, input, output):
-        label, acInput = input
-        return self.dist.logProbDerivOutput(acInput, output)
-
-    def createAcc(self, createAccChild):
-        return DecisionTreeAccLeaf(createAccChild(self.dist), tag = self.tag)
-
-    def synth(self, input, method = SynthMethod.Sample, actualOutput = None):
-        label, acInput = input
-        return self.dist.synth(acInput, method, actualOutput)
-
-    def countLeaves(self):
-        return 1
-
-    def paramsSingle(self):
-        return []
-
-    def parseSingle(self, params):
-        return self, params
-
-    def parseChildren(self, params, parseChild):
-        dist, paramsLeft = parseChild(self.dist, params)
-        return DecisionTreeLeaf(dist, tag = self.tag), paramsLeft
 
 # (FIXME : merge MappedInputDist with TransformedInputDist?
 #   (Also merge some of the corresponding Accs?))

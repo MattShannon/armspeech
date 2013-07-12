@@ -20,6 +20,7 @@ from armspeech.util.mathhelp import logSum
 from armspeech.util.iterhelp import chunkList
 from armspeech.util.mathhelp import assert_allclose
 from armspeech.util.mathhelp import AsArray
+from armspeech.util.util import MapElem
 from codedep import codeDeps, ForwardRef
 
 import test_transform_questions
@@ -211,47 +212,29 @@ def gen_shared_DiscreteDist(keys = ['a', 'b', 'c'], dimIn = 3):
             yield random.choice(keys), randn(dimIn)
     return dist, getInputGen()
 
-@codeDeps(d.DecisionTreeLeaf, d.DecisionTreeNode, gen_LinearGaussian, randTag,
-    test_transform_questions.SimplePhoneset, test_transform_questions.getQuestionGroups
+@codeDeps(MapElem, d.MappedInputDist, d.createDiscreteDist, gen_LinearGaussian,
+    randTag, test_transform.gen_DecisionTree,
+    test_transform_questions.SimplePhoneset,
+    test_transform_questions.getQuestionGroups
 )
 def gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = 3):
     phoneset = test_transform_questions.SimplePhoneset()
     labels = phoneset.phoneList
     questionGroups = test_transform_questions.getQuestionGroups(phoneset)
 
-    def decisionTree(labelsLeft):
-        fullQuestionsLeft = []
-        for labelValuer, questions in questionGroups:
-            for question in questions:
-                yesNonEmpty = False
-                noNonEmpty = False
-                for label in labelsLeft:
-                    if question(labelValuer(label)):
-                        yesNonEmpty = True
-                    else:
-                        noNonEmpty = True
-                    if yesNonEmpty and noNonEmpty:
-                        break
-                if yesNonEmpty and noNonEmpty:
-                    fullQuestionsLeft.append((labelValuer, question))
+    decTree = test_transform.gen_DecisionTree(questionGroups, labels,
+                                              splitProb = splitProb)
+    dist = d.MappedInputDist(MapElem(0, 2, decTree),
+        d.createDiscreteDist(range(decTree.numLeaves), lambda key:
+            gen_LinearGaussian(dimIn)[0]
+        )
+    ).withTag(randTag())
 
-        if random.random() > splitProb or not fullQuestionsLeft:
-            return d.DecisionTreeLeaf(gen_LinearGaussian(dimIn)[0])
-        else:
-            fullQuestion = random.choice(fullQuestionsLeft)
-            labelValuer, question = fullQuestion
-            labelsLeftYes = []
-            labelsLeftNo = []
-            for label in labelsLeft:
-                if question(labelValuer(label)):
-                    labelsLeftYes.append(label)
-                else:
-                    labelsLeftNo.append(label)
-            return d.DecisionTreeNode(fullQuestion, decisionTree(labelsLeftYes), decisionTree(labelsLeftNo))
     def getInputGen():
         while True:
             yield random.choice(labels), randn(dimIn)
-    return decisionTree(labels).withTag(randTag()), getInputGen()
+
+    return dist, getInputGen()
 
 @codeDeps(d.MappedInputDist, gen_LinearGaussian, randTag, simpleInputGen,
     test_transform.gen_genericTransform
@@ -882,8 +865,8 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
     gen_nestedTransformDist, gen_shared_DiscreteDist, getTrainCG, getTrainEM,
     getTrainFromAcc, randBool, randTag, randomizeParams,
     restrictTypicalOutputLength, test_transform_questions.SimplePhoneset,
-    test_transform_questions.getQuestionGroups, trn.trainEM, wnet.netIsTopSorted,
-    wnet.nodeSetCompute
+    test_transform_questions.getQuestionGroups, trn.trainEM,
+    wnet.netIsTopSorted, wnet.nodeSetCompute
 )
 class TestDist(unittest.TestCase):
     def setUp(self):
@@ -1037,7 +1020,7 @@ class TestDist(unittest.TestCase):
         for distIndex in range(numDists):
             dimIn = randint(0, 5)
             dist, inputGen = gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = dimIn)
-            checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivInput_hasDiscrete_check = True, logProbDerivOutputCheck = True)
+            checkLots(dist, inputGen, hasParams = True, eps = eps, numPoints = numPoints, logProbDerivOutputCheck = True)
             if self.deepTest:
                 initEstDist = randomizeParams(dist)
                 check_est(dist, getTrainEM(initEstDist), inputGen, hasParams = True)
