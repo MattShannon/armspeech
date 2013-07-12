@@ -9,6 +9,7 @@
 from __future__ import division
 
 import mathhelp
+from mathhelp import ThreshMax
 from armspeech.util.mathhelp import assert_allclose
 from codedep import codeDeps
 
@@ -20,20 +21,43 @@ import random
 from numpy.random import randn, randint
 
 @codeDeps()
+def randBool():
+    return randint(0, 2) == 0
+
+@codeDeps()
 def randLogProb():
     if randint(0, 3) == 0:
         return float('-inf')
     else:
         return 5.0 * randn()
 
+@codeDeps(randBool)
+def gen_float(allowInf = True):
+    if allowInf and randint(0, 6) == 0:
+        if randBool():
+            return float('-inf')
+        else:
+            return float('inf')
+    else:
+        return 5.0 * randn()
+
+@codeDeps(gen_float)
+def gen_list_of_floats(length = None, allowInf = True):
+    if length is None:
+        length = randint(20)
+    fakeLength = length * 2
+    xs = [ gen_float(allowInf = allowInf) for _ in range(fakeLength) ]
+    # resample to ensure some repetitions
+    return [ xs[randint(fakeLength)] for _ in range(length) ]
+
 @codeDeps()
 def shapeRand(ranks = [0, 1], allDimsNonZero = False):
     rank = random.choice(ranks)
     return [ randint(1 if allDimsNonZero else 0, 10) for i in range(rank) ]
 
-@codeDeps(assert_allclose, mathhelp.logAdd, mathhelp.logDet,
-    mathhelp.logDetPosDef, mathhelp.logSum, mathhelp.reprArray,
-    mathhelp.sampleDiscrete, randLogProb, shapeRand
+@codeDeps(ThreshMax, assert_allclose, gen_float, gen_list_of_floats,
+    mathhelp.logAdd, mathhelp.logDet, mathhelp.logDetPosDef, mathhelp.logSum,
+    mathhelp.reprArray, mathhelp.sampleDiscrete, randLogProb, shapeRand
 )
 class TestMathHelp(unittest.TestCase):
     def test_logAdd(self, numPoints = 200):
@@ -49,6 +73,48 @@ class TestMathHelp(unittest.TestCase):
             l = [ randLogProb() for _ in range(n) ]
             r = mathhelp.logSum(l)
             assert_allclose(np.exp(r), np.sum(np.exp(l)))
+
+    def test_ThreshMax(self, numPoints = 200):
+        for pointIndex in range(numPoints):
+            objectType = randint(3)
+            if objectType == 0:
+                wrap = lambda xs: xs
+                value = lambda x: x
+                key = None
+            elif objectType == 1:
+                wrap = lambda xs: [ (randint(10), x) for x in xs ]
+                value = lambda x: x[1]
+                key = value
+            elif objectType == 2:
+                wrap = lambda xs: [ (x, randint(10)) for x in xs ]
+                value = lambda x: x[0]
+                key = value
+            else:
+                assert False
+
+            threshMaxZero = ThreshMax(0.0, key = key)
+            xs = wrap(gen_list_of_floats())
+            thresh = abs(randn())
+            threshMax = ThreshMax(thresh, key = key)
+
+            assert (threshMaxZero(xs) ==
+                    [ x for x in xs if value(x) == max(map(key, xs)) ])
+
+            assert threshMax(threshMax(xs)) == threshMax(xs)
+
+            x = gen_float()
+            rep = wrap([ x for _ in range(randint(10)) ])
+            assert threshMax(rep) == rep
+
+            thresh2 = abs(randn())
+            thresh1 = thresh2 + abs(randn())
+            threshMax1 = ThreshMax(thresh1, key = key)
+            threshMax2 = ThreshMax(thresh2, key = key)
+            assert threshMax2(threshMax1(xs)) == threshMax2(xs)
+
+            ys = wrap(gen_list_of_floats())
+            assert (threshMax(threshMax(xs) + threshMax(ys)) ==
+                    threshMax(xs + ys))
 
     def test_logDet(self, numPoints = 200):
         for pointIndex in range(numPoints):

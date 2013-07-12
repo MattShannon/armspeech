@@ -76,6 +76,46 @@ def logSum(l):
         return np.log(np.sum(np.exp(np.array(l) - k))) + k
 
 @codeDeps()
+class ThreshMax(object):
+    """Computes the thresholded maximum of a list.
+
+    The thresholded maximum of a list *xs* of floats is a list of all the items
+    of *xs* within a specified threshold *thresh* of the maximum of *xs*.
+
+    If *xs* is not a list of floats, a *key* function mapping items to floats
+    may be specified.
+
+    If *thresh* is *0.0* (and given that *key* returns floats), this is
+    equivalent to the built-in *max* function, except that it returns a list of
+    all maximal values rather than picking the first one, and if *xs* is empty
+    it returns an empty list rather than raising an exception.
+    """
+    def __init__(self, thresh, key = None):
+        self.thresh = thresh
+        self.key = key
+
+        # thresh < 0.0 can cause problems when there are -inf values in xs, and
+        #   thresh == +inf can cause problems when there are +inf values in xs
+        assert 0.0 <= self.thresh < float('inf')
+
+    def __call__(self, xs):
+        thresh = self.thresh
+        key = self.key
+
+        if key is None:
+            maxValue = max(xs) if xs else 0.0
+            return [
+                x for x in xs
+                if x >= maxValue - thresh
+            ]
+        else:
+            maxValue = max(map(key, xs)) if xs else 0.0
+            return [
+                x for x in xs
+                if key(x) >= maxValue - thresh
+            ]
+
+@codeDeps()
 def sigmoid(a):
     if a > 40.0:
         return 1.0
