@@ -13,6 +13,8 @@ from armspeech.util.mathhelp import logDet
 from armspeech.util.mathhelp import assert_allclose
 from codedep import codeDeps, ForwardRef
 
+import test_transform_questions
+
 import unittest
 import math
 import random
@@ -467,6 +469,44 @@ class TestOutputTransform(unittest.TestCase):
             axf = gen_ShiftOutputTransform(shapeInput = shapeInput, shapeOutput = shapeOutput)
             checkOutputTransform(axf, shapeInput, shapeOutput, hasParams = True, eps = eps, its = itsPerTransform, checkAdditional = checkAdditional)
 
+@codeDeps(randTag, xf.DecisionTree)
+def gen_DecisionTree(questionGroups, labels, splitProb = 0.49):
+    numLeavess = [0]
+    def gen_tree(labelsLeft):
+        fullQuestionsLeft = []
+        for labelValuer, questions in questionGroups:
+            for question in questions:
+                yesNonEmpty = False
+                noNonEmpty = False
+                for label in labelsLeft:
+                    if question(labelValuer(label)):
+                        yesNonEmpty = True
+                    else:
+                        noNonEmpty = True
+                    if yesNonEmpty and noNonEmpty:
+                        break
+                if yesNonEmpty and noNonEmpty:
+                    fullQuestionsLeft.append((labelValuer, question))
+
+        if random.random() > splitProb or not fullQuestionsLeft:
+            numLeavess[0] += 1
+            return numLeavess[0] - 1
+        else:
+            fullQuestion = random.choice(fullQuestionsLeft)
+            labelValuer, question = fullQuestion
+            labelsLeftYes = []
+            labelsLeftNo = []
+            for label in labelsLeft:
+                if question(labelValuer(label)):
+                    labelsLeftYes.append(label)
+                else:
+                    labelsLeftNo.append(label)
+            return (fullQuestion, [gen_tree(labelsLeftNo),
+                                   gen_tree(labelsLeftYes)])
+
+    tree = gen_tree(labels)
+    return xf.DecisionTree(tree, numLeaves = numLeavess[0]).withTag(randTag())
+
 @codeDeps(assert_allclose, xf.eval_local)
 def checkDiscreteTransform(transform, domain, codomain, its,
                            checkAdditional = None):
@@ -481,9 +521,93 @@ def checkDiscreteTransform(transform, domain, codomain, its,
         assert transform(x) in codomain
         assert_allclose(transformEvaled(x), transform(x))
 
-@codeDeps()
+@codeDeps(checkDiscreteTransform, gen_DecisionTree,
+    test_transform_questions.SimplePhoneset,
+    test_transform_questions.getQuestionGroups, xf.DecisionTree, xf.applyTree,
+    xf.getTreeLeaves
+)
 class TestDiscreteTransform(unittest.TestCase):
-    pass
+    def test_DecisionTree_fixed(self):
+        tree = 0
+        assert xf.getTreeLeaves(tree) == [0]
+        assert xf.applyTree(tree, None) == 0
+        decTree = xf.DecisionTree(tree)
+        assert decTree.numLeaves == 1
+        decTree.checkTree()
+
+        labelValuer = lambda x: x+'a'
+        question = lambda x: int(x == 'bla')
+        tree = ((labelValuer, question), [0, 1])
+        assert xf.getTreeLeaves(tree) == [0, 1]
+        assert xf.applyTree(tree, 'bl') == 1
+        assert xf.applyTree(tree, 'b') == 0
+        decTree = xf.DecisionTree(tree)
+        assert decTree.numLeaves == 2
+        decTree.checkTree()
+
+        labelValuer = lambda x: x
+        def fq(depth):
+            fullQuestion = labelValuer, lambda x: ord(x[depth]) - 97
+            return fullQuestion
+        tree = (fq(0), [0, (fq(1), [1, 2, (fq(2), [3, 4, 5]), 6])])
+        assert xf.getTreeLeaves(tree) == [0, 1, 2, 3, 4, 5, 6]
+        assert xf.applyTree(tree, 'axx') == 0
+        assert xf.applyTree(tree, 'bax') == 1
+        assert xf.applyTree(tree, 'bbx') == 2
+        assert xf.applyTree(tree, 'bca') == 3
+        assert xf.applyTree(tree, 'bcb') == 4
+        assert xf.applyTree(tree, 'bcc') == 5
+        assert xf.applyTree(tree, 'bdx') == 6
+        decTree = xf.DecisionTree(tree)
+        assert decTree.numLeaves == 7
+        decTree.checkTree()
+
+        labelValuer = lambda x: x
+        def fq(depth):
+            fullQuestion = labelValuer, lambda x: ord(x[depth]) - 97
+            return fullQuestion
+        tree = (fq(0), [0, (fq(1), [1, 2, (fq(2), [3, 3, 4]), 5])])
+        assert xf.getTreeLeaves(tree) == [0, 1, 2, 3, 3, 4, 5]
+        assert xf.applyTree(tree, 'axx') == 0
+        assert xf.applyTree(tree, 'bax') == 1
+        assert xf.applyTree(tree, 'bbx') == 2
+        assert xf.applyTree(tree, 'bca') == 3
+        assert xf.applyTree(tree, 'bcb') == 3
+        assert xf.applyTree(tree, 'bcc') == 4
+        assert xf.applyTree(tree, 'bdx') == 5
+        decTree = xf.DecisionTree(tree)
+        assert decTree.numLeaves == 6
+        decTree.checkTree(checkNoTiedLeaves = False)
+        self.assertRaises(AssertionError, decTree.checkTree)
+
+        labelValuer = lambda x: x
+        def fq(depth):
+            fullQuestion = labelValuer, lambda x: ord(x[depth]) - 97
+            return fullQuestion
+        tree = (fq(0), [0, (fq(1), [1, 2, (fq(2), [4, 5, 6]), 7])])
+        assert xf.getTreeLeaves(tree) == [0, 1, 2, 4, 5, 6, 7]
+        assert xf.applyTree(tree, 'axx') == 0
+        assert xf.applyTree(tree, 'bax') == 1
+        assert xf.applyTree(tree, 'bbx') == 2
+        assert xf.applyTree(tree, 'bca') == 4
+        assert xf.applyTree(tree, 'bcb') == 5
+        assert xf.applyTree(tree, 'bcc') == 6
+        assert xf.applyTree(tree, 'bdx') == 7
+        decTree = xf.DecisionTree(tree)
+        assert decTree.numLeaves == 8
+        decTree.checkTree(checkNoUnreachable = False)
+        self.assertRaises(AssertionError, decTree.checkTree)
+
+    def test_DecisionTree(self, its = 100, itsPerTransform = 10):
+        phoneset = test_transform_questions.SimplePhoneset()
+        labels = phoneset.phoneList
+        questionGroups = test_transform_questions.getQuestionGroups(phoneset)
+
+        for it in range(its):
+            decTree = gen_DecisionTree(questionGroups, labels)
+            decTree.checkTree()
+            checkDiscreteTransform(decTree, labels, range(decTree.numLeaves),
+                                   its = itsPerTransform)
 
 @codeDeps(TestDiscreteTransform, TestOutputTransform, TestTransform)
 def suite():

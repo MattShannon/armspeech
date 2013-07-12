@@ -27,6 +27,8 @@ import armspeech.util.mylinalg as mla
 
 def eval_local(reprString):
     from numpy import array, zeros, dtype, float64
+    # (for decision tree stuff in test_transform)
+    from questions import IdLabelValuer, SubsetQuestion
 
     return eval(reprString)
 
@@ -750,3 +752,62 @@ class DiscreteTransform(object):
         """
         self.tag = tag
         return self
+
+@codeDeps()
+def getTreeLeaves(tree):
+    leafIndices = []
+    agenda = [tree]
+    while agenda:
+        tree = agenda.pop()
+        if not isinstance(tree, tuple):
+            leafIndex = tree
+            leafIndices.append(leafIndex)
+        else:
+            question, subTrees = tree
+            agenda.extend(reversed(subTrees))
+
+    return leafIndices
+
+# (could be implemented in cython eventually)
+@codeDeps()
+def applyTree(tree, label):
+    tree = tree
+    while True:
+        if not isinstance(tree, tuple):
+            leafIndex = tree
+            return leafIndex
+        else:
+            fullQuestion, subTrees = tree
+            labelValuer, question = fullQuestion
+            value = question(labelValuer(label))
+            tree = subTrees[value]
+
+@codeDeps(DiscreteTransform, applyTree, getTreeLeaves)
+class DecisionTree(DiscreteTransform):
+    def __init__(self, tree, numLeaves = None, tag = None):
+        self.tree = tree
+        self.numLeaves = numLeaves
+        self.tag = tag
+
+        if self.numLeaves is None:
+            leafIndices = getTreeLeaves(self.tree)
+            numLeaves = max(leafIndices) + 1
+            assert all([ 0 <= leafIndex < numLeaves
+                         for leafIndex in leafIndices ])
+            self.numLeaves = numLeaves
+
+    def __repr__(self):
+        return ('DecisionTree(%r, numLeaves=%r, tag=%r)' %
+                (self.tree, self.numLeaves, self.tag))
+
+    def checkTree(self, checkNoTiedLeaves = True, checkNoUnreachable = True):
+        leafIndices = getTreeLeaves(self.tree)
+        assert all([ 0 <= leafIndex < self.numLeaves
+                     for leafIndex in leafIndices ])
+        if checkNoTiedLeaves:
+            assert len(set(leafIndices)) == len(leafIndices)
+        if checkNoUnreachable:
+            assert set(leafIndices) == set(range(self.numLeaves))
+
+    def __call__(self, label):
+        return applyTree(self.tree, label)
