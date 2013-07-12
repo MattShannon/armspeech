@@ -22,7 +22,7 @@ from armspeech.util.mathhelp import assert_allclose
 from armspeech.util.mathhelp import AsArray
 from codedep import codeDeps, ForwardRef
 
-import test_dist_questions
+import test_transform_questions
 import test_transform
 
 import unittest
@@ -212,12 +212,12 @@ def gen_shared_DiscreteDist(keys = ['a', 'b', 'c'], dimIn = 3):
     return dist, getInputGen()
 
 @codeDeps(d.DecisionTreeLeaf, d.DecisionTreeNode, gen_LinearGaussian, randTag,
-    test_dist_questions.SimplePhoneset, test_dist_questions.getQuestionGroups
+    test_transform_questions.SimplePhoneset, test_transform_questions.getQuestionGroups
 )
 def gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = 3):
-    phoneset = test_dist_questions.SimplePhoneset()
+    phoneset = test_transform_questions.SimplePhoneset()
     labels = phoneset.phoneList
-    questionGroups = test_dist_questions.getQuestionGroups(phoneset)
+    questionGroups = test_transform_questions.getQuestionGroups(phoneset)
 
     def decisionTree(labelsLeft):
         fullQuestionsLeft = []
@@ -881,8 +881,8 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
     gen_constant_AutoregressiveNetDist, gen_inSeq_AutoregressiveNetDist,
     gen_nestedTransformDist, gen_shared_DiscreteDist, getTrainCG, getTrainEM,
     getTrainFromAcc, randBool, randTag, randomizeParams,
-    restrictTypicalOutputLength, test_dist_questions.SimplePhoneset,
-    test_dist_questions.getQuestionGroups, trn.trainEM, wnet.netIsTopSorted,
+    restrictTypicalOutputLength, test_transform_questions.SimplePhoneset,
+    test_transform_questions.getQuestionGroups, trn.trainEM, wnet.netIsTopSorted,
     wnet.nodeSetCompute
 )
 class TestDist(unittest.TestCase):
@@ -1046,8 +1046,8 @@ class TestDist(unittest.TestCase):
     # (FIXME : add a separate, independent unit test for decisionTreeCluster
     #   (put in test_cluster.py))
     def test_AutoGrowingDiscreteAcc_and_decisionTreeCluster(self, eps = 1e-8, numDists = 20, numPoints = 100):
-        phoneset = test_dist_questions.SimplePhoneset()
-        questionGroups = test_dist_questions.getQuestionGroups(phoneset)
+        phoneset = test_transform_questions.SimplePhoneset()
+        questionGroups = test_transform_questions.getQuestionGroups(phoneset)
         for distIndex in range(numDists):
             dimIn = randint(0, 5)
             dist, inputGen = gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = dimIn)
