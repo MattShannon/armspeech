@@ -730,3 +730,23 @@ class ShiftOutputTransform(OutputTransform):
         return np.zeros(np.shape(self.params))
     def inv(self, input, modelledOutput):
         return modelledOutput - self.shift(input)
+
+@codeDeps()
+class DiscreteTransform(object):
+    """Function of one argument with a discrete domain and codomain.
+
+    (Currently does not support learnable parameters).
+    """
+    # (FIXME : don't think tags are of much use here)
+    def withTag(self, tag):
+        """Set tag and return self.
+
+        This is intended to be used immediately after object creation, such as:
+
+            discreteTransform = SomeDiscreteTransform().withTag('hi')
+
+        This is particularly important here since DiscreteTransforms should be
+        immutable.
+        """
+        self.tag = tag
+        return self

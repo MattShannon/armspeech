@@ -467,11 +467,30 @@ class TestOutputTransform(unittest.TestCase):
             axf = gen_ShiftOutputTransform(shapeInput = shapeInput, shapeOutput = shapeOutput)
             checkOutputTransform(axf, shapeInput, shapeOutput, hasParams = True, eps = eps, its = itsPerTransform, checkAdditional = checkAdditional)
 
-@codeDeps(TestOutputTransform, TestTransform)
+@codeDeps(assert_allclose, xf.eval_local)
+def checkDiscreteTransform(transform, domain, codomain, its,
+                           checkAdditional = None):
+    assert transform.tag is not None
+    transformEvaled = xf.eval_local(repr(transform))
+    assert transformEvaled.tag == transform.tag
+    assert repr(transform) == repr(transformEvaled)
+    for it in range(its):
+        x = random.choice(domain)
+        if checkAdditional is not None:
+            checkAdditional(transform, x)
+        assert transform(x) in codomain
+        assert_allclose(transformEvaled(x), transform(x))
+
+@codeDeps()
+class TestDiscreteTransform(unittest.TestCase):
+    pass
+
+@codeDeps(TestDiscreteTransform, TestOutputTransform, TestTransform)
 def suite():
     return unittest.TestSuite([
         unittest.TestLoader().loadTestsFromTestCase(TestTransform),
         unittest.TestLoader().loadTestsFromTestCase(TestOutputTransform),
+        unittest.TestLoader().loadTestsFromTestCase(TestDiscreteTransform),
     ])
 
 if __name__ == '__main__':
