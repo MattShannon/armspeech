@@ -851,7 +851,7 @@ def checkLots(dist, inputGen, hasParams, eps, numPoints, iid = True, unitOcc = F
             getTrainCG(dist, length = -2)(training)
 
 @codeDeps(assert_allclose, checkLots, check_est, cluster.ClusteringSpec,
-    cluster.MdlGrowerSpec, cluster.decisionTreeCluster,
+    cluster.MdlUtilitySpec, cluster.decisionTreeCluster,
     d.AutoGrowingDiscreteAcc, d.ConstantClassifierAcc, d.LinearGaussianAcc,
     d.Memo, d.estimateInitialMixtureOfTwoExperts,
     gen_AutoregressiveSequenceDist, gen_BinaryLogisticClassifier,
@@ -1038,9 +1038,9 @@ class TestDist(unittest.TestCase):
                 acc = d.AutoGrowingDiscreteAcc(createAcc = lambda: d.LinearGaussianAcc(inputLength = dimIn, varianceFloor = 0.0))
                 for input, output, occ in training:
                     acc.add(input, output, occ)
-                growerSpec = cluster.MdlGrowerSpec(1.0, minCount = 0.1)
+                utilitySpec = cluster.MdlUtilitySpec(1.0, minCount = 0.1)
                 clusteringSpec = cluster.ClusteringSpec(
-                    growerSpec, questionGroups, verbosity = 0
+                    utilitySpec, questionGroups, verbosity = 0
                 )
                 return cluster.decisionTreeCluster(
                     clusteringSpec, acc.accDict.keys(),

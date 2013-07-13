@@ -22,14 +22,11 @@ import heapq
 @codeDeps()
 def partitionLabels(labels, fullQuestion):
     labelValuer, question = fullQuestion
-    labelsYes = []
-    labelsNo = []
+    labelsForAnswer = [ [] for _ in question.codomain() ]
     for label in labels:
-        if question(labelValuer(label)):
-            labelsYes.append(label)
-        else:
-            labelsNo.append(label)
-    return labelsYes, labelsNo
+        answer = question(labelValuer(label))
+        labelsForAnswer[answer].append(label)
+    return labelsForAnswer
 
 @codeDeps()
 def removeTrivialQuestions(labels, questionGroups):
@@ -69,16 +66,13 @@ class AccSummer(object):
         labelValuer, question = fullQuestion
         accForLabel = self.accForLabel
 
-        accYes = self.createAcc()
-        accNo = self.createAcc()
+        accForAnswer = [ self.createAcc() for _ in question.codomain() ]
         for label in labels:
             acc = accForLabel(label)
-            if question(labelValuer(label)):
-                d.addAcc(accYes, acc)
-            else:
-                d.addAcc(accNo, acc)
+            answer = question(labelValuer(label))
+            d.addAcc(accForAnswer[answer], acc)
 
-        return accYes, accNo
+        return accForAnswer
 
     def sumAccsFirstLevel(self, labels, questionGroups):
         accForLabel = self.accForLabel
@@ -100,15 +94,12 @@ class AccSummer(object):
         return labelValueToAccs
 
     def sumAccsSecondLevel(self, labelValueToAcc, question):
-        accYes = self.createAcc()
-        accNo = self.createAcc()
+        accForAnswer = [ self.createAcc() for _ in question.codomain() ]
         for labelValue, acc in labelValueToAcc.iteritems():
-            if question(labelValue):
-                d.addAcc(accYes, acc)
-            else:
-                d.addAcc(accNo, acc)
+            answer = question(labelValue)
+            d.addAcc(accForAnswer[answer], acc)
 
-        return accYes, accNo
+        return accForAnswer
 
     def sumAccsForQuestions(self, labels, questionGroups):
         """Returns an iterator with yes and no accs for each question."""
@@ -118,10 +109,10 @@ class AccSummer(object):
             labelValueToAcc, (labelValuer, questions)
         ) in zip(labelValueToAccs, questionGroups):
             for question in questions:
-                accYes, accNo = self.sumAccsSecondLevel(labelValueToAcc,
-                                                        question)
+                accForAnswer = self.sumAccsSecondLevel(labelValueToAcc,
+                                                       question)
                 fullQuestion = labelValuer, question
-                yield fullQuestion, accYes, accNo
+                yield fullQuestion, accForAnswer
 
     def sumAccsForQuestionGroups(self, labels, questionGroups):
         """Returns an iterator with yes and no accs for each question."""
@@ -133,9 +124,9 @@ class AccSummer(object):
         ) in zip(labelValueToAccs, questionGroups):
             accsForQuestions = []
             for question in questions:
-                accYes, accNo = self.sumAccsSecondLevel(labelValueToAcc,
-                                                        question)
-                accsForQuestions.append((question, accYes, accNo))
+                accForAnswer = self.sumAccsSecondLevel(labelValueToAcc,
+                                                       question)
+                accsForQuestions.append((question, accForAnswer))
             accsForQuestionGroups.append((labelValuer, accsForQuestions))
 
         return accsForQuestionGroups
@@ -167,75 +158,66 @@ class LeafEstimator(object):
 @codeDeps(assert_allclose)
 class SplitInfo(object):
     """Collected information for a (potential or actual) split."""
-    def __init__(self, protoNoSplit, fullQuestion, protoYes, protoNo):
+    def __init__(self, protoNoSplit, fullQuestion, protoForAnswer):
         self.protoNoSplit = protoNoSplit
         self.fullQuestion = fullQuestion
-        self.protoYes = protoYes
-        self.protoNo = protoNo
+        self.protoForAnswer = protoForAnswer
 
         assert self.protoNoSplit is not None
+        assert len(self.protoForAnswer) >= 1
         if self.fullQuestion is None:
-            assert self.protoYes is None and self.protoNo is None
-        if self.protoYes is not None and self.protoNo is not None:
-            assert_allclose(self.protoYes.count + self.protoNo.count,
-                            self.protoNoSplit.count)
+            assert self.protoForAnswer == [self.protoNoSplit]
+        if any([ proto is not None for proto in self.protoForAnswer ]):
+            assert_allclose(
+                sum([ proto.count for proto in self.protoForAnswer ]),
+                self.protoNoSplit.count
+            )
 
-    def delta(self):
+    def deltaNumLeaves(self):
+        return len(self.protoForAnswer) - 1
+
+    def delta(self, perLeafPenalty = 0.0):
         """Returns the delta for this split.
 
         The delta is used to choose which question to use to split a given node
         and to decide whether to split at all.
         """
-        if self.protoYes is None or self.protoNo is None:
+        if any([ proto is None for proto in self.protoForAnswer ]):
             return float('-inf')
         else:
-            return self.protoYes.aux + self.protoNo.aux - self.protoNoSplit.aux
+            return (
+                sum([ proto.aux - perLeafPenalty
+                      for proto in self.protoForAnswer ]) -
+                (self.protoNoSplit.aux - perLeafPenalty)
+            )
 
 @codeDeps()
-def maxSplit(splitInfos):
-    return max(splitInfos, key = lambda splitInfo: splitInfo.delta())
-
-@codeDeps()
-class Grower(object):
-    def allowSplit(self, splitInfo):
-        abstract
-
-    def useSplit(self, splitInfo):
-        abstract
-
-@codeDeps(Grower)
-class SimpleGrower(Grower):
-    def __init__(self, thresh, minCount):
-        self.thresh = thresh
+class SplitValuer(object):
+    def __init__(self, perLeafPenalty, minCount):
+        self.perLeafPenalty = perLeafPenalty
         self.minCount = minCount
 
+        assert self.perLeafPenalty >= 0.0
         assert self.minCount > 0.0
 
-    def allowSplit(self, splitInfo):
-        protoYes = splitInfo.protoYes
-        protoNo = splitInfo.protoNo
-        return (protoYes is not None and
-                protoNo is not None and
-                protoYes.count >= self.minCount and
-                protoNo.count >= self.minCount)
+    def __call__(self, splitInfo):
+        if all([ proto is not None and proto.count >= self.minCount
+                 for proto in splitInfo.protoForAnswer ]):
+            return splitInfo.delta(self.perLeafPenalty)
+        else:
+            return float('-inf')
 
-    def useSplit(self, splitInfo):
-        return (
-            splitInfo.fullQuestion is not None and
-            splitInfo.delta() > self.thresh
-        )
-
-@codeDeps(SimpleGrower)
-class ThreshGrowerSpec(object):
-    def __init__(self, thresh, minCount):
-        self.thresh = thresh
+@codeDeps(SplitValuer)
+class FixedUtilitySpec(object):
+    def __init__(self, perLeafPenalty, minCount):
+        self.perLeafPenalty = perLeafPenalty
         self.minCount = minCount
 
     def __call__(self, distRoot, countRoot, verbosity = 1):
-        return SimpleGrower(self.thresh, self.minCount)
+        return SplitValuer(self.perLeafPenalty, self.minCount)
 
-@codeDeps(SimpleGrower, d.getDefaultParamSpec)
-class MdlGrowerSpec(object):
+@codeDeps(SplitValuer, d.getDefaultParamSpec)
+class MdlUtilitySpec(object):
     def __init__(self, mdlFactor, minCount,
                  paramSpec = d.getDefaultParamSpec()):
         self.mdlFactor = mdlFactor
@@ -244,23 +226,23 @@ class MdlGrowerSpec(object):
 
     def __call__(self, distRoot, countRoot, verbosity = 1):
         numParamsPerLeaf = len(self.paramSpec.params(distRoot))
-        thresh = (
+        perLeafPenalty = (
             0.5 * self.mdlFactor * numParamsPerLeaf * math.log(countRoot + 1.0)
         )
         if verbosity >= 1:
-            print ('cluster: setting thresh using MDL: mdlFactor = %s and'
-                   ' numParamsPerLeaf = %s and count = %s' %
+            print ('cluster: setting perLeafPenalty using MDL: mdlFactor = %s'
+                   ' and numParamsPerLeaf = %s and count = %s' %
                    (self.mdlFactor, numParamsPerLeaf, countRoot))
-        return SimpleGrower(thresh, self.minCount)
+        return SplitValuer(perLeafPenalty, self.minCount)
 
-@codeDeps(MapElem, SimpleGrower, SplitInfo, d.DiscreteDist, d.MappedInputDist,
-    d.sumValuedRats, maxSplit, partitionLabels, timed, xf.DecisionTree
+@codeDeps(MapElem, SplitInfo, d.DiscreteDist, d.MappedInputDist,
+    d.sumValuedRats, partitionLabels, timed, xf.DecisionTree
 )
 class DecisionTreeClusterer(object):
-    def __init__(self, accSummer, leafEstimator, grower, verbosity):
+    def __init__(self, accSummer, leafEstimator, splitValuer, verbosity):
         self.accSummer = accSummer
         self.leafEstimator = leafEstimator
-        self.grower = grower
+        self.splitValuer = splitValuer
         self.verbosity = verbosity
 
     def getPossSplitIter(self, state, questionGroups):
@@ -275,16 +257,16 @@ class DecisionTreeClusterer(object):
         For a given state and list of questionGroups, this function returns an
         iterator over splits, one for each allowed question.
         """
-        labels, questionGroupsRemaining, isYesList, protoNoSplit = state
+        labels, questionGroupsRemaining, answerSeq, protoNoSplit = state
 
         for (
-            fullQuestion, accYes, accNo
+            fullQuestion, accForAnswer
         ) in self.accSummer.sumAccsForQuestions(labels, questionGroups):
-            protoYes = self.leafEstimator.estOrNone(accYes)
-            protoNo = self.leafEstimator.estOrNone(accNo)
-            splitInfo = SplitInfo(protoNoSplit, fullQuestion,
-                                  protoYes, protoNo)
-            if self.grower.allowSplit(splitInfo):
+            _, question = fullQuestion
+            protoForAnswer = [ self.leafEstimator.estOrNone(acc)
+                               for acc in accForAnswer ]
+            splitInfo = SplitInfo(protoNoSplit, fullQuestion, protoForAnswer)
+            if self.splitValuer(splitInfo) > float('-inf'):
                 yield splitInfo
 
     def getPossSplitsWithPrunedQuestionGroups(self, state, questionGroups):
@@ -295,11 +277,9 @@ class DecisionTreeClusterer(object):
         that can never be selected in future (that is, lower in the tree)
         removed.
         """
-        labels, questionGroupsRemaining, isYesList, protoNoSplit = state
+        labels, questionGroupsRemaining, answerSeq, protoNoSplit = state
 
-        # this method makes assumptions about how allowSplit uses minCount
-        assert isinstance(self.grower, SimpleGrower)
-        minCount = self.grower.minCount
+        minCount = self.splitValuer.minCount
 
         questionGroupsOut = []
         splitInfos = []
@@ -307,16 +287,16 @@ class DecisionTreeClusterer(object):
             labelValuer, accsForQuestions
         ) in self.accSummer.sumAccsForQuestionGroups(labels, questionGroups):
             questionsOut = []
-            for question, accYes, accNo in accsForQuestions:
-                if accYes.count() >= minCount and accNo.count() >= minCount:
+            for question, accForAnswer in accsForQuestions:
+                if all([ acc.count() >= minCount for acc in accForAnswer ]):
                     questionsOut.append(question)
 
-                    protoYes = self.leafEstimator.estOrNone(accYes)
-                    protoNo = self.leafEstimator.estOrNone(accNo)
+                    protoForAnswer = [ self.leafEstimator.estOrNone(acc)
+                                       for acc in accForAnswer ]
                     fullQuestion = labelValuer, question
                     splitInfo = SplitInfo(protoNoSplit, fullQuestion,
-                                          protoYes, protoNo)
-                    if self.grower.allowSplit(splitInfo):
+                                          protoForAnswer)
+                    if self.splitValuer(splitInfo) > float('-inf'):
                         splitInfos.append(splitInfo)
             if questionsOut:
                 questionGroupsOut.append((labelValuer, questionsOut))
@@ -324,69 +304,73 @@ class DecisionTreeClusterer(object):
         return splitInfos, questionGroupsOut
 
     def getNextStates(self, state, splitInfo):
-        labels, questionGroups, isYesList, protoNoSplit = state
+        labels, questionGroups, answerSeq, protoNoSplit = state
 
         if self.verbosity >= 2:
-            indent = '    '+''.join([ ('|  ' if isYes else '   ')
-                                      for isYes in isYesList ])
-        if self.grower.useSplit(splitInfo):
+            indent = '    '+''.join([ ('|  ' if answer != 0 else '   ')
+                                      for answer in answerSeq ])
+        if splitInfo.fullQuestion is None:
+            if self.verbosity >= 2:
+                print 'cluster:'+indent+'leaf'
+            return []
+        else:
             labelValuer, question = splitInfo.fullQuestion
             if self.verbosity >= 2:
                 print ('cluster:%squestion ( %s %s ) ( delta = %s )' %
                        (indent, labelValuer.shortRepr(), question.shortRepr(),
                         splitInfo.delta()))
-            labelsYes, labelsNo = partitionLabels(labels,
-                                                  splitInfo.fullQuestion)
-            questionGroupsYes = questionGroups
-            questionGroupsNo = questionGroups
+            labelsForAnswer = partitionLabels(labels, (labelValuer, question))
 
             return [
-                (labelsYes, questionGroupsYes, isYesList + (True,),
-                 splitInfo.protoYes),
-                (labelsNo, questionGroupsNo, isYesList + (False,),
-                 splitInfo.protoNo),
+                (labels, questionGroups, answerSeq + (answer,), proto)
+                # (FIXME : using reversed below is a bit odd: it means tree is
+                #   explored with later answers (such as 1 / "yes") first.
+                #   Did it this way to provide backwards compatibility for
+                #   printing out pretty pictures of the tree so far, but may
+                #   ultimately want to get rid of both pictures and reversed.)
+                for answer, labels, proto in reversed(zip(
+                    question.codomain(),
+                    labelsForAnswer,
+                    splitInfo.protoForAnswer
+                ))
             ]
-        else:
-            if self.verbosity >= 2:
-                print 'cluster:'+indent+'leaf'
-            return []
 
     def maxSplitAndNextStates(self, state, *splitInfos):
-        labels, questionGroups, isYesList, protoNoSplit = state
+        labels, questionGroups, answerSeq, protoNoSplit = state
 
         splitInfos = list(splitInfos)
-        splitInfos.append(SplitInfo(protoNoSplit, None, None, None))
-        splitInfo = maxSplit(splitInfos)
+        splitInfos.append(SplitInfo(protoNoSplit, None, [protoNoSplit]))
+        splitInfo = max(splitInfos, key = self.splitValuer)
         nextStates = self.getNextStates(state, splitInfo)
         return splitInfo, nextStates
 
     def computeBestSplitAndNextStates(self, state):
-        labels, questionGroups, isYesList, protoNoSplit = state
+        labels, questionGroups, answerSeq, protoNoSplit = state
 
         splitInfos, questionGroupsOut = (
             self.getPossSplitsWithPrunedQuestionGroups(state, questionGroups)
         )
-        splitInfos.append(SplitInfo(protoNoSplit, None, None, None))
-        splitInfo = maxSplit(splitInfos)
-        stateNew = labels, questionGroupsOut, isYesList, protoNoSplit
+        splitInfos.append(SplitInfo(protoNoSplit, None, [protoNoSplit]))
+        splitInfo = max(splitInfos, key = self.splitValuer)
+        stateNew = labels, questionGroupsOut, answerSeq, protoNoSplit
         nextStates = self.getNextStates(stateNew, splitInfo)
         return splitInfo, nextStates
 
     def printNodeInfo(self, state):
-        labels, questionGroups, isYesList, protoNoSplit = state
+        labels, questionGroups, answerSeq, protoNoSplit = state
 
-        indent = '    '+''.join([ ('|  ' if isYes else '   ')
-                                  for isYes in isYesList[:-1] ])
-        if not isYesList:
+        indent = '    '+''.join([ ('|  ' if answer != 0 else '   ')
+                                  for answer in answerSeq[:-1] ])
+        if not answerSeq:
             extra = ''
-        elif isYesList[-1]:
+        elif answerSeq[-1] != 0:
             extra = '|->'
         else:
             extra = '\->'
-        print ('cluster:%s%snode ( count = %s ,'
+        print ('cluster:%s%s(%s)-node ( count = %s ,'
                ' remaining labels/QGs/Qs = %s/%s/%s )' %
-               (indent, extra, protoNoSplit.count,
-                len(labels), len(questionGroups),
+               (indent, extra, answerSeq[-1] if answerSeq else '',
+                protoNoSplit.count, len(labels), len(questionGroups),
                 sum([ len(questions)
                       for _, questions in questionGroups ])))
 
@@ -394,12 +378,12 @@ class DecisionTreeClusterer(object):
         agenda = [stateInit]
         while agenda:
             state = agenda.pop()
-            labels, questionGroups, isYesList, protoNoSplit = state
+            labels, questionGroups, answerSeq, protoNoSplit = state
             if self.verbosity >= 2:
                 self.printNodeInfo(state)
             if self.verbosity >= 3:
-                indent = '    '+''.join([ ('|  ' if isYes else '   ')
-                                          for isYes in isYesList ])
+                indent = '    '+''.join([ ('|  ' if answer != 0 else '   ')
+                                          for answer in answerSeq ])
                 computeBestSplit = timed(
                     self.computeBestSplitAndNextStates,
                     msg = 'cluster:%schoose and perform split took' % indent
@@ -408,49 +392,49 @@ class DecisionTreeClusterer(object):
                 computeBestSplit = self.computeBestSplitAndNextStates
             splitInfo, nextStates = computeBestSplit(state)
             agenda.extend(reversed(nextStates))
-            yield isYesList, splitInfo
+            yield answerSeq, splitInfo
 
     def subTreeSplitInfoIterInGreedyOrder(self, stateInit):
         agenda = []
 
         def agendaPush(state):
-            labels, questionGroups, isYesList, protoNoSplit = state
+            labels, questionGroups, answerSeq, protoNoSplit = state
             splitInfos, questionGroupsOut = (
                 self.getPossSplitsWithPrunedQuestionGroups(state,
                                                            questionGroups)
             )
-            splitInfos.append(SplitInfo(protoNoSplit, None, None, None))
-            splitInfo = maxSplit(splitInfos)
-            stateNew = labels, questionGroupsOut, isYesList, protoNoSplit
-            if self.grower.useSplit(splitInfo):
+            splitInfos.append(SplitInfo(protoNoSplit, None, [protoNoSplit]))
+            splitInfo = max(splitInfos, key = self.splitValuer)
+            stateNew = labels, questionGroupsOut, answerSeq, protoNoSplit
+            if splitInfo.fullQuestion is not None:
                 heapq.heappush(
                     agenda,
-                    (-splitInfo.delta(), splitInfo, stateNew)
+                    (-self.splitValuer(splitInfo), splitInfo, stateNew)
                 )
 
         agendaPush(stateInit)
         while agenda:
             value, splitInfo, state = heapq.heappop(agenda)
-            labels, questionGroups, isYesList, protoNoSplit = state
+            labels, questionGroups, answerSeq, protoNoSplit = state
             if self.verbosity >= 2:
                 self.printNodeInfo(state)
             nextStates = self.getNextStates(state, splitInfo)
             for nextState in nextStates:
                 agendaPush(nextState)
-            yield isYesList, splitInfo
+            yield answerSeq, splitInfo
 
     def constructTree(self, splitInfoDict):
         leafProtos = []
-        def construct(isYesList):
-            splitInfo = splitInfoDict[isYesList]
-            if self.grower.useSplit(splitInfo):
-                treeNo = construct(isYesList + (False,))
-                treeYes = construct(isYesList + (True,))
-                labelValuer, question = splitInfo.fullQuestion
-                return (splitInfo.fullQuestion, [treeNo, treeYes])
-            else:
+        def construct(answerSeq):
+            splitInfo = splitInfoDict[answerSeq]
+            if splitInfo.fullQuestion is None:
                 leafProtos.append(splitInfo.protoNoSplit)
                 return len(leafProtos) - 1
+            else:
+                _, question = splitInfo.fullQuestion
+                treeForAnswer = [ construct(answerSeq + (answer,))
+                                  for answer in question.codomain() ]
+                return (splitInfo.fullQuestion, treeForAnswer)
         tree = construct(())
 
         leafDists = [ leafProto.dist for leafProto in leafProtos ]
@@ -466,10 +450,10 @@ class DecisionTreeClusterer(object):
 
 @codeDeps(d.getDefaultEstimateTotAuxNoRevert)
 class ClusteringSpec(object):
-    def __init__(self, growerSpec, questionGroups,
+    def __init__(self, utilitySpec, questionGroups,
                  estimateTotAux = d.getDefaultEstimateTotAuxNoRevert(),
                  verbosity = 2):
-        self.growerSpec = growerSpec
+        self.utilitySpec = utilitySpec
         self.questionGroups = questionGroups
         self.estimateTotAux = estimateTotAux
         self.verbosity = verbosity
@@ -486,14 +470,14 @@ def decisionTreeCluster(clusteringSpec, labels, accForLabel, createAcc):
     if verbosity >= 3:
         getProtoRoot = timed(getProtoRoot)
     protoRoot = getProtoRoot()
-    grower = clusteringSpec.growerSpec(protoRoot.dist, protoRoot.count,
-                                       verbosity = verbosity)
-    clusterer = DecisionTreeClusterer(accSummer, leafEstimator, grower,
+    splitValuer = clusteringSpec.utilitySpec(protoRoot.dist, protoRoot.count,
+                                             verbosity = verbosity)
+    clusterer = DecisionTreeClusterer(accSummer, leafEstimator, splitValuer,
                                       verbosity = verbosity)
     if verbosity >= 1:
-        print ('cluster: decision tree clustering with thresh = %s and'
+        print ('cluster: decision tree clustering with perLeafPenalty = %s and'
                ' minCount = %s' %
-               (grower.thresh, grower.minCount))
+               (splitValuer.perLeafPenalty, splitValuer.minCount))
 
     questionGroups = removeTrivialQuestions(labels,
                                             clusteringSpec.questionGroups)
@@ -526,20 +510,18 @@ def getDeltaIter(labelsRoot, accForLabel, distRoot, splitIter,
     labelsDict = dict()
     labelsDict[()] = labelsRoot
 
-    for isYesList, fullQuestion, distYes, distNo in splitIter:
-        logProb = logProbDict[isYesList]
-        labels = labelsDict[isYesList]
+    for answerSeq, fullQuestion, distForAnswer in splitIter:
+        labelsForAnswer = partitionLabels(labelsDict[answerSeq], fullQuestion)
 
-        labelsYes, labelsNo = partitionLabels(labels, fullQuestion)
-        logProbYes = getLogProb(distYes, labelsYes)
-        logProbNo = getLogProb(distNo, labelsNo)
+        _, question = fullQuestion
+        delta = -logProbDict[answerSeq]
+        for answer, labels, dist in zip(question.codomain(), labelsForAnswer,
+                                        distForAnswer):
+            logProb = getLogProb(dist, labels)
+            delta += logProb
+            logProbDict[answerSeq + (answer,)] = logProb
+            labelsDict[answerSeq + (answer,)] = labels
 
-        logProbDict[isYesList + (True,)] = logProbYes
-        logProbDict[isYesList + (False,)] = logProbNo
-        labelsDict[isYesList + (True,)] = labelsYes
-        labelsDict[isYesList + (False,)] = labelsNo
-
-        delta = logProbYes + logProbNo - logProb
         yield delta
 
 @codeDeps(AccSummer, DecisionTreeClusterer, LeafEstimator, getDeltaIter,
@@ -553,14 +535,14 @@ def decisionTreeClusterInGreedyOrderWithTest(clusteringSpec,
     accSummer = AccSummer(accForLabel, createAcc)
     leafEstimator = LeafEstimator(clusteringSpec.estimateTotAux)
     protoRoot = leafEstimator.est(accSummer.sumAccs(labels))
-    grower = clusteringSpec.growerSpec(protoRoot.dist, protoRoot.count,
-                                       verbosity = verbosity)
-    clusterer = DecisionTreeClusterer(accSummer, leafEstimator, grower,
+    splitValuer = clusteringSpec.utilitySpec(protoRoot.dist, protoRoot.count,
+                                             verbosity = verbosity)
+    clusterer = DecisionTreeClusterer(accSummer, leafEstimator, splitValuer,
                                       verbosity = verbosity)
     if verbosity >= 1:
-        print ('cluster: decision tree clustering with thresh = %s and'
+        print ('cluster: decision tree clustering with perLeafPenalty = %s and'
                ' minCount = %s' %
-               (grower.thresh, grower.minCount))
+               (splitValuer.perLeafPenalty, splitValuer.minCount))
 
     questionGroups = removeTrivialQuestions(labels,
                                             clusteringSpec.questionGroups)
@@ -569,12 +551,16 @@ def decisionTreeClusterInGreedyOrderWithTest(clusteringSpec,
     splitInfoIter = clusterer.subTreeSplitInfoIterInGreedyOrder(
         (labels, questionGroups, (), protoRoot)
     )
-    splitInfoIter, splitInfoIter2 = itertools.tee(splitInfoIter, 2)
-    splitIter = ( (isYesList, splitInfo.fullQuestion,
-                   splitInfo.protoYes.dist, splitInfo.protoNo.dist)
-                  for isYesList, splitInfo in splitInfoIter2 )
+    splitInfoIter, splitInfoIter2, splitInfoIter3 = itertools.tee(
+        splitInfoIter, 3
+    )
+    splitIter = ( (answerSeq, splitInfo.fullQuestion,
+                   [ proto.dist for proto in splitInfo.protoForAnswer ])
+                  for answerSeq, splitInfo in splitInfoIter2 )
+    deltaNumLeavesIter = ( splitInfo.deltaNumLeaves()
+                           for answerSeq, splitInfo in splitInfoIter3 )
     deltaIterTrain = ( splitInfo.delta()
-                       for isYesList, splitInfo in splitInfoIter )
+                       for answerSeq, splitInfo in splitInfoIter )
     deltaIterTest = getDeltaIter(labelsTest, accForLabelTest, protoRoot.dist,
                                  splitIter)
-    return itertools.izip(deltaIterTrain, deltaIterTest)
+    return itertools.izip(deltaNumLeavesIter, deltaIterTrain, deltaIterTest)

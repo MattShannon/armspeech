@@ -1040,7 +1040,7 @@ def getEqualityThreshQGFramesLeft(sortedValues, threshes = None):
             (ques.getEqualityQuestions(values) +
              ques.getThreshQuestions(threshes)))
 
-@codeDeps(cluster.ClusteringSpec, cluster.MdlGrowerSpec,
+@codeDeps(cluster.ClusteringSpec, cluster.MdlUtilitySpec,
     cluster.decisionTreeCluster, d.AutoGrowingDiscreteAcc, d.FloorSetter,
     d.defaultEstimatePartial, evaluateVarious, getBmiForCorpus,
     getCorpusWithSubLabels, getInitDist1, globalToFullCtxCreateAcc, mixup,
@@ -1084,9 +1084,9 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
 
     clusteringSpecDict = dict()
     for agTag in agTags:
-        growerSpec = cluster.MdlGrowerSpec(mdlFactor, minCount = 10.0)
+        utilitySpec = cluster.MdlUtilitySpec(mdlFactor, minCount = 10.0)
         clusteringSpecDict[agTag] = cluster.ClusteringSpec(
-            growerSpec, questionGroups, verbosity = 3
+            utilitySpec, questionGroups, verbosity = 3
         )
 
     subDistDict = dict()
@@ -1118,7 +1118,7 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
 
     printTime('finished clustered')
 
-@codeDeps(cluster.ClusteringSpec, cluster.MdlGrowerSpec,
+@codeDeps(cluster.ClusteringSpec, cluster.MdlUtilitySpec,
     cluster.decisionTreeCluster, d.AutoGrowingDiscreteAcc, d.FloorSetter,
     d.defaultEstimatePartial, evaluateVarious, getBmiForCorpus,
     getCorpusWithSubLabels, getEqualityThreshQGFramesLeft, getInitDist3,
@@ -1178,9 +1178,9 @@ def doDecisionTreeClusteredFramesRemainingSystem(synthOutDir, figOutDir,
 
     clusteringSpecDict = dict()
     for agTag in agTags:
-        growerSpec = cluster.MdlGrowerSpec(mdlFactor, minCount = 10.0)
+        utilitySpec = cluster.MdlUtilitySpec(mdlFactor, minCount = 10.0)
         clusteringSpecDict[agTag] = cluster.ClusteringSpec(
-            growerSpec, questionGroups, verbosity = 3
+            utilitySpec, questionGroups, verbosity = 3
         )
 
     subDistDict = dict()
@@ -1212,7 +1212,7 @@ def doDecisionTreeClusteredFramesRemainingSystem(synthOutDir, figOutDir,
 
     printTime('finished clustered_frames_remaining')
 
-@codeDeps(cluster.ClusteringSpec, cluster.MdlGrowerSpec,
+@codeDeps(cluster.ClusteringSpec, cluster.MdlUtilitySpec,
     cluster.decisionTreeClusterInGreedyOrderWithTest, d.FloorSetter,
     getBmiForCorpus, getCorpusWithSubLabels, getInitDist1,
     globalToFullCtxCreateAcc, nodetree.findTaggedNode, printTime,
@@ -1263,7 +1263,7 @@ def doDecisionTreeClusteredInvestigateMdl(synthOutDir, figOutDir,
 
     clusteringSpecDict = dict()
     for agTag in agTags:
-        growerSpec = cluster.MdlGrowerSpec(mdlFactor, minCount = 10.0)
+        growerSpec = cluster.MdlUtilitySpec(mdlFactor, minCount = 10.0)
         clusteringSpecDict[agTag] = cluster.ClusteringSpec(
             growerSpec, questionGroups, verbosity = 0
         )
@@ -1285,7 +1285,7 @@ def doDecisionTreeClusteredInvestigateMdl(synthOutDir, figOutDir,
             f.write('# format: [train delta] [test delta] (both per frame)\n')
             f.write('# frames: %s %s\n' % (agAcc.occ, agAccTest.occ))
             for (
-                deltaTrain, deltaTest
+                deltaNumLeaves, deltaTrain, deltaTest
             ) in cluster.decisionTreeClusterInGreedyOrderWithTest(
                 clusteringSpec,
                 agAcc.accDict.keys(),
@@ -1294,10 +1294,14 @@ def doDecisionTreeClusteredInvestigateMdl(synthOutDir, figOutDir,
                 lambda label: agAccTest.accDict[label],
                 agAcc.createAcc
             ):
-                print 'delta: %s %s' % (deltaTrain / agAcc.occ,
-                                        deltaTest / agAccTest.occ)
-                f.write('%s %s\n' % (deltaTrain / agAcc.occ,
-                                     deltaTest / agAccTest.occ))
+                print ('delta: %s %s %s' %
+                       (deltaNumLeaves,
+                        deltaTrain / agAcc.occ,
+                        deltaTest / agAccTest.occ))
+                f.write('%s %s %s\n' %
+                        (deltaNumLeaves,
+                         deltaTrain / agAcc.occ,
+                         deltaTest / agAccTest.occ))
 
     printTime('finished clustered_investigate_mdl')
 

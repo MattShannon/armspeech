@@ -11,6 +11,7 @@ from __future__ import division
 import transform as xf
 from armspeech.util.mathhelp import logDet
 from armspeech.util.mathhelp import assert_allclose
+import cluster
 from codedep import codeDeps, ForwardRef
 
 import test_transform_questions
@@ -469,40 +470,27 @@ class TestOutputTransform(unittest.TestCase):
             axf = gen_ShiftOutputTransform(shapeInput = shapeInput, shapeOutput = shapeOutput)
             checkOutputTransform(axf, shapeInput, shapeOutput, hasParams = True, eps = eps, its = itsPerTransform, checkAdditional = checkAdditional)
 
-@codeDeps(randTag, xf.DecisionTree)
+@codeDeps(cluster.partitionLabels, randTag, xf.DecisionTree)
 def gen_DecisionTree(questionGroups, labels, splitProb = 0.49):
     numLeavess = [0]
     def gen_tree(labelsLeft):
         fullQuestionsLeft = []
         for labelValuer, questions in questionGroups:
             for question in questions:
-                yesNonEmpty = False
-                noNonEmpty = False
-                for label in labelsLeft:
-                    if question(labelValuer(label)):
-                        yesNonEmpty = True
-                    else:
-                        noNonEmpty = True
-                    if yesNonEmpty and noNonEmpty:
-                        break
-                if yesNonEmpty and noNonEmpty:
-                    fullQuestionsLeft.append((labelValuer, question))
+                fullQuestion = labelValuer, question
+                labelsForAnswer = cluster.partitionLabels(labelsLeft,
+                                                          fullQuestion)
+                if all([ labels for labels in labelsForAnswer ]):
+                    fullQuestionsLeft.append(fullQuestion)
 
         if random.random() > splitProb or not fullQuestionsLeft:
             numLeavess[0] += 1
             return numLeavess[0] - 1
         else:
             fullQuestion = random.choice(fullQuestionsLeft)
-            labelValuer, question = fullQuestion
-            labelsLeftYes = []
-            labelsLeftNo = []
-            for label in labelsLeft:
-                if question(labelValuer(label)):
-                    labelsLeftYes.append(label)
-                else:
-                    labelsLeftNo.append(label)
-            return (fullQuestion, [gen_tree(labelsLeftNo),
-                                   gen_tree(labelsLeftYes)])
+            labelsForAnswer = cluster.partitionLabels(labelsLeft, fullQuestion)
+            return (fullQuestion, [ gen_tree(labels)
+                                    for labels in labelsForAnswer ])
 
     tree = gen_tree(labels)
     return xf.DecisionTree(tree, numLeaves = numLeavess[0]).withTag(randTag())

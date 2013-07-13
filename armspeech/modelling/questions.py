@@ -3,7 +3,10 @@
 A full question consists of a label valuer together with a question. The label
 valuer is a callable that maps a label to a value (e.g. extracts the left-hand
 phone from a full-context label). A question is a callable that maps this
-value to a boolean representing yes or no.
+value to an answer, which is a value in some known codomain.
+The codomain should be of the form range(n) for some n.
+For example for standard decision tree questions the codomain consists of
+0 (answering "no" to the question) and 1 (answering "yes" to the question).
 """
 
 # Copyright 2011, 2012, 2013 Matt Shannon
@@ -89,7 +92,9 @@ class SubsetQuestion(Question):
     def shortRepr(self):
         return 'is '+self.name
     def __call__(self, value):
-        return value in self.subset
+        return int(value in self.subset)
+    def codomain(self):
+        return range(2)
 
 @codeDeps(Question)
 class EqualityQuestion(Question):
@@ -100,7 +105,9 @@ class EqualityQuestion(Question):
     def shortRepr(self):
         return '== '+str(self.value)
     def __call__(self, value):
-        return value == self.value
+        return int(value == self.value)
+    def codomain(self):
+        return range(2)
 
 @codeDeps(Question)
 class ThreshQuestion(Question):
@@ -111,7 +118,22 @@ class ThreshQuestion(Question):
     def shortRepr(self):
         return '<= '+str(self.thresh)
     def __call__(self, value):
-        return value <= self.thresh
+        return int(value <= self.thresh)
+    def codomain(self):
+        return range(2)
+
+@codeDeps(Question)
+class CmpQuestion(Question):
+    def __init__(self, thresh):
+        self.thresh = thresh
+    def __repr__(self):
+        return 'CmpQuestion(%r)' % self.thresh
+    def shortRepr(self):
+        return 'vs '+str(self.thresh)
+    def __call__(self, value):
+        return cmp(value, self.thresh) + 1
+    def codomain(self):
+        return range(3)
 
 @codeDeps(SubsetQuestion)
 def getSubsetQuestions(namedSubsets):
@@ -122,3 +144,6 @@ def getEqualityQuestions(values):
 @codeDeps(ThreshQuestion)
 def getThreshQuestions(threshes):
     return [ ThreshQuestion(thresh) for thresh in threshes ]
+@codeDeps(CmpQuestion)
+def getCmpQuestions(threshes):
+    return [ CmpQuestion(thresh) for thresh in threshes ]
