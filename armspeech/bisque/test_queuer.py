@@ -75,27 +75,30 @@ class TestDistribute(unittest.TestCase):
                                             liftExampleDag()]:
             with TempDir() as tempDir:
                 buildRepo = qr.BuildRepo(base = tempDir.location)
-                queuer = sge_queuer.MockSgeQueuer(buildRepo = buildRepo)
+                with sge_queuer.MockSgeQueuer(buildRepo = buildRepo) as queuer:
+                    finalArtifacts = [ art for art, expectedValue in testDag ]
+                    live = queuer.generateArtifacts(finalArtifacts,
+                                                    verbosity = 0)
+                    assert len(live) == totJobs
+                    finalLiveJobs = [
+                        live[job.secHash()]
+                        for art in finalArtifacts for job in art.parents()
+                        if job.secHash() in live
+                    ]
+                    assert len(finalLiveJobs) == finalJobs
+                    while not all([ liveJob.hasEnded()
+                                    for liveJob in finalLiveJobs ]):
+                        time.sleep(0.1)
+                    assert all([ liveJob.hasCompleted()
+                                 for liveJob in live.values() ])
+                    for art, expectedValue in testDag:
+                        assert art.loadValue(buildRepo) == expectedValue
 
-                finalArtifacts = [ art for art, expectedValue in testDag ]
-                live = queuer.generateArtifacts(finalArtifacts, verbosity = 0)
-                assert len(live) == totJobs
-                finalLiveJobs = [
-                    live[job.secHash()]
-                    for art in finalArtifacts for job in art.parents()
-                    if job.secHash() in live
-                ]
-                assert len(finalLiveJobs) == finalJobs
-                while not all([ liveJob.hasEnded()
-                                for liveJob in finalLiveJobs ]):
-                    time.sleep(0.1)
-                for art, expectedValue in testDag:
-                    assert art.loadValue(buildRepo) == expectedValue
-
-                # check no jobs submitted if we already have the desired
-                #   artifacts
-                live = queuer.generateArtifacts(finalArtifacts, verbosity = 0)
-                assert len(live) == 0
+                    # check no jobs submitted if we already have the desired
+                    #   artifacts
+                    live = queuer.generateArtifacts(finalArtifacts,
+                                                    verbosity = 0)
+                    assert len(live) == 0
 
     def test_MockSgeQueuer_several_little_submissions(self):
         for testDag, totJobs, finalJobs in [simpleTestDag(),
@@ -103,38 +106,39 @@ class TestDistribute(unittest.TestCase):
                                             liftExampleDag()]:
             with TempDir() as tempDir:
                 buildRepo = qr.BuildRepo(base = tempDir.location)
-                queuer = sge_queuer.MockSgeQueuer(buildRepo = buildRepo)
+                with sge_queuer.MockSgeQueuer(buildRepo = buildRepo) as queuer:
+                    finalLiveJobs = []
+                    liveJobDirs = set()
+                    totSubmitted = 0
+                    for art, expectedValue in testDag:
+                        live = queuer.generateArtifacts([art], verbosity = 0)
+                        finalLiveJobs.extend([
+                            live[job.secHash()]
+                            for job in art.parents() if job.secHash() in live
+                        ])
+                        liveJobDirs.update([ liveJob.dir
+                                             for liveJob in live.values() ])
+                        totSubmitted += len(live)
+                    assert len(liveJobDirs) == totJobs
+                    assert len(finalLiveJobs) == finalJobs
+                    if totSubmitted == totJobs:
+                        logging.warning(
+                            're-use of submitted jobs for MockSgeQueuer not'
+                            ' properly tested, since jobs completed too fast'
+                        )
+                    while not all([ liveJob.hasEnded()
+                                    for liveJob in finalLiveJobs ]):
+                        time.sleep(0.1)
+                    assert all([ liveJob.hasCompleted()
+                                 for liveJob in live.values() ])
+                    for art, expectedValue in testDag:
+                        assert art.loadValue(buildRepo) == expectedValue
 
-                finalLiveJobs = []
-                liveJobDirs = set()
-                totSubmitted = 0
-                for art, expectedValue in testDag:
-                    live = queuer.generateArtifacts([art], verbosity = 0)
-                    finalLiveJobs.extend([
-                        live[job.secHash()]
-                        for job in art.parents() if job.secHash() in live
-                    ])
-                    liveJobDirs.update([ liveJob.dir
-                                         for liveJob in live.values() ])
-                    totSubmitted += len(live)
-                assert len(liveJobDirs) == totJobs
-                assert len(finalLiveJobs) == finalJobs
-                if totSubmitted == totJobs:
-                    logging.warning(
-                        're-use of submitted jobs for MockSgeQueuer not'
-                        ' properly tested, since jobs completed too fast'
-                    )
-                while not all([ liveJob.hasEnded()
-                                for liveJob in finalLiveJobs ]):
-                    time.sleep(0.1)
-                for art, expectedValue in testDag:
-                    assert art.loadValue(buildRepo) == expectedValue
-
-                # check no jobs submitted if we already have the desired
-                #   artifacts
-                for art, expectedValue in testDag:
-                    live = queuer.generateArtifacts([art], verbosity = 0)
-                    assert len(live) == 0
+                    # check no jobs submitted if we already have the desired
+                    #   artifacts
+                    for art, expectedValue in testDag:
+                        live = queuer.generateArtifacts([art], verbosity = 0)
+                        assert len(live) == 0
 
 @codeDeps(TestDistribute)
 def suite():

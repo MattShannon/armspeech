@@ -13,20 +13,15 @@ from __future__ import division
 
 import queuer as qr
 import sge_runner
+import mock_sge
 from armspeech.util import persist
 from codedep import codeDeps
 
 import re
 import os
 import sys
-import logging
-import subprocess
-from subprocess import PIPE
 from armspeech.util import subprocesshelp
 import inspect
-import threading
-import socket
-from collections import defaultdict
 
 @codeDeps(qr.Queuer)
 class SgeQueuer(qr.Queuer):
@@ -45,90 +40,23 @@ class SgeQueuer(qr.Queuer):
 
         return liveJob
 
-@codeDeps()
-class MockQueueState(object):
-    def __init__(self):
-        self.counter = 0
-        self.mockStatus = dict()
-        self.children = defaultdict(list)
-        self.parents = dict()
-        self.jobSpec = dict()
-    def newJid(self):
-        self.counter += 1
-        return str(self.counter)
-    def submit(self, parentJids, jobName, args, logDir):
-        jid = self.newJid()
-        self.parents[jid] = parentJids
-        for parentJid in parentJids:
-            self.children[parentJid].append(jid)
-        self.jobSpec[jid] = jobName, args, logDir
-        return jid
-
-# (FIXME : use multiprocessing instead of threading, and then move this into
-#   a separate file? Would require changes to the way code shares state, but
-#   would allow true multithreaded single-machine job running. At the moment
-#   we presumably only get a speed-up from using threads if jobs are I/O-bound.)
-@codeDeps(MockQueueState, SgeQueuer, persist.secHashObject, sge_runner)
+@codeDeps(SgeQueuer, mock_sge.getMockSge, persist.secHashObject, sge_runner)
 class MockSgeQueuer(SgeQueuer):
-    def __init__(self, buildRepo, pythonExec = '/usr/bin/python'):
+    def __init__(self, buildRepo, jointLog = False, pythonExec = '/usr/bin/python'):
         self.buildRepo = buildRepo
+        self.jointLog = jointLog
         self.pythonExec = pythonExec
 
-        self.queueState = MockQueueState()
-        self.secHashUid = persist.secHashObject(id(self))
+    def __enter__(self):
+        self.submitServer, self.runServerProcess = mock_sge.getMockSge()
+        self.secHashUid = persist.secHashObject((
+            self.buildRepo, self.runServerProcess.pid
+        ))
+        return self
 
-    def parentsDone(self, jid):
-        return all([ self.queueState.mockStatus[parentJid] in [3, 10] for parentJid in self.queueState.parents[jid] ])
-
-    def runIfEligible(self, jid, verbosity):
-        if self.parentsDone(jid) and self.queueState.mockStatus[jid] == 1:
-            def run():
-                jobName, args, logDir = self.queueState.jobSpec[jid]
-                mockEnv = dict()
-                if 'PYTHONPATH' in os.environ:
-                    mockEnv['PYTHONPATH'] = os.environ['PYTHONPATH']
-                mockEnv['PYTHONUNBUFFERED'] = 'yes'
-                mockEnv['JOB_ID'] = jid
-                if 'HOSTNAME' in os.environ:
-                    mockEnv['HOSTNAME'] = os.environ['HOSTNAME']
-                else:
-                    mockEnv['HOSTNAME'] = socket.gethostname()
-                mockEnv['SGE_TASK_ID'] = 'undefined'
-                mockEnv['JOB_NAME'] = jobName
-
-                self.queueState.mockStatus[jid] = 2
-                if verbosity >= 1:
-                    print 'mock_sge_queuer: job', jid, 'started'
-                try:
-                    p = subprocess.Popen([self.pythonExec] + args, stdout = PIPE, stderr = PIPE, env = mockEnv)
-                    stdoutdata, stderrdata = p.communicate()
-                    with open(os.path.join(logDir, jobName+'.o'+jid), 'w') as outFile:
-                        outFile.write(stdoutdata)
-                    with open(os.path.join(logDir, jobName+'.e'+jid), 'w') as errFile:
-                        errFile.write(stderrdata)
-                    if p.returncode == 0:
-                        self.queueState.mockStatus[jid] = 3
-                        if verbosity >= 1:
-                            print 'mock_sge_queuer: job', jid, 'finished'
-                    elif p.returncode == 100:
-                        self.queueState.mockStatus[jid] = 11
-                        logging.warning('mock_sge_queuer: error in job '+str(jid)+' (holding successors)')
-                    else:
-                        self.queueState.mockStatus[jid] = 10
-                        logging.warning('mock_sge_queuer: error in job '+str(jid)+'')
-                except:
-                    self.queueState.mockStatus[jid] = 10
-                    logging.warning('mock_sge_queuer: error in job '+str(jid)+'')
-                    raise
-                finally:
-                    self.runNext(jid, verbosity)
-            t = threading.Thread(target = run)
-            t.start()
-
-    def runNext(self, jidJustFinished, verbosity):
-        jids = self.queueState.children[jidJustFinished]
-        for jid in jids:
-            self.runIfEligible(jid, verbosity)
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.submitServer.requestExitWhenDone()
+        self.runServerProcess.join()
 
     def qsub(self, jobName, liveJobDir, parentJids, verbosity):
         args = [
@@ -140,11 +68,20 @@ class MockSgeQueuer(SgeQueuer):
             print 'queuer: command:'
             print '\t', ' '.join(args)
 
-        jidAssigned = self.queueState.submit(parentJids, jobName, args, logDir = liveJobDir)
-        self.queueState.mockStatus[jidAssigned] = 1
+        env = dict()
+        if 'PYTHONPATH' in os.environ:
+            env['PYTHONPATH'] = os.environ['PYTHONPATH']
+        env['PYTHONUNBUFFERED'] = 'yes'
 
-        self.runIfEligible(jidAssigned, verbosity)
-
+        jidAssigned = self.submitServer.submit(
+            parentJids,
+            jobName,
+            env,
+            self.pythonExec,
+            args,
+            logDir = liveJobDir,
+            jointLog = self.jointLog
+        )
         return jidAssigned
 
 qsubRe = re.compile(r'Your job.* ([0-9]+) \("(.*)"\) has been submitted\n$')

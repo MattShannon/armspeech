@@ -58,7 +58,6 @@ class BuildRepo(object):
         persist.savePickle(os.path.join(liveJob.dir, 'job.pickle'), job)
         liveJob.setExtra('secHash', jobSecHash)
         persist.savePickle(os.path.join(liveJob.dir, 'buildRepo.pickle'), self)
-        persist.savePickle(os.path.join(liveJob.dir, 'queuer.pickle'), queuer)
         liveJob.setStored()
 
         job.checkAllSecHash()
@@ -90,13 +89,23 @@ class LiveJob(object):
     def setStored(self):
         self.setStatus(0)
     def setSubmitted(self):
+        assert self.status() == 0
         self.setStatus(1)
     def setRunning(self):
+        assert self.status() == 1
         self.setStatus(2)
     def setCompleted(self):
+        assert self.status() == 2
         self.setStatus(3)
     def setError(self):
+        assert self.status() == 2
         self.setStatus(10)
+    def hasCompleted(self):
+        status = self.status()
+        return status == 3
+    def hasError(self):
+        status = self.status()
+        return status == 10
     def hasEnded(self):
         status = self.status()
         return status == 3 or status == 10
