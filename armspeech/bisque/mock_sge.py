@@ -18,14 +18,18 @@ import logging
 import subprocess
 import multiprocessing
 import socket
-from collections import defaultdict
+from collections import defaultdict, deque
 
 @codeDeps()
 class RunServer(object):
-    def __init__(self, submitConn, pollInterval = 0.1, verbosity = 1):
+    def __init__(self, submitConn, numSlots = 4, pollInterval = 0.1,
+                 verbosity = 1):
         self.submitConn = submitConn
+        self.numSlots = numSlots
         self.pollInterval = pollInterval
         self.verbosity = verbosity
+
+        assert self.numSlots >= 1
 
         self.children = defaultdict(list)
         self.parents = dict()
@@ -94,13 +98,14 @@ class RunServer(object):
 
     def loop(self):
         heldJobs = set()
+        readyJobs = deque([])
         activeJobs = dict()
 
-        def startIfEligible(jid):
-            if self.status[jid] == 1 and self.parentsDone(jid):
+        def readyIfEligible(jid):
+            if jid in heldJobs and self.parentsDone(jid):
+                assert self.status[jid] == 1
                 heldJobs.remove(jid)
-                process = self.startJob(jid)
-                activeJobs[jid] = process
+                readyJobs.append(jid)
 
         while True:
             if self.submitConn.poll(self.pollInterval):
@@ -118,9 +123,17 @@ class RunServer(object):
                     self.status[jid] = 1
 
                     heldJobs.add(jid)
-                    startIfEligible(jid)
-            elif self.exitWhenDone and not activeJobs:
+                    readyIfEligible(jid)
+            elif self.exitWhenDone and (not heldJobs and
+                                        not readyJobs and
+                                        not activeJobs):
                 return
+
+            if readyJobs and len(activeJobs) < self.numSlots:
+                jid = readyJobs.popleft()
+                assert self.status[jid] == 1
+                process = self.startJob(jid)
+                activeJobs[jid] = process
 
             for jid, process in activeJobs.items():
                 # process may be None, indicating a job that failed to start
@@ -128,8 +141,9 @@ class RunServer(object):
                     del activeJobs[jid]
                     if process is not None:
                         self.processFinishedJob(jid, process)
+                    assert self.status[jid] >= 3
                     for childJid in self.children[jid]:
-                        startIfEligible(childJid)
+                        readyIfEligible(childJid)
 
 @codeDeps()
 class SubmitServer(object):
@@ -153,10 +167,10 @@ class SubmitServer(object):
         self.submitConn.send((exitWhenDone,))
 
 @codeDeps(RunServer, SubmitServer)
-def getMockSge(pollInterval = 0.1, verbosity = 0):
+def getMockSge(numSlots = 4, pollInterval = 0.1, verbosity = 0):
     runServerSubmitConn, submitServerSubmitConn = multiprocessing.Pipe(False)
-    runServer = RunServer(runServerSubmitConn, pollInterval = pollInterval,
-                          verbosity = verbosity)
+    runServer = RunServer(runServerSubmitConn, numSlots = numSlots,
+                          pollInterval = pollInterval, verbosity = verbosity)
     submitServer = SubmitServer(submitServerSubmitConn)
     runServerProcess = multiprocessing.Process(target = runServer.loop)
     runServerProcess.start()
