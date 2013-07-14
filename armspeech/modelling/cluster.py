@@ -9,6 +9,7 @@
 import dist as d
 import transform as xf
 from armspeech.util.util import MapElem
+from armspeech.util.mathhelp import ThreshMax
 from armspeech.util.mathhelp import assert_allclose
 from armspeech.util.timing import timed
 from codedep import codeDeps
@@ -245,12 +246,16 @@ class MdlUtilitySpec(object):
 )
 class DecisionTreeClusterer(object):
     def __init__(self, accSummer, minCount, leafEstimator, splitValuer,
-                 verbosity):
+                 nearBestThresh, verbosity):
         self.accSummer = accSummer
         self.minCount = minCount
         self.leafEstimator = leafEstimator
         self.splitValuer = splitValuer
+        self.nearBestThresh = nearBestThresh
         self.verbosity = verbosity
+
+        self.threshMax = ThreshMax(self.nearBestThresh, key = self.splitValuer)
+        self.threshMaxZero = ThreshMax(0.0, key = self.splitValuer)
 
     def getPossSplits(self, protoNoSplit, accsForQuestionGroups):
         splitInfos = []
@@ -284,10 +289,14 @@ class DecisionTreeClusterer(object):
 
         splitInfos = self.getPossSplits(protoNoSplit, accsForQuestionGroups)
         noSplitInfo = SplitInfo(protoNoSplit, None, [protoNoSplit])
-        splitInfo = max(splitInfos + [noSplitInfo], key = self.splitValuer)
+        nearBestSplitInfos = self.threshMax(splitInfos + [noSplitInfo])
+        bestSplitInfos = self.threshMaxZero(nearBestSplitInfos)
+        bestSplitInfo = bestSplitInfos[0]
+        bestSplitInfo.bests = bestSplitInfos
+        bestSplitInfo.nearBests = nearBestSplitInfos
 
         stateAdj = labels, questionGroupsOut, answerSeq, protoNoSplit
-        return splitInfo, stateAdj
+        return bestSplitInfo, stateAdj
 
     def getNextStates(self, state, splitInfo):
         labels, questionGroups, answerSeq, protoNoSplit = state
@@ -295,6 +304,9 @@ class DecisionTreeClusterer(object):
         if self.verbosity >= 2:
             indent = '    '+''.join([ ('|  ' if answer != 0 else '   ')
                                       for answer in answerSeq ])
+        if self.verbosity >= 2:
+            print ('cluster:%s(bests = %s, nearBests = %s)' %
+                   (indent, len(splitInfo.bests), len(splitInfo.nearBests)))
         if splitInfo.fullQuestion is None:
             if self.verbosity >= 2:
                 print 'cluster:'+indent+'leaf'
@@ -412,12 +424,14 @@ class ClusteringSpec(object):
     def __init__(self, utilitySpec, questionGroups, minCount,
                  estimateTotAux = d.getDefaultEstimateTotAuxNoRevert(),
                  catchEstimationErrors = False,
+                 nearBestThresh = 0.1,
                  verbosity = 2):
         self.utilitySpec = utilitySpec
         self.questionGroups = questionGroups
         self.minCount = minCount
         self.estimateTotAux = estimateTotAux
         self.catchEstimationErrors = catchEstimationErrors
+        self.nearBestThresh = nearBestThresh
         self.verbosity = verbosity
 
 @codeDeps(AccSummer, DecisionTreeClusterer, LeafEstimator, d.Rat,
@@ -439,7 +453,9 @@ def decisionTreeCluster(clusteringSpec, labels, accForLabel, createAcc):
     splitValuer = clusteringSpec.utilitySpec(protoRoot.dist, protoRoot.count,
                                              verbosity = verbosity)
     clusterer = DecisionTreeClusterer(accSummer, minCount, leafEstimator,
-                                      splitValuer, verbosity = verbosity)
+                                      splitValuer,
+                                      clusteringSpec.nearBestThresh,
+                                      verbosity = verbosity)
     if verbosity >= 1:
         print ('cluster: decision tree clustering with perLeafPenalty = %s and'
                ' minCount = %s' %
@@ -508,7 +524,9 @@ def decisionTreeClusterInGreedyOrderWithTest(clusteringSpec,
     splitValuer = clusteringSpec.utilitySpec(protoRoot.dist, protoRoot.count,
                                              verbosity = verbosity)
     clusterer = DecisionTreeClusterer(accSummer, minCount, leafEstimator,
-                                      splitValuer, verbosity = verbosity)
+                                      splitValuer,
+                                      clusteringSpec.nearBestThresh,
+                                      verbosity = verbosity)
     if verbosity >= 1:
         print ('cluster: decision tree clustering with perLeafPenalty = %s and'
                ' minCount = %s' %
