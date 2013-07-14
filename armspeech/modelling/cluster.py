@@ -101,7 +101,20 @@ class AccSummer(object):
 
         return accForAnswer
 
-    def sumAccsForQuestionGroups(self, labels, questionGroups):
+    def sumAccsForQuestionGroups(self, labels, questionGroups, minCount = 0.0):
+        """Computes the acc for each labelValuer, question and answer.
+
+        The returned value is a list with zero or one elements for each
+        questionGroup; if one element then this element is a list with zero or
+        one elements for each question; if one element then this element is a
+        list of accs, one for each possible answer.
+
+        We say that a question violates the minimum count constraint if any of
+        its answers has count less than minCount.
+        Questions which violate this constraint, and question groups for which
+        all the questions violate this constraint, are not represented in the
+        returned value.
+        """
         labelValueToAccs = self.sumAccsFirstLevel(labels, questionGroups)
 
         accsForQuestionGroups = []
@@ -112,8 +125,10 @@ class AccSummer(object):
             for question in questions:
                 accForAnswer = self.sumAccsSecondLevel(labelValueToAcc,
                                                        question)
-                accsForQuestions.append((question, accForAnswer))
-            accsForQuestionGroups.append((labelValuer, accsForQuestions))
+                if all([ acc.count() >= minCount for acc in accForAnswer ]):
+                    accsForQuestions.append((question, accForAnswer))
+            if accsForQuestions:
+                accsForQuestionGroups.append((labelValuer, accsForQuestions))
 
         return accsForQuestionGroups
 
