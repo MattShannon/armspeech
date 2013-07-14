@@ -101,19 +101,6 @@ class AccSummer(object):
 
         return accForAnswer
 
-    def sumAccsForQuestions(self, labels, questionGroups):
-        """Returns an iterator with yes and no accs for each question."""
-        labelValueToAccs = self.sumAccsFirstLevel(labels, questionGroups)
-
-        for (
-            labelValueToAcc, (labelValuer, questions)
-        ) in zip(labelValueToAccs, questionGroups):
-            for question in questions:
-                accForAnswer = self.sumAccsSecondLevel(labelValueToAcc,
-                                                       question)
-                fullQuestion = labelValuer, question
-                yield fullQuestion, accForAnswer
-
     def sumAccsForQuestionGroups(self, labels, questionGroups):
         labelValueToAccs = self.sumAccsFirstLevel(labels, questionGroups)
 
@@ -253,8 +240,8 @@ class DecisionTreeClusterer(object):
         self.splitValuer = splitValuer
         self.verbosity = verbosity
 
-    def getPossSplitIter(self, state, questionGroups):
-        """Returns an iterator with one SplitInfo for each allowed question.
+    def getPossSplitsWithPrunedQuestionGroups(self, state, questionGroups):
+        """Returns a list of possible splits (and an updated questionGroups).
 
         A clustering state is a proto-leaf together with info about its
         position in the tree and enough info about the initial parts of the
@@ -264,23 +251,7 @@ class DecisionTreeClusterer(object):
 
         For a given state and list of questionGroups, this function returns an
         iterator over splits, one for each allowed question.
-        """
-        labels, questionGroupsRemaining, answerSeq, protoNoSplit = state
-
-        for (
-            fullQuestion, accForAnswer
-        ) in self.accSummer.sumAccsForQuestions(labels, questionGroups):
-            protoForAnswer = self.leafEstimator.estForAnswerOrNone(
-                accForAnswer
-            )
-            if protoForAnswer is not None:
-                yield SplitInfo(protoNoSplit, fullQuestion, protoForAnswer)
-
-    def getPossSplitsWithPrunedQuestionGroups(self, state, questionGroups):
-        """Returns a list of possible splits (and an updated questionGroups).
-
-        This method is like getPossSplitIter but returns a list rather than an
-        iterator, and returns an updated questionGroups with certain questions
+        It also returns an updated questionGroups with certain questions
         that can never be selected in future (that is, lower in the tree)
         removed.
         """
