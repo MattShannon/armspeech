@@ -181,9 +181,7 @@ class SplitInfo(object):
         self.fullQuestion = fullQuestion
         self.protoForAnswer = protoForAnswer
 
-        assert self.protoNoSplit is not None
         assert len(self.protoForAnswer) >= 1
-        assert all([ proto is not None for proto in self.protoForAnswer ])
         if self.fullQuestion is None:
             assert self.protoForAnswer == [self.protoNoSplit]
         assert_allclose(
