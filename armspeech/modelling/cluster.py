@@ -148,11 +148,23 @@ class LeafEstimator(object):
         count = acc.count()
         return ProtoLeaf(dist, aux, auxRat, count)
 
+    def estForAnswer(self, accForAnswer):
+        return [ self.est(acc) for acc in accForAnswer ]
+
     def estOrNone(self, acc):
         try:
             return self.est(acc)
         except d.EstimationError:
             return None
+
+    def estForAnswerOrNone(self, accForAnswer):
+        if self.catchEstimationErrors:
+            try:
+                return self.estForAnswer(accForAnswer)
+            except d.EstimationError:
+                return None
+        else:
+            return self.estForAnswer(accForAnswer)
 
 @codeDeps(assert_allclose)
 class SplitInfo(object):
@@ -164,13 +176,13 @@ class SplitInfo(object):
 
         assert self.protoNoSplit is not None
         assert len(self.protoForAnswer) >= 1
+        assert all([ proto is not None for proto in self.protoForAnswer ])
         if self.fullQuestion is None:
             assert self.protoForAnswer == [self.protoNoSplit]
-        if any([ proto is not None for proto in self.protoForAnswer ]):
-            assert_allclose(
-                sum([ proto.count for proto in self.protoForAnswer ]),
-                self.protoNoSplit.count
-            )
+        assert_allclose(
+            sum([ proto.count for proto in self.protoForAnswer ]),
+            self.protoNoSplit.count
+        )
 
     def deltaNumLeaves(self):
         return len(self.protoForAnswer) - 1
@@ -181,14 +193,11 @@ class SplitInfo(object):
         The delta is used to choose which question to use to split a given node
         and to decide whether to split at all.
         """
-        if any([ proto is None for proto in self.protoForAnswer ]):
-            return float('-inf')
-        else:
-            return (
-                sum([ proto.aux - perLeafPenalty
-                      for proto in self.protoForAnswer ]) -
-                (self.protoNoSplit.aux - perLeafPenalty)
-            )
+        return (
+            sum([ proto.aux - perLeafPenalty
+                  for proto in self.protoForAnswer ]) -
+            (self.protoNoSplit.aux - perLeafPenalty)
+        )
 
 @codeDeps()
 class SplitValuer(object):
@@ -200,7 +209,7 @@ class SplitValuer(object):
         assert self.minCount > 0.0
 
     def __call__(self, splitInfo):
-        if all([ proto is not None and proto.count >= self.minCount
+        if all([ proto.count >= self.minCount
                  for proto in splitInfo.protoForAnswer ]):
             return splitInfo.delta(self.perLeafPenalty)
         else:
@@ -261,11 +270,11 @@ class DecisionTreeClusterer(object):
         for (
             fullQuestion, accForAnswer
         ) in self.accSummer.sumAccsForQuestions(labels, questionGroups):
-            protoForAnswer = [ self.leafEstimator.estOrNone(acc)
-                               for acc in accForAnswer ]
-            splitInfo = SplitInfo(protoNoSplit, fullQuestion, protoForAnswer)
-            if self.splitValuer(splitInfo) > float('-inf'):
-                yield splitInfo
+            protoForAnswer = self.leafEstimator.estForAnswerOrNone(
+                accForAnswer
+            )
+            if protoForAnswer is not None:
+                yield SplitInfo(protoNoSplit, fullQuestion, protoForAnswer)
 
     def getPossSplitsWithPrunedQuestionGroups(self, state, questionGroups):
         """Returns a list of possible splits (and an updated questionGroups).
@@ -292,12 +301,13 @@ class DecisionTreeClusterer(object):
                 if all([ acc.count() >= minCount for acc in accForAnswer ]):
                     questionsOut.append(question)
 
-                    protoForAnswer = [ self.leafEstimator.estOrNone(acc)
-                                       for acc in accForAnswer ]
-                    fullQuestion = labelValuer, question
-                    splitInfo = SplitInfo(protoNoSplit, fullQuestion,
-                                          protoForAnswer)
-                    if self.splitValuer(splitInfo) > float('-inf'):
+                    protoForAnswer = self.leafEstimator.estForAnswerOrNone(
+                        accForAnswer
+                    )
+                    if protoForAnswer is not None:
+                        fullQuestion = labelValuer, question
+                        splitInfo = SplitInfo(protoNoSplit, fullQuestion,
+                                              protoForAnswer)
                         splitInfos.append(splitInfo)
             if questionsOut:
                 questionGroupsOut.append((labelValuer, questionsOut))
