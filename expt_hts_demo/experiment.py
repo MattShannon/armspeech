@@ -1263,9 +1263,9 @@ def doDecisionTreeClusteredInvestigateMdl(synthOutDir, figOutDir,
 
     clusteringSpecDict = dict()
     for agTag in agTags:
-        growerSpec = cluster.MdlUtilitySpec(mdlFactor, minCount = 10.0)
+        utilitySpec = cluster.MdlUtilitySpec(mdlFactor, minCount = 10.0)
         clusteringSpecDict[agTag] = cluster.ClusteringSpec(
-            growerSpec, questionGroups, verbosity = 0
+            utilitySpec, questionGroups, verbosity = 0
         )
 
     for agTag in agTags:
