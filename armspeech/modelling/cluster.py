@@ -349,6 +349,7 @@ class DecisionTreeClusterer(object):
         splitInfos, questionGroupsOut = (
             self.getPossSplitsWithPrunedQuestionGroups(state, questionGroups)
         )
+        splitInfos = list(splitInfos)
         splitInfos.append(SplitInfo(protoNoSplit, None, [protoNoSplit]))
         splitInfo = max(splitInfos, key = self.splitValuer)
         stateNew = labels, questionGroupsOut, answerSeq, protoNoSplit
@@ -402,6 +403,7 @@ class DecisionTreeClusterer(object):
                 self.getPossSplitsWithPrunedQuestionGroups(state,
                                                            questionGroups)
             )
+            splitInfos = list(splitInfos)
             splitInfos.append(SplitInfo(protoNoSplit, None, [protoNoSplit]))
             splitInfo = max(splitInfos, key = self.splitValuer)
             stateNew = labels, questionGroupsOut, answerSeq, protoNoSplit
