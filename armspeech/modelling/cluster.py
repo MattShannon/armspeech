@@ -277,6 +277,9 @@ class DecisionTreeClusterer(object):
         """
         labels, questionGroupsRemaining, answerSeq, protoNoSplit = state
 
+        # (N.B. question group pruning makes assumptions about how minCount
+        #   affects the value of a split)
+        assert isinstance(self.splitValuer, SplitValuer)
         minCount = self.splitValuer.minCount
 
         questionGroupsOut = []
