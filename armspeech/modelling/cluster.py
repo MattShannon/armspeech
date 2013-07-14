@@ -252,6 +252,27 @@ class DecisionTreeClusterer(object):
         self.splitValuer = splitValuer
         self.verbosity = verbosity
 
+    def getPossSplits(self, protoNoSplit, accsForQuestionGroups):
+        splitInfos = []
+        for labelValuer, accsForQuestions in accsForQuestionGroups:
+            for question, accForAnswer in accsForQuestions:
+                protoForAnswer = self.leafEstimator.estForAnswerOrNone(
+                    accForAnswer
+                )
+                if protoForAnswer is not None:
+                    fullQuestion = labelValuer, question
+                    splitInfos.append(
+                        SplitInfo(protoNoSplit, fullQuestion, protoForAnswer)
+                    )
+
+        return splitInfos
+
+    def getPrunedQuestionGroups(self, accsForQuestionGroups):
+        return [
+            (labelValuer, [ question for question, _ in accsForQuestions ])
+            for labelValuer, accsForQuestions in accsForQuestionGroups
+        ]
+
     def getPossSplitsWithPrunedQuestionGroups(self, state, questionGroups):
         """Returns a list of possible splits (and an updated questionGroups).
 
@@ -269,29 +290,11 @@ class DecisionTreeClusterer(object):
         """
         labels, questionGroupsRemaining, answerSeq, protoNoSplit = state
 
-        minCount = self.minCount
-
-        questionGroupsOut = []
-        splitInfos = []
-        for (
-            labelValuer, accsForQuestions
-        ) in self.accSummer.sumAccsForQuestionGroups(labels, questionGroups):
-            questionsOut = []
-            for question, accForAnswer in accsForQuestions:
-                if all([ acc.count() >= minCount for acc in accForAnswer ]):
-                    questionsOut.append(question)
-
-                    protoForAnswer = self.leafEstimator.estForAnswerOrNone(
-                        accForAnswer
-                    )
-                    if protoForAnswer is not None:
-                        fullQuestion = labelValuer, question
-                        splitInfo = SplitInfo(protoNoSplit, fullQuestion,
-                                              protoForAnswer)
-                        splitInfos.append(splitInfo)
-            if questionsOut:
-                questionGroupsOut.append((labelValuer, questionsOut))
-
+        accsForQuestionGroups = self.accSummer.sumAccsForQuestionGroups(
+            labels, questionGroups, minCount = self.minCount
+        )
+        splitInfos = self.getPossSplits(protoNoSplit, accsForQuestionGroups)
+        questionGroupsOut = self.getPrunedQuestionGroups(accsForQuestionGroups)
         return splitInfos, questionGroupsOut
 
     def getNextStates(self, state, splitInfo):
