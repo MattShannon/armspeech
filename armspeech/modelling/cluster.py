@@ -115,7 +115,6 @@ class AccSummer(object):
                 yield fullQuestion, accForAnswer
 
     def sumAccsForQuestionGroups(self, labels, questionGroups):
-        """Returns an iterator with yes and no accs for each question."""
         labelValueToAccs = self.sumAccsFirstLevel(labels, questionGroups)
 
         accsForQuestionGroups = []
