@@ -281,6 +281,15 @@ class DecisionTreeClusterer(object):
             for labelValuer, accsForQuestions in accsForQuestionGroups
         ]
 
+    def getBestAction(self, protoNoSplit, splitInfos):
+        noSplitInfo = SplitInfo(protoNoSplit, None, [protoNoSplit])
+        nearBestSplitInfos = self.threshMax(splitInfos + [noSplitInfo])
+        bestSplitInfos = self.threshMaxZero(nearBestSplitInfos)
+        bestSplitInfo = bestSplitInfos[0]
+        bestSplitInfo.bests = bestSplitInfos
+        bestSplitInfo.nearBests = nearBestSplitInfos
+        return bestSplitInfo
+
     def computeBestSplitAndStateAdj(self, state):
         labels, questionGroups, answerSeq, protoNoSplit = state
 
@@ -291,12 +300,7 @@ class DecisionTreeClusterer(object):
         questionGroupsOut = self.getPrunedQuestionGroups(accsForQuestionGroups)
 
         splitInfos = self.getPossSplits(protoNoSplit, accsForQuestionGroups)
-        noSplitInfo = SplitInfo(protoNoSplit, None, [protoNoSplit])
-        nearBestSplitInfos = self.threshMax(splitInfos + [noSplitInfo])
-        bestSplitInfos = self.threshMaxZero(nearBestSplitInfos)
-        bestSplitInfo = bestSplitInfos[0]
-        bestSplitInfo.bests = bestSplitInfos
-        bestSplitInfo.nearBests = nearBestSplitInfos
+        bestSplitInfo = self.getBestAction(protoNoSplit, splitInfos)
 
         stateAdj = labels, questionGroupsOut, answerSeq, protoNoSplit
         return bestSplitInfo, stateAdj
