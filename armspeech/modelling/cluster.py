@@ -399,7 +399,8 @@ class DecisionTreeClusterer(object):
         def construct(answerSeq):
             splitInfo = splitInfoDict[answerSeq]
             if splitInfo.fullQuestion is None:
-                leafProtos.append(splitInfo.protoNoSplit)
+                leafProto, = splitInfo.protoForAnswer
+                leafProtos.append(leafProto)
                 return len(leafProtos) - 1
             else:
                 _, question = splitInfo.fullQuestion
