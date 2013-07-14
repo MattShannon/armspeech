@@ -326,15 +326,6 @@ class DecisionTreeClusterer(object):
                 ))
             ]
 
-    def maxSplitAndNextStates(self, state, *splitInfos):
-        labels, questionGroups, answerSeq, protoNoSplit = state
-
-        splitInfos = list(splitInfos)
-        splitInfos.append(SplitInfo(protoNoSplit, None, [protoNoSplit]))
-        splitInfo = max(splitInfos, key = self.splitValuer)
-        nextStates = self.getNextStates(state, splitInfo)
-        return splitInfo, nextStates
-
     def computeBestSplitAndNextStates(self, state):
         labels, questionGroups, answerSeq, protoNoSplit = state
 
