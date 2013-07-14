@@ -102,7 +102,8 @@ class AccSummer(object):
 
         return accForAnswer
 
-    def sumAccsForQuestionGroups(self, labels, questionGroups, minCount = 0.0):
+    def sumAccsForQuestionGroupsSub(self, labelValueToAccs, questionGroups,
+                                    minCount = 0.0):
         """Computes the acc for each labelValuer, question and answer.
 
         The returned value is a list with zero or one elements for each
@@ -116,8 +117,6 @@ class AccSummer(object):
         all the questions violate this constraint, are not represented in the
         returned value.
         """
-        labelValueToAccs = self.sumAccsFirstLevel(labels, questionGroups)
-
         accsForQuestionGroups = []
         for (
             labelValueToAcc, (labelValuer, questions)
@@ -132,6 +131,12 @@ class AccSummer(object):
                 accsForQuestionGroups.append((labelValuer, accsForQuestions))
 
         return accsForQuestionGroups
+
+    def sumAccsForQuestionGroups(self, labels, questionGroups, minCount = 0.0):
+        labelValueToAccs = self.sumAccsFirstLevel(labels, questionGroups)
+        return self.sumAccsForQuestionGroupsSub(
+            labelValueToAccs, questionGroups, minCount = minCount
+        )
 
 @codeDeps()
 class ProtoLeaf(object):
