@@ -261,7 +261,6 @@ class DecisionTreeClusterer(object):
         for (
             fullQuestion, accForAnswer
         ) in self.accSummer.sumAccsForQuestions(labels, questionGroups):
-            _, question = fullQuestion
             protoForAnswer = [ self.leafEstimator.estOrNone(acc)
                                for acc in accForAnswer ]
             splitInfo = SplitInfo(protoNoSplit, fullQuestion, protoForAnswer)
