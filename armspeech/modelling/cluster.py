@@ -142,8 +142,9 @@ class ProtoLeaf(object):
 
 @codeDeps(ProtoLeaf, d.EstimationError)
 class LeafEstimator(object):
-    def __init__(self, estimateTotAux):
+    def __init__(self, estimateTotAux, catchEstimationErrors = True):
         self.estimateTotAux = estimateTotAux
+        self.catchEstimationErrors = catchEstimationErrors
 
     def est(self, acc):
         dist, (aux, auxRat) = self.estimateTotAux(acc)
@@ -154,10 +155,13 @@ class LeafEstimator(object):
         return [ self.est(acc) for acc in accForAnswer ]
 
     def estOrNone(self, acc):
-        try:
+        if self.catchEstimationErrors:
+            try:
+                return self.est(acc)
+            except d.EstimationError:
+                return None
+        else:
             return self.est(acc)
-        except d.EstimationError:
-            return None
 
     def estForAnswerOrNone(self, accForAnswer):
         if self.catchEstimationErrors:
@@ -451,10 +455,12 @@ class DecisionTreeClusterer(object):
 class ClusteringSpec(object):
     def __init__(self, utilitySpec, questionGroups,
                  estimateTotAux = d.getDefaultEstimateTotAuxNoRevert(),
+                 catchEstimationErrors = True,
                  verbosity = 2):
         self.utilitySpec = utilitySpec
         self.questionGroups = questionGroups
         self.estimateTotAux = estimateTotAux
+        self.catchEstimationErrors = catchEstimationErrors
         self.verbosity = verbosity
 
 @codeDeps(AccSummer, DecisionTreeClusterer, LeafEstimator, d.Rat,
@@ -463,7 +469,10 @@ class ClusteringSpec(object):
 def decisionTreeCluster(clusteringSpec, labels, accForLabel, createAcc):
     verbosity = clusteringSpec.verbosity
     accSummer = AccSummer(accForLabel, createAcc)
-    leafEstimator = LeafEstimator(clusteringSpec.estimateTotAux)
+    leafEstimator = LeafEstimator(
+        clusteringSpec.estimateTotAux,
+        catchEstimationErrors = clusteringSpec.catchEstimationErrors
+    )
     def getProtoRoot():
         return leafEstimator.est(accSummer.sumAccs(labels))
     if verbosity >= 3:
@@ -532,7 +541,10 @@ def decisionTreeClusterInGreedyOrderWithTest(clusteringSpec,
                                              createAcc):
     verbosity = clusteringSpec.verbosity
     accSummer = AccSummer(accForLabel, createAcc)
-    leafEstimator = LeafEstimator(clusteringSpec.estimateTotAux)
+    leafEstimator = LeafEstimator(
+        clusteringSpec.estimateTotAux,
+        catchEstimationErrors = clusteringSpec.catchEstimationErrors
+    )
     protoRoot = leafEstimator.est(accSummer.sumAccs(labels))
     splitValuer = clusteringSpec.utilitySpec(protoRoot.dist, protoRoot.count,
                                              verbosity = verbosity)
