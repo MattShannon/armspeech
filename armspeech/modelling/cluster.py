@@ -142,7 +142,7 @@ class ProtoLeaf(object):
 
 @codeDeps(ProtoLeaf, d.EstimationError)
 class LeafEstimator(object):
-    def __init__(self, estimateTotAux, catchEstimationErrors = True):
+    def __init__(self, estimateTotAux, catchEstimationErrors = False):
         self.estimateTotAux = estimateTotAux
         self.catchEstimationErrors = catchEstimationErrors
 
@@ -411,7 +411,7 @@ class DecisionTreeClusterer(object):
 class ClusteringSpec(object):
     def __init__(self, utilitySpec, questionGroups, minCount,
                  estimateTotAux = d.getDefaultEstimateTotAuxNoRevert(),
-                 catchEstimationErrors = True,
+                 catchEstimationErrors = False,
                  verbosity = 2):
         self.utilitySpec = utilitySpec
         self.questionGroups = questionGroups
