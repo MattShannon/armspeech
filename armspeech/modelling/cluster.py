@@ -273,29 +273,21 @@ class DecisionTreeClusterer(object):
             for labelValuer, accsForQuestions in accsForQuestionGroups
         ]
 
-    def getPossSplitsWithPrunedQuestionGroups(self, state, questionGroups):
-        """Returns a list of possible splits (and an updated questionGroups).
-
-        A clustering state is a proto-leaf together with info about its
-        position in the tree and enough info about the initial parts of the
-        tree to allow clustering of the sub-tree with the proto-leaf as root.
-        (This initial tree info consists of the labels remaining and the
-        non-trivial question groups remaining).
-
-        For a given state and list of questionGroups, this function returns an
-        iterator over splits, one for each allowed question.
-        It also returns an updated questionGroups with certain questions
-        that can never be selected in future (that is, lower in the tree)
-        removed.
-        """
-        labels, questionGroupsRemaining, answerSeq, protoNoSplit = state
+    def computeBestSplitAndStateAdj(self, state):
+        labels, questionGroups, answerSeq, protoNoSplit = state
 
         accsForQuestionGroups = self.accSummer.sumAccsForQuestionGroups(
             labels, questionGroups, minCount = self.minCount
         )
-        splitInfos = self.getPossSplits(protoNoSplit, accsForQuestionGroups)
+
         questionGroupsOut = self.getPrunedQuestionGroups(accsForQuestionGroups)
-        return splitInfos, questionGroupsOut
+
+        splitInfos = self.getPossSplits(protoNoSplit, accsForQuestionGroups)
+        noSplitInfo = SplitInfo(protoNoSplit, None, [protoNoSplit])
+        splitInfo = max(splitInfos + [noSplitInfo], key = self.splitValuer)
+
+        stateAdj = labels, questionGroupsOut, answerSeq, protoNoSplit
+        return splitInfo, stateAdj
 
     def getNextStates(self, state, splitInfo):
         labels, questionGroups, answerSeq, protoNoSplit = state
@@ -329,19 +321,6 @@ class DecisionTreeClusterer(object):
                 ))
             ]
 
-    def computeBestSplitAndNextStates(self, state):
-        labels, questionGroups, answerSeq, protoNoSplit = state
-
-        splitInfos, questionGroupsOut = (
-            self.getPossSplitsWithPrunedQuestionGroups(state, questionGroups)
-        )
-        splitInfos = list(splitInfos)
-        splitInfos.append(SplitInfo(protoNoSplit, None, [protoNoSplit]))
-        splitInfo = max(splitInfos, key = self.splitValuer)
-        stateNew = labels, questionGroupsOut, answerSeq, protoNoSplit
-        nextStates = self.getNextStates(stateNew, splitInfo)
-        return splitInfo, nextStates
-
     def printNodeInfo(self, state):
         labels, questionGroups, answerSeq, protoNoSplit = state
 
@@ -371,12 +350,13 @@ class DecisionTreeClusterer(object):
                 indent = '    '+''.join([ ('|  ' if answer != 0 else '   ')
                                           for answer in answerSeq ])
                 computeBestSplit = timed(
-                    self.computeBestSplitAndNextStates,
+                    self.computeBestSplitAndStateAdj,
                     msg = 'cluster:%schoose and perform split took' % indent
                 )
             else:
-                computeBestSplit = self.computeBestSplitAndNextStates
-            splitInfo, nextStates = computeBestSplit(state)
+                computeBestSplit = self.computeBestSplitAndStateAdj
+            splitInfo, stateAdj = computeBestSplit(state)
+            nextStates = self.getNextStates(stateAdj, splitInfo)
             agenda.extend(reversed(nextStates))
             yield answerSeq, splitInfo
 
@@ -384,19 +364,11 @@ class DecisionTreeClusterer(object):
         agenda = []
 
         def agendaPush(state):
-            labels, questionGroups, answerSeq, protoNoSplit = state
-            splitInfos, questionGroupsOut = (
-                self.getPossSplitsWithPrunedQuestionGroups(state,
-                                                           questionGroups)
-            )
-            splitInfos = list(splitInfos)
-            splitInfos.append(SplitInfo(protoNoSplit, None, [protoNoSplit]))
-            splitInfo = max(splitInfos, key = self.splitValuer)
-            stateNew = labels, questionGroupsOut, answerSeq, protoNoSplit
             if splitInfo.fullQuestion is not None:
+                splitInfo, stateAdj = self.computeBestSplitAndStateAdj(state)
                 heapq.heappush(
                     agenda,
-                    (-self.splitValuer(splitInfo), splitInfo, stateNew)
+                    (-self.splitValuer(splitInfo), splitInfo, stateAdj)
                 )
 
         agendaPush(stateInit)
