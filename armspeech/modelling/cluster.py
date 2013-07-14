@@ -207,35 +207,26 @@ class SplitInfo(object):
 
 @codeDeps()
 class SplitValuer(object):
-    def __init__(self, perLeafPenalty, minCount):
+    def __init__(self, perLeafPenalty):
         self.perLeafPenalty = perLeafPenalty
-        self.minCount = minCount
 
         assert self.perLeafPenalty >= 0.0
-        assert self.minCount > 0.0
 
     def __call__(self, splitInfo):
-        if all([ proto.count >= self.minCount
-                 for proto in splitInfo.protoForAnswer ]):
-            return splitInfo.delta(self.perLeafPenalty)
-        else:
-            return float('-inf')
+        return splitInfo.delta(self.perLeafPenalty)
 
 @codeDeps(SplitValuer)
 class FixedUtilitySpec(object):
-    def __init__(self, perLeafPenalty, minCount):
+    def __init__(self, perLeafPenalty):
         self.perLeafPenalty = perLeafPenalty
-        self.minCount = minCount
 
     def __call__(self, distRoot, countRoot, verbosity = 1):
-        return SplitValuer(self.perLeafPenalty, self.minCount)
+        return SplitValuer(self.perLeafPenalty)
 
 @codeDeps(SplitValuer, d.getDefaultParamSpec)
 class MdlUtilitySpec(object):
-    def __init__(self, mdlFactor, minCount,
-                 paramSpec = d.getDefaultParamSpec()):
+    def __init__(self, mdlFactor, paramSpec = d.getDefaultParamSpec()):
         self.mdlFactor = mdlFactor
-        self.minCount = minCount
         self.paramSpec = paramSpec
 
     def __call__(self, distRoot, countRoot, verbosity = 1):
@@ -247,14 +238,16 @@ class MdlUtilitySpec(object):
             print ('cluster: setting perLeafPenalty using MDL: mdlFactor = %s'
                    ' and numParamsPerLeaf = %s and count = %s' %
                    (self.mdlFactor, numParamsPerLeaf, countRoot))
-        return SplitValuer(perLeafPenalty, self.minCount)
+        return SplitValuer(perLeafPenalty)
 
 @codeDeps(MapElem, SplitInfo, d.DiscreteDist, d.MappedInputDist,
     d.sumValuedRats, partitionLabels, timed, xf.DecisionTree
 )
 class DecisionTreeClusterer(object):
-    def __init__(self, accSummer, leafEstimator, splitValuer, verbosity):
+    def __init__(self, accSummer, minCount, leafEstimator, splitValuer,
+                 verbosity):
         self.accSummer = accSummer
+        self.minCount = minCount
         self.leafEstimator = leafEstimator
         self.splitValuer = splitValuer
         self.verbosity = verbosity
@@ -276,10 +269,7 @@ class DecisionTreeClusterer(object):
         """
         labels, questionGroupsRemaining, answerSeq, protoNoSplit = state
 
-        # (N.B. question group pruning makes assumptions about how minCount
-        #   affects the value of a split)
-        assert isinstance(self.splitValuer, SplitValuer)
-        minCount = self.splitValuer.minCount
+        minCount = self.minCount
 
         questionGroupsOut = []
         splitInfos = []
@@ -453,12 +443,13 @@ class DecisionTreeClusterer(object):
 
 @codeDeps(d.getDefaultEstimateTotAuxNoRevert)
 class ClusteringSpec(object):
-    def __init__(self, utilitySpec, questionGroups,
+    def __init__(self, utilitySpec, questionGroups, minCount,
                  estimateTotAux = d.getDefaultEstimateTotAuxNoRevert(),
                  catchEstimationErrors = True,
                  verbosity = 2):
         self.utilitySpec = utilitySpec
         self.questionGroups = questionGroups
+        self.minCount = minCount
         self.estimateTotAux = estimateTotAux
         self.catchEstimationErrors = catchEstimationErrors
         self.verbosity = verbosity
@@ -469,6 +460,7 @@ class ClusteringSpec(object):
 def decisionTreeCluster(clusteringSpec, labels, accForLabel, createAcc):
     verbosity = clusteringSpec.verbosity
     accSummer = AccSummer(accForLabel, createAcc)
+    minCount = clusteringSpec.minCount
     leafEstimator = LeafEstimator(
         clusteringSpec.estimateTotAux,
         catchEstimationErrors = clusteringSpec.catchEstimationErrors
@@ -480,12 +472,12 @@ def decisionTreeCluster(clusteringSpec, labels, accForLabel, createAcc):
     protoRoot = getProtoRoot()
     splitValuer = clusteringSpec.utilitySpec(protoRoot.dist, protoRoot.count,
                                              verbosity = verbosity)
-    clusterer = DecisionTreeClusterer(accSummer, leafEstimator, splitValuer,
-                                      verbosity = verbosity)
+    clusterer = DecisionTreeClusterer(accSummer, minCount, leafEstimator,
+                                      splitValuer, verbosity = verbosity)
     if verbosity >= 1:
         print ('cluster: decision tree clustering with perLeafPenalty = %s and'
                ' minCount = %s' %
-               (splitValuer.perLeafPenalty, splitValuer.minCount))
+               (splitValuer.perLeafPenalty, minCount))
 
     questionGroups = removeTrivialQuestions(labels,
                                             clusteringSpec.questionGroups)
@@ -541,6 +533,7 @@ def decisionTreeClusterInGreedyOrderWithTest(clusteringSpec,
                                              createAcc):
     verbosity = clusteringSpec.verbosity
     accSummer = AccSummer(accForLabel, createAcc)
+    minCount = clusteringSpec.minCount
     leafEstimator = LeafEstimator(
         clusteringSpec.estimateTotAux,
         catchEstimationErrors = clusteringSpec.catchEstimationErrors
@@ -548,12 +541,12 @@ def decisionTreeClusterInGreedyOrderWithTest(clusteringSpec,
     protoRoot = leafEstimator.est(accSummer.sumAccs(labels))
     splitValuer = clusteringSpec.utilitySpec(protoRoot.dist, protoRoot.count,
                                              verbosity = verbosity)
-    clusterer = DecisionTreeClusterer(accSummer, leafEstimator, splitValuer,
-                                      verbosity = verbosity)
+    clusterer = DecisionTreeClusterer(accSummer, minCount, leafEstimator,
+                                      splitValuer, verbosity = verbosity)
     if verbosity >= 1:
         print ('cluster: decision tree clustering with perLeafPenalty = %s and'
                ' minCount = %s' %
-               (splitValuer.perLeafPenalty, splitValuer.minCount))
+               (splitValuer.perLeafPenalty, minCount))
 
     questionGroups = removeTrivialQuestions(labels,
                                             clusteringSpec.questionGroups)

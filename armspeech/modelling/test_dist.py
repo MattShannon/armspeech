@@ -1038,9 +1038,9 @@ class TestDist(unittest.TestCase):
                 acc = d.AutoGrowingDiscreteAcc(createAcc = lambda: d.LinearGaussianAcc(inputLength = dimIn, varianceFloor = 0.0))
                 for input, output, occ in training:
                     acc.add(input, output, occ)
-                utilitySpec = cluster.MdlUtilitySpec(1.0, minCount = 0.1)
+                utilitySpec = cluster.MdlUtilitySpec(1.0)
                 clusteringSpec = cluster.ClusteringSpec(
-                    utilitySpec, questionGroups, verbosity = 0
+                    utilitySpec, questionGroups, minCount = 0.1, verbosity = 0
                 )
                 return cluster.decisionTreeCluster(
                     clusteringSpec, acc.accDict.keys(),

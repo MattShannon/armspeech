@@ -1084,9 +1084,9 @@ def doDecisionTreeClusteredSystem(synthOutDir, figOutDir, mdlFactor = 0.3):
 
     clusteringSpecDict = dict()
     for agTag in agTags:
-        utilitySpec = cluster.MdlUtilitySpec(mdlFactor, minCount = 10.0)
+        utilitySpec = cluster.MdlUtilitySpec(mdlFactor)
         clusteringSpecDict[agTag] = cluster.ClusteringSpec(
-            utilitySpec, questionGroups, verbosity = 3
+            utilitySpec, questionGroups, minCount = 10.0, verbosity = 3
         )
 
     subDistDict = dict()
@@ -1178,9 +1178,9 @@ def doDecisionTreeClusteredFramesRemainingSystem(synthOutDir, figOutDir,
 
     clusteringSpecDict = dict()
     for agTag in agTags:
-        utilitySpec = cluster.MdlUtilitySpec(mdlFactor, minCount = 10.0)
+        utilitySpec = cluster.MdlUtilitySpec(mdlFactor)
         clusteringSpecDict[agTag] = cluster.ClusteringSpec(
-            utilitySpec, questionGroups, verbosity = 3
+            utilitySpec, questionGroups, minCount = 10.0, verbosity = 3
         )
 
     subDistDict = dict()
@@ -1263,9 +1263,9 @@ def doDecisionTreeClusteredInvestigateMdl(synthOutDir, figOutDir,
 
     clusteringSpecDict = dict()
     for agTag in agTags:
-        utilitySpec = cluster.MdlUtilitySpec(mdlFactor, minCount = 10.0)
+        utilitySpec = cluster.MdlUtilitySpec(mdlFactor)
         clusteringSpecDict[agTag] = cluster.ClusteringSpec(
-            utilitySpec, questionGroups, verbosity = 0
+            utilitySpec, questionGroups, minCount = 10.0, verbosity = 0
         )
 
     for agTag in agTags:
