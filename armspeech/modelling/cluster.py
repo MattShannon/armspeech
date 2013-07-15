@@ -310,7 +310,12 @@ def constructTree(splitInfoDict):
 @codeDeps(getBestAction, getPossSplits, getPrunedQuestionGroups,
     partitionLabels, timed
 )
-class DecisionTreeClusterer(object):
+class NodeBasedClusterer(object):
+    """Supports decision tree clustering in a node-by-node fashion.
+
+    More specifically this class contains methods that use a certain form of
+    state which is useful for node-based clustering.
+    """
     def __init__(self, accSummer, minCount, leafEstimator, splitValuer,
                  nearBestThresh, verbosity):
         self.accSummer = accSummer
@@ -449,7 +454,7 @@ class ClusteringSpec(object):
         self.nearBestThresh = nearBestThresh
         self.verbosity = verbosity
 
-@codeDeps(AccSummer, DecisionTreeClusterer, LeafEstimator, constructTree, d.Rat,
+@codeDeps(AccSummer, LeafEstimator, NodeBasedClusterer, constructTree, d.Rat,
     removeTrivialQuestions, timed
 )
 def decisionTreeCluster(clusteringSpec, labels, accForLabel, createAcc):
@@ -467,10 +472,10 @@ def decisionTreeCluster(clusteringSpec, labels, accForLabel, createAcc):
     protoRoot = getProtoRoot()
     splitValuer = clusteringSpec.utilitySpec(protoRoot.dist, protoRoot.count,
                                              verbosity = verbosity)
-    clusterer = DecisionTreeClusterer(accSummer, minCount, leafEstimator,
-                                      splitValuer,
-                                      clusteringSpec.nearBestThresh,
-                                      verbosity = verbosity)
+    clusterer = NodeBasedClusterer(accSummer, minCount, leafEstimator,
+                                   splitValuer,
+                                   clusteringSpec.nearBestThresh,
+                                   verbosity = verbosity)
     if verbosity >= 1:
         print ('cluster: decision tree clustering with perLeafPenalty = %s and'
                ' minCount = %s' %
@@ -521,7 +526,7 @@ def getDeltaIter(labelsRoot, accForLabel, distRoot, splitIter,
 
         yield delta
 
-@codeDeps(AccSummer, DecisionTreeClusterer, LeafEstimator, getDeltaIter,
+@codeDeps(AccSummer, LeafEstimator, NodeBasedClusterer, getDeltaIter,
     removeTrivialQuestions
 )
 def decisionTreeClusterInGreedyOrderWithTest(clusteringSpec,
@@ -538,10 +543,10 @@ def decisionTreeClusterInGreedyOrderWithTest(clusteringSpec,
     protoRoot = leafEstimator.est(accSummer.sumAccs(labels))
     splitValuer = clusteringSpec.utilitySpec(protoRoot.dist, protoRoot.count,
                                              verbosity = verbosity)
-    clusterer = DecisionTreeClusterer(accSummer, minCount, leafEstimator,
-                                      splitValuer,
-                                      clusteringSpec.nearBestThresh,
-                                      verbosity = verbosity)
+    clusterer = NodeBasedClusterer(accSummer, minCount, leafEstimator,
+                                   splitValuer,
+                                   clusteringSpec.nearBestThresh,
+                                   verbosity = verbosity)
     if verbosity >= 1:
         print ('cluster: decision tree clustering with perLeafPenalty = %s and'
                ' minCount = %s' %
