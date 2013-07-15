@@ -302,16 +302,16 @@ def getPrunedQuestionGroups(accsForQuestionGroups):
     ]
 
 @codeDeps(SplitInfo, ThreshMax)
-def getBestAction(protoNoSplit, splitInfos, splitValuer, nearBestThresh = 0.1):
-    threshMax = ThreshMax(nearBestThresh, key = splitValuer)
+def getBestAction(protoNoSplit, splitInfos, splitValuer, goodThresh = 0.1):
+    threshMax = ThreshMax(goodThresh, key = splitValuer)
     threshMaxZero = ThreshMax(0.0, key = splitValuer)
 
     noSplitInfo = SplitInfo(protoNoSplit, None, [protoNoSplit])
-    nearBestSplitInfos = threshMax(splitInfos + [noSplitInfo])
-    bestSplitInfos = threshMaxZero(nearBestSplitInfos)
+    goodSplitInfos = threshMax(splitInfos + [noSplitInfo])
+    bestSplitInfos = threshMaxZero(goodSplitInfos)
     bestSplitInfo = bestSplitInfos[0]
     bestSplitInfo.bests = bestSplitInfos
-    bestSplitInfo.nearBests = nearBestSplitInfos
+    bestSplitInfo.goods = goodSplitInfos
     return bestSplitInfo
 
 @codeDeps(MapElem, d.DiscreteDist, d.MappedInputDist, d.sumValuedRats,
@@ -353,13 +353,13 @@ class NodeBasedClusterer(object):
     state which is useful for node-based clustering.
     """
     def __init__(self, accSummer1, accSummer2, minCount, leafEstimator,
-                 splitValuer, nearBestThresh, verbosity):
+                 splitValuer, goodThresh, verbosity):
         self.accSummer1 = accSummer1
         self.accSummer2 = accSummer2
         self.minCount = minCount
         self.leafEstimator = leafEstimator
         self.splitValuer = splitValuer
-        self.nearBestThresh = nearBestThresh
+        self.goodThresh = goodThresh
         self.verbosity = verbosity
 
     def computeBestSplitAndStateAdj(self, state):
@@ -378,7 +378,7 @@ class NodeBasedClusterer(object):
                                    self.leafEstimator)
         bestSplitInfo = getBestAction(protoNoSplit, splitInfos,
                                       self.splitValuer,
-                                      nearBestThresh = self.nearBestThresh)
+                                      goodThresh = self.goodThresh)
 
         stateAdj = labels, questionGroupsOut, answerSeq, protoNoSplit
         return bestSplitInfo, stateAdj
@@ -390,8 +390,8 @@ class NodeBasedClusterer(object):
             indent = '    '+''.join([ ('|  ' if answer != 0 else '   ')
                                       for answer in answerSeq ])
         if self.verbosity >= 2:
-            print ('cluster:%s(bests = %s, nearBests = %s)' %
-                   (indent, len(splitInfo.bests), len(splitInfo.nearBests)))
+            print ('cluster:%s(bests = %s, goods = %s)' %
+                   (indent, len(splitInfo.bests), len(splitInfo.goods)))
         if splitInfo.fullQuestion is None:
             if self.verbosity >= 2:
                 print 'cluster:'+indent+'leaf'
@@ -487,13 +487,13 @@ class DepthBasedClusterer(object):
     state which is useful for depth-based clustering.
     """
     def __init__(self, accSummer1, accSummer2, minCount, leafEstimator,
-                 splitValuer, nearBestThresh, verbosity):
+                 splitValuer, goodThresh, verbosity):
         self.accSummer1 = accSummer1
         self.accSummer2 = accSummer2
         self.minCount = minCount
         self.leafEstimator = leafEstimator
         self.splitValuer = splitValuer
-        self.nearBestThresh = nearBestThresh
+        self.goodThresh = goodThresh
         self.verbosity = verbosity
 
     def getAccsForQuestionGroupsForLeaf(self, leafToQgToValueToAcc,
@@ -581,7 +581,7 @@ class DepthBasedClusterer(object):
                                        self.leafEstimator)
             bestSplitInfo = getBestAction(
                 protoNoSplit, splitInfos, self.splitValuer,
-                nearBestThresh = self.nearBestThresh
+                goodThresh = self.goodThresh
             )
 
             bestSplitInfoForLeaf.append(bestSplitInfo)
@@ -617,14 +617,14 @@ class ClusteringSpec(object):
     def __init__(self, utilitySpec, questionGroups, minCount,
                  estimateTotAux = d.getDefaultEstimateTotAuxNoRevert(),
                  catchEstimationErrors = False,
-                 nearBestThresh = 0.1,
+                 goodThresh = 0.1,
                  verbosity = 2):
         self.utilitySpec = utilitySpec
         self.questionGroups = questionGroups
         self.minCount = minCount
         self.estimateTotAux = estimateTotAux
         self.catchEstimationErrors = catchEstimationErrors
-        self.nearBestThresh = nearBestThresh
+        self.goodThresh = goodThresh
         self.verbosity = verbosity
 
 @codeDeps(LeafEstimator, NodeBasedClusterer, NodeBasedFirstLevelAccSummer,
@@ -648,7 +648,7 @@ def decisionTreeCluster(clusteringSpec, labels, accForLabel, createAcc):
                                              verbosity = verbosity)
     clusterer = NodeBasedClusterer(accSummer1, accSummer2, minCount,
                                    leafEstimator, splitValuer,
-                                   clusteringSpec.nearBestThresh,
+                                   clusteringSpec.goodThresh,
                                    verbosity = verbosity)
     if verbosity >= 1:
         print ('cluster: decision tree clustering with perLeafPenalty = %s and'
@@ -694,7 +694,7 @@ def decisionTreeClusterDepthBased(clusteringSpec, labels, labelledAccChunks,
                                              verbosity = verbosity)
     clusterer = DepthBasedClusterer(accSummer1, accSummer2, minCount,
                                     leafEstimator, splitValuer,
-                                    clusteringSpec.nearBestThresh,
+                                    clusteringSpec.goodThresh,
                                     verbosity = verbosity)
     if verbosity >= 1:
         print ('cluster: decision tree clustering with perLeafPenalty = %s and'
@@ -765,7 +765,7 @@ def decisionTreeClusterInGreedyOrderWithTest(clusteringSpec,
                                              verbosity = verbosity)
     clusterer = NodeBasedClusterer(accSummer1, accSummer2, minCount,
                                    leafEstimator, splitValuer,
-                                   clusteringSpec.nearBestThresh,
+                                   clusteringSpec.goodThresh,
                                    verbosity = verbosity)
     if verbosity >= 1:
         print ('cluster: decision tree clustering with perLeafPenalty = %s and'
