@@ -243,6 +243,46 @@ class FixedFileArtifact(Artifact):
     def isDone(self, buildRepo):
         return os.path.exists(self.location)
 
+@codeDeps(Artifact)
+class LazySeqArtifact(Artifact):
+    """A wrapper for sequence-valued artifacts allowing lazy loading.
+
+    This (slightly hacky) class provides a wrapper around an underlying
+    sequence-valued artifact.
+    The artifact value for this class is an iterator representing the same
+    sequence as the underlying value.
+    When loadValue is called for this artifact an iterator is returned, but the
+    underlying value is only computed when the first element of the iterator is
+    accessed.
+    The underlying value is then stored in memory to allow it to be used for
+    the remainder of the lifetime of the iterator.
+    This class therefore provides a way for a given sequence-valued artifact to
+    be loaded (e.g. unpickled) only when it is needed.
+    """
+    def __init__(self, seqArt):
+        self.seqArt = seqArt
+    def parents(self):
+        return self.seqArt.parents()
+    def parentArtifacts(self):
+        return self.seqArt.parentArtifacts()
+    def computeSecHash(self):
+        return self.seqArt.computeSecHash()
+    def loc(self, buildRepo):
+        return self.seqArt.loc(buildRepo)
+    def isDone(self, buildRepo):
+        return self.seqArt.isDone(buildRepo)
+    def loadValue(self, buildRepo):
+        def getValueNew():
+            for elem in self.seqArt.loadValue(buildRepo):
+                yield elem
+        return getValueNew()
+    def saveValue(self, buildRepo, value):
+        return self.seqArt.saveValue(buildRepo, value)
+
+@codeDeps(LazySeqArtifact)
+def lazySeq(seqArt):
+    return LazySeqArtifact(seqArt)
+
 @codeDeps(Artifact, codedep.getHash, persist.loadPickle, persist.savePickle,
     persist.secHashObject
 )
