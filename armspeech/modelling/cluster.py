@@ -416,8 +416,8 @@ class DecisionTreeClusterer(object):
         agenda = []
 
         def agendaPush(state):
+            splitInfo, stateAdj = self.computeBestSplitAndStateAdj(state)
             if splitInfo.fullQuestion is not None:
-                splitInfo, stateAdj = self.computeBestSplitAndStateAdj(state)
                 heapq.heappush(
                     agenda,
                     (-self.splitValuer(splitInfo), splitInfo, stateAdj)
