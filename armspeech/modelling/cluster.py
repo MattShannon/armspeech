@@ -51,59 +51,20 @@ def removeTrivialQuestions(labels, questionGroups):
         return questionGroupsOut
 
 @codeDeps(d.addAcc)
-class AccSummer(object):
-    def __init__(self, accForLabel, createAcc):
-        self.accForLabel = accForLabel
+class SecondLevelAccSummer(object):
+    def __init__(self, createAcc):
         self.createAcc = createAcc
 
-    def sumAccs(self, labels):
-        accForLabel = self.accForLabel
-        accTot = self.createAcc()
-        for label in labels:
-            d.addAcc(accTot, accForLabel(label))
-        return accTot
-
-    def sumAccsForQuestion(self, labels, fullQuestion):
-        labelValuer, question = fullQuestion
-        accForLabel = self.accForLabel
-
+    def forQuestion(self, valueToAcc, question):
         accForAnswer = [ self.createAcc() for _ in question.codomain() ]
-        for label in labels:
-            acc = accForLabel(label)
-            answer = question(labelValuer(label))
-            d.addAcc(accForAnswer[answer], acc)
-
-        return accForAnswer
-
-    def sumAccsFirstLevel(self, labels, questionGroups):
-        accForLabel = self.accForLabel
-        numQuestionGroups = len(questionGroups)
-
-        labelValuers = [ labelValuer
-                         for labelValuer, questions in questionGroups ]
-        labelValueToAccs = [ defaultdict(self.createAcc)
-                             for _ in range(numQuestionGroups) ]
-
-        for label in labels:
-            acc = accForLabel(label)
-            for qgIndex in range(numQuestionGroups):
-                labelValuer = labelValuers[qgIndex]
-                labelValueToAcc = labelValueToAccs[qgIndex]
-                d.addAcc(labelValueToAcc[labelValuer(label)], acc)
-
-        # list contains one labelValueToAcc for each questionGroup
-        return labelValueToAccs
-
-    def sumAccsSecondLevel(self, labelValueToAcc, question):
-        accForAnswer = [ self.createAcc() for _ in question.codomain() ]
-        for labelValue, acc in labelValueToAcc.iteritems():
+        for labelValue, acc in valueToAcc.iteritems():
             answer = question(labelValue)
             d.addAcc(accForAnswer[answer], acc)
 
         return accForAnswer
 
-    def sumAccsForQuestionGroupsSub(self, labelValueToAccs, questionGroups,
-                                    minCount = 0.0):
+    def forQuestionGroups(self, qgToValueToAcc, questionGroups,
+                          minCount = 0.0):
         """Computes the acc for each labelValuer, question and answer.
 
         The returned value is a list with zero or one elements for each
@@ -119,12 +80,11 @@ class AccSummer(object):
         """
         accsForQuestionGroups = []
         for (
-            labelValueToAcc, (labelValuer, questions)
-        ) in zip(labelValueToAccs, questionGroups):
+            valueToAcc, (labelValuer, questions)
+        ) in zip(qgToValueToAcc, questionGroups):
             accsForQuestions = []
             for question in questions:
-                accForAnswer = self.sumAccsSecondLevel(labelValueToAcc,
-                                                       question)
+                accForAnswer = self.forQuestion(valueToAcc, question)
                 if all([ acc.count() >= minCount for acc in accForAnswer ]):
                     accsForQuestions.append((question, accForAnswer))
             if accsForQuestions:
@@ -132,11 +92,49 @@ class AccSummer(object):
 
         return accsForQuestionGroups
 
-    def sumAccsForQuestionGroups(self, labels, questionGroups, minCount = 0.0):
-        labelValueToAccs = self.sumAccsFirstLevel(labels, questionGroups)
-        return self.sumAccsForQuestionGroupsSub(
-            labelValueToAccs, questionGroups, minCount = minCount
-        )
+@codeDeps(d.addAcc)
+class NodeBasedFirstLevelAccSummer(object):
+    """A first-level acc summer that is useful for node-based clustering."""
+    def __init__(self, accForLabel, createAcc):
+        self.accForLabel = accForLabel
+        self.createAcc = createAcc
+
+    def all(self, labels):
+        accForLabel = self.accForLabel
+        accTot = self.createAcc()
+        for label in labels:
+            d.addAcc(accTot, accForLabel(label))
+        return accTot
+
+    def forQuestion(self, labels, fullQuestion):
+        labelValuer, question = fullQuestion
+        accForLabel = self.accForLabel
+
+        accForAnswer = [ self.createAcc() for _ in question.codomain() ]
+        for label in labels:
+            acc = accForLabel(label)
+            answer = question(labelValuer(label))
+            d.addAcc(accForAnswer[answer], acc)
+
+        return accForAnswer
+
+    def getQgToValueToAcc(self, labels, questionGroups):
+        accForLabel = self.accForLabel
+        numQuestionGroups = len(questionGroups)
+
+        labelValuers = [ labelValuer
+                         for labelValuer, questions in questionGroups ]
+        qgToValueToAcc = [ defaultdict(self.createAcc)
+                           for _ in range(numQuestionGroups) ]
+
+        for label in labels:
+            acc = accForLabel(label)
+            for qgIndex in range(numQuestionGroups):
+                labelValuer = labelValuers[qgIndex]
+                valueToAcc = qgToValueToAcc[qgIndex]
+                d.addAcc(valueToAcc[labelValuer(label)], acc)
+
+        return qgToValueToAcc
 
 @codeDeps()
 class ProtoLeaf(object):
@@ -316,9 +314,10 @@ class NodeBasedClusterer(object):
     More specifically this class contains methods that use a certain form of
     state which is useful for node-based clustering.
     """
-    def __init__(self, accSummer, minCount, leafEstimator, splitValuer,
-                 nearBestThresh, verbosity):
-        self.accSummer = accSummer
+    def __init__(self, accSummer1, accSummer2, minCount, leafEstimator,
+                 splitValuer, nearBestThresh, verbosity):
+        self.accSummer1 = accSummer1
+        self.accSummer2 = accSummer2
         self.minCount = minCount
         self.leafEstimator = leafEstimator
         self.splitValuer = splitValuer
@@ -328,8 +327,11 @@ class NodeBasedClusterer(object):
     def computeBestSplitAndStateAdj(self, state):
         labels, questionGroups, answerSeq, protoNoSplit = state
 
-        accsForQuestionGroups = self.accSummer.sumAccsForQuestionGroups(
-            labels, questionGroups, minCount = self.minCount
+        qgToValueToAcc = self.accSummer1.getQgToValueToAcc(
+            labels, questionGroups
+        )
+        accsForQuestionGroups = self.accSummer2.forQuestionGroups(
+            qgToValueToAcc, questionGroups, minCount = self.minCount
         )
 
         questionGroupsOut = getPrunedQuestionGroups(accsForQuestionGroups)
@@ -454,26 +456,27 @@ class ClusteringSpec(object):
         self.nearBestThresh = nearBestThresh
         self.verbosity = verbosity
 
-@codeDeps(AccSummer, LeafEstimator, NodeBasedClusterer, constructTree, d.Rat,
-    removeTrivialQuestions, timed
+@codeDeps(LeafEstimator, NodeBasedClusterer, NodeBasedFirstLevelAccSummer,
+    SecondLevelAccSummer, constructTree, d.Rat, removeTrivialQuestions, timed
 )
 def decisionTreeCluster(clusteringSpec, labels, accForLabel, createAcc):
     verbosity = clusteringSpec.verbosity
-    accSummer = AccSummer(accForLabel, createAcc)
+    accSummer1 = NodeBasedFirstLevelAccSummer(accForLabel, createAcc)
+    accSummer2 = SecondLevelAccSummer(createAcc)
     minCount = clusteringSpec.minCount
     leafEstimator = LeafEstimator(
         clusteringSpec.estimateTotAux,
         catchEstimationErrors = clusteringSpec.catchEstimationErrors
     )
     def getProtoRoot():
-        return leafEstimator.est(accSummer.sumAccs(labels))
+        return leafEstimator.est(accSummer1.all(labels))
     if verbosity >= 3:
         getProtoRoot = timed(getProtoRoot)
     protoRoot = getProtoRoot()
     splitValuer = clusteringSpec.utilitySpec(protoRoot.dist, protoRoot.count,
                                              verbosity = verbosity)
-    clusterer = NodeBasedClusterer(accSummer, minCount, leafEstimator,
-                                   splitValuer,
+    clusterer = NodeBasedClusterer(accSummer1, accSummer2, minCount,
+                                   leafEstimator, splitValuer,
                                    clusteringSpec.nearBestThresh,
                                    verbosity = verbosity)
     if verbosity >= 1:
@@ -526,25 +529,26 @@ def getDeltaIter(labelsRoot, accForLabel, distRoot, splitIter,
 
         yield delta
 
-@codeDeps(AccSummer, LeafEstimator, NodeBasedClusterer, getDeltaIter,
-    removeTrivialQuestions
+@codeDeps(LeafEstimator, NodeBasedClusterer, NodeBasedFirstLevelAccSummer,
+    SecondLevelAccSummer, getDeltaIter, removeTrivialQuestions
 )
 def decisionTreeClusterInGreedyOrderWithTest(clusteringSpec,
                                              labels, labelsTest,
                                              accForLabel, accForLabelTest,
                                              createAcc):
     verbosity = clusteringSpec.verbosity
-    accSummer = AccSummer(accForLabel, createAcc)
+    accSummer1 = NodeBasedFirstLevelAccSummer(accForLabel, createAcc)
+    accSummer2 = SecondLevelAccSummer(createAcc)
     minCount = clusteringSpec.minCount
     leafEstimator = LeafEstimator(
         clusteringSpec.estimateTotAux,
         catchEstimationErrors = clusteringSpec.catchEstimationErrors
     )
-    protoRoot = leafEstimator.est(accSummer.sumAccs(labels))
+    protoRoot = leafEstimator.est(accSummer1.all(labels))
     splitValuer = clusteringSpec.utilitySpec(protoRoot.dist, protoRoot.count,
                                              verbosity = verbosity)
-    clusterer = NodeBasedClusterer(accSummer, minCount, leafEstimator,
-                                   splitValuer,
+    clusterer = NodeBasedClusterer(accSummer1, accSummer2, minCount,
+                                   leafEstimator, splitValuer,
                                    clusteringSpec.nearBestThresh,
                                    verbosity = verbosity)
     if verbosity >= 1:
