@@ -1034,6 +1034,7 @@ class TestDist(unittest.TestCase):
         for distIndex in range(numDists):
             dimIn = randint(0, 5)
             dist, inputGen = gen_DecisionTree_with_LinearGaussian_leaves(splitProb = 0.49, dimIn = dimIn)
+            useDepthBasedTraining = randBool()
             def train(training):
                 acc = d.AutoGrowingDiscreteAcc(createAcc = lambda: d.LinearGaussianAcc(inputLength = dimIn, varianceFloor = 0.0))
                 for input, output, occ in training:
@@ -1042,10 +1043,16 @@ class TestDist(unittest.TestCase):
                 clusteringSpec = cluster.ClusteringSpec(
                     utilitySpec, questionGroups, minCount = 0.1, verbosity = 0
                 )
-                return cluster.decisionTreeCluster(
-                    clusteringSpec, acc.accDict.keys(),
-                    lambda label: acc.accDict[label], acc.createAcc
-                )
+                if useDepthBasedTraining:
+                    return cluster.decisionTreeClusterDepthBased(
+                        clusteringSpec, acc.accDict.keys(),
+                        [acc.accDict.items()], acc.createAcc
+                    )
+                else:
+                    return cluster.decisionTreeCluster(
+                        clusteringSpec, acc.accDict.keys(),
+                        lambda label: acc.accDict[label], acc.createAcc
+                    )
             if True:
                 # check decision tree clustering runs at all
                 training = [ (input, dist.synth(input), math.exp(randn())) for input, index in zip(inputGen, range(numPoints)) ]

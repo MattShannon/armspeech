@@ -136,6 +136,44 @@ class NodeBasedFirstLevelAccSummer(object):
 
         return qgToValueToAcc
 
+@codeDeps(d.addAcc)
+class DepthBasedFirstLevelAccSummer(object):
+    """A first-level acc summer that is useful for depth-based clustering."""
+    def __init__(self, labelledAccChunks, createAcc):
+        self.labelledAccChunks = labelledAccChunks
+        self.createAcc = createAcc
+
+    def all(self):
+        accTot = self.createAcc()
+        for labelledAccs in self.labelledAccChunks:
+            for _, acc in labelledAccs:
+                d.addAcc(accTot, acc)
+        return accTot
+
+    def getLeafToQgToValueToAcc(self, numLeaves, labelToLeafIndex, questionGroups):
+        leafToQgToValueToAcc = [
+            [
+                defaultdict(self.createAcc)
+                for _ in questionGroups
+            ]
+            for _ in range(numLeaves)
+        ]
+        for labelledAccs in self.labelledAccChunks:
+            for label, acc in labelledAccs:
+                try:
+                    leafIndex = labelToLeafIndex[label]
+                except KeyError:
+                    pass
+                else:
+                    for qgIndex, (labelValuer, _) in enumerate(questionGroups):
+                        labelValue = labelValuer(label)
+                        d.addAcc(
+                            leafToQgToValueToAcc[leafIndex][qgIndex][labelValue],
+                            acc
+                        )
+
+        return leafToQgToValueToAcc
+
 @codeDeps()
 class ProtoLeaf(object):
     def __init__(self, dist, aux, auxRat, count):
@@ -441,6 +479,139 @@ class NodeBasedClusterer(object):
                 agendaPush(nextState)
             yield answerSeq, splitInfo
 
+@codeDeps(getBestAction, getPossSplits, timed)
+class DepthBasedClusterer(object):
+    """Supports decision tree clustering in a layer-by-layer fashion.
+
+    More specifically this class contains methods that use a certain form of
+    state which is useful for depth-based clustering.
+    """
+    def __init__(self, accSummer1, accSummer2, minCount, leafEstimator,
+                 splitValuer, nearBestThresh, verbosity):
+        self.accSummer1 = accSummer1
+        self.accSummer2 = accSummer2
+        self.minCount = minCount
+        self.leafEstimator = leafEstimator
+        self.splitValuer = splitValuer
+        self.nearBestThresh = nearBestThresh
+        self.verbosity = verbosity
+
+    def getAccsForQuestionGroupsForLeaf(self, leafToQgToValueToAcc,
+                                        questionGroups):
+        accsForQuestionGroupsForLeaf = []
+        for qgToValueToAcc in leafToQgToValueToAcc:
+            accsForQuestionGroups = self.accSummer2.forQuestionGroups(
+                qgToValueToAcc, questionGroups, minCount = self.minCount
+            )
+            accsForQuestionGroupsForLeaf.append(accsForQuestionGroups)
+
+        return accsForQuestionGroupsForLeaf
+
+    def checkStateConsistent(self, state):
+        labelToLeafIndex, leafProtos, leafAnswerSeqs = state
+        numLeaves = len(leafProtos)
+        assert len(leafAnswerSeqs) == numLeaves
+        assert set(labelToLeafIndex.values()) == set(range(numLeaves))
+
+    def getInitialState(self, labels, protoRoot):
+        labelToLeafIndex = dict()
+        for label in labels:
+            labelToLeafIndex[label] = 0
+
+        leafProtos = [protoRoot]
+        leafAnswerSeqs = [()]
+
+        state = labelToLeafIndex, leafProtos, leafAnswerSeqs
+        return state
+
+    def getNextState(self, state, bestSplitInfoForLeaf):
+        labelToLeafIndex, leafProtos, leafAnswerSeqs = state
+
+        leafProtosNew = []
+        leafAnswerSeqsNew = []
+        leafIndexMaps = []
+        for leafIndex, splitInfo in enumerate(bestSplitInfoForLeaf):
+            if splitInfo.fullQuestion is None:
+                leafIndexMaps.append(None)
+            else:
+                _, question = splitInfo.fullQuestion
+                protoForAnswer = splitInfo.protoForAnswer
+                answerSeq = leafAnswerSeqs[leafIndex]
+                leafIndexMap = []
+                for answer, proto in zip(question.codomain(), protoForAnswer):
+                    leafIndexNew = len(leafProtosNew)
+                    leafProtosNew.append(proto)
+                    leafAnswerSeqsNew.append(answerSeq + (answer,))
+                    leafIndexMap.append(leafIndexNew)
+                leafIndexMaps.append(leafIndexMap)
+        assert len(leafIndexMaps) == len(leafProtos)
+
+        labelToLeafIndexNew = dict()
+        for label in labelToLeafIndex:
+            leafIndex = labelToLeafIndex[label]
+            leafIndexMap = leafIndexMaps[leafIndex]
+            if leafIndexMap is not None:
+                splitInfo = bestSplitInfoForLeaf[leafIndex]
+                labelValuer, question = splitInfo.fullQuestion
+                answer = question(labelValuer(label))
+                leafIndexNew = leafIndexMap[answer]
+                labelToLeafIndexNew[label] = leafIndexNew
+
+        stateNew = labelToLeafIndexNew, leafProtosNew, leafAnswerSeqsNew
+        return stateNew
+
+    def addLayer(self, state, questionGroups):
+        """Computes a single additional layer of the decision tree."""
+        labelToLeafIndex, leafProtos, leafAnswerSeqs = state
+        numLeaves = len(leafProtos)
+
+        leafToQgToValueToAcc = self.accSummer1.getLeafToQgToValueToAcc(
+            numLeaves, labelToLeafIndex, questionGroups
+        )
+
+        accsForQuestionGroupsForLeaf = self.getAccsForQuestionGroupsForLeaf(
+            leafToQgToValueToAcc, questionGroups
+        )
+
+        bestSplitInfoForLeaf = []
+        for leafIndex in range(numLeaves):
+            accsForQuestionGroups = accsForQuestionGroupsForLeaf[leafIndex]
+            protoNoSplit = leafProtos[leafIndex]
+            splitInfos = getPossSplits(protoNoSplit, accsForQuestionGroups,
+                                       self.leafEstimator)
+            bestSplitInfo = getBestAction(
+                protoNoSplit, splitInfos, self.splitValuer,
+                nearBestThresh = self.nearBestThresh
+            )
+
+            bestSplitInfoForLeaf.append(bestSplitInfo)
+
+        splitInfoDict = dict()
+        for leafIndex, splitInfo in enumerate(bestSplitInfoForLeaf):
+            answerSeq = leafAnswerSeqs[leafIndex]
+            splitInfoDict[answerSeq] = splitInfo
+
+        stateNew = self.getNextState(state, bestSplitInfoForLeaf)
+
+        return stateNew, splitInfoDict
+
+    def addLayers(self, stateInit, questionGroups):
+        """Computes all remaining layers of the decision tree."""
+        splitInfoDict = dict()
+        state = stateInit
+        while True:
+            addLayer = self.addLayer
+            if self.verbosity >= 3:
+                addLayer = timed(addLayer)
+            state, splitInfoDictMore = addLayer(state, questionGroups)
+            splitInfoDict.update(splitInfoDictMore)
+            if self.verbosity >= 2:
+                print 'cluster: added %s nodes' % len(splitInfoDictMore)
+            if not splitInfoDictMore:
+                break
+
+        return splitInfoDict
+
 @codeDeps(d.getDefaultEstimateTotAuxNoRevert)
 class ClusteringSpec(object):
     def __init__(self, utilitySpec, questionGroups, minCount,
@@ -489,6 +660,51 @@ def decisionTreeCluster(clusteringSpec, labels, accForLabel, createAcc):
     splitInfoDict = dict(
         clusterer.subTreeSplitInfoIter((labels, questionGroups, (), protoRoot))
     )
+    dist, (aux, auxRat) = constructTree(splitInfoDict)
+
+    if verbosity >= 1:
+        countRoot = protoRoot.count
+        # (FIXME : leaf computation relies on specific form of dist)
+        print 'cluster: %s leaves' % len(dist.dist.distDict)
+        print ('cluster: aux root = %s (%s) -> aux tree = %s (%s) (%s count)' %
+               (protoRoot.aux / countRoot, d.Rat.toString(protoRoot.auxRat),
+                aux / countRoot, d.Rat.toString(auxRat),
+                countRoot))
+    return dist
+
+@codeDeps(DepthBasedClusterer, DepthBasedFirstLevelAccSummer, LeafEstimator,
+    SecondLevelAccSummer, constructTree, d.Rat, removeTrivialQuestions, timed
+)
+def decisionTreeClusterDepthBased(clusteringSpec, labels, labelledAccChunks,
+                                  createAcc):
+    verbosity = clusteringSpec.verbosity
+    accSummer1 = DepthBasedFirstLevelAccSummer(labelledAccChunks, createAcc)
+    accSummer2 = SecondLevelAccSummer(createAcc)
+    minCount = clusteringSpec.minCount
+    leafEstimator = LeafEstimator(
+        clusteringSpec.estimateTotAux,
+        catchEstimationErrors = clusteringSpec.catchEstimationErrors
+    )
+    def getProtoRoot():
+        return leafEstimator.est(accSummer1.all())
+    if verbosity >= 3:
+        getProtoRoot = timed(getProtoRoot)
+    protoRoot = getProtoRoot()
+    splitValuer = clusteringSpec.utilitySpec(protoRoot.dist, protoRoot.count,
+                                             verbosity = verbosity)
+    clusterer = DepthBasedClusterer(accSummer1, accSummer2, minCount,
+                                    leafEstimator, splitValuer,
+                                    clusteringSpec.nearBestThresh,
+                                    verbosity = verbosity)
+    if verbosity >= 1:
+        print ('cluster: decision tree clustering with perLeafPenalty = %s and'
+               ' minCount = %s' %
+               (splitValuer.perLeafPenalty, minCount))
+
+    questionGroups = removeTrivialQuestions(labels,
+                                            clusteringSpec.questionGroups)
+    stateInit = clusterer.getInitialState(labels, protoRoot)
+    splitInfoDict = clusterer.addLayers(stateInit, questionGroups)
     dist, (aux, auxRat) = constructTree(splitInfoDict)
 
     if verbosity >= 1:
