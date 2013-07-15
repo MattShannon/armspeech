@@ -115,6 +115,9 @@ class ThreshMax(object):
                 if key(x) >= maxValue - thresh
             ]
 
+    def flatten(self, xss):
+        return self([ x for xs in xss for x in xs ])
+
 @codeDeps()
 def sigmoid(a):
     if a > 40.0:
