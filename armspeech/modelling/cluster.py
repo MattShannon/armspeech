@@ -150,7 +150,8 @@ class DepthBasedFirstLevelAccSummer(object):
                 d.addAcc(accTot, acc)
         return accTot
 
-    def getLeafToQgToValueToAcc(self, numLeaves, labelToLeafIndex, questionGroups):
+    def getLeafToQgToValueToAcc(self, numLeaves, labelToLeafIndex,
+                                questionGroups):
         leafToQgToValueToAcc = [
             [
                 defaultdict(self.createAcc)
@@ -166,11 +167,8 @@ class DepthBasedFirstLevelAccSummer(object):
                     pass
                 else:
                     for qgIndex, (labelValuer, _) in enumerate(questionGroups):
-                        labelValue = labelValuer(label)
-                        d.addAcc(
-                            leafToQgToValueToAcc[leafIndex][qgIndex][labelValue],
-                            acc
-                        )
+                        valueToAcc = leafToQgToValueToAcc[leafIndex][qgIndex]
+                        d.addAcc(valueToAcc[labelValuer(label)], acc)
 
         return leafToQgToValueToAcc
 
