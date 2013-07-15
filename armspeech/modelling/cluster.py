@@ -244,6 +244,40 @@ class MdlUtilitySpec(object):
                    (self.mdlFactor, numParamsPerLeaf, countRoot))
         return SplitValuer(perLeafPenalty)
 
+@codeDeps(SplitInfo)
+def getPossSplits(protoNoSplit, accsForQuestionGroups, leafEstimator):
+    splitInfos = []
+    for labelValuer, accsForQuestions in accsForQuestionGroups:
+        for question, accForAnswer in accsForQuestions:
+            protoForAnswer = leafEstimator.estForAnswerOrNone(accForAnswer)
+            if protoForAnswer is not None:
+                fullQuestion = labelValuer, question
+                splitInfos.append(
+                    SplitInfo(protoNoSplit, fullQuestion, protoForAnswer)
+                )
+
+    return splitInfos
+
+@codeDeps()
+def getPrunedQuestionGroups(accsForQuestionGroups):
+    return [
+        (labelValuer, [ question for question, _ in accsForQuestions ])
+        for labelValuer, accsForQuestions in accsForQuestionGroups
+    ]
+
+@codeDeps(SplitInfo, ThreshMax)
+def getBestAction(protoNoSplit, splitInfos, splitValuer, nearBestThresh = 0.1):
+    threshMax = ThreshMax(nearBestThresh, key = splitValuer)
+    threshMaxZero = ThreshMax(0.0, key = splitValuer)
+
+    noSplitInfo = SplitInfo(protoNoSplit, None, [protoNoSplit])
+    nearBestSplitInfos = threshMax(splitInfos + [noSplitInfo])
+    bestSplitInfos = threshMaxZero(nearBestSplitInfos)
+    bestSplitInfo = bestSplitInfos[0]
+    bestSplitInfo.bests = bestSplitInfos
+    bestSplitInfo.nearBests = nearBestSplitInfos
+    return bestSplitInfo
+
 @codeDeps(MapElem, d.DiscreteDist, d.MappedInputDist, d.sumValuedRats,
     xf.DecisionTree
 )
@@ -273,7 +307,9 @@ def constructTree(splitInfoDict):
     )
     return dist, auxValuedRat
 
-@codeDeps(SplitInfo, ThreshMax, partitionLabels, timed)
+@codeDeps(getBestAction, getPossSplits, getPrunedQuestionGroups,
+    partitionLabels, timed
+)
 class DecisionTreeClusterer(object):
     def __init__(self, accSummer, minCount, leafEstimator, splitValuer,
                  nearBestThresh, verbosity):
@@ -284,39 +320,6 @@ class DecisionTreeClusterer(object):
         self.nearBestThresh = nearBestThresh
         self.verbosity = verbosity
 
-        self.threshMax = ThreshMax(self.nearBestThresh, key = self.splitValuer)
-        self.threshMaxZero = ThreshMax(0.0, key = self.splitValuer)
-
-    def getPossSplits(self, protoNoSplit, accsForQuestionGroups):
-        splitInfos = []
-        for labelValuer, accsForQuestions in accsForQuestionGroups:
-            for question, accForAnswer in accsForQuestions:
-                protoForAnswer = self.leafEstimator.estForAnswerOrNone(
-                    accForAnswer
-                )
-                if protoForAnswer is not None:
-                    fullQuestion = labelValuer, question
-                    splitInfos.append(
-                        SplitInfo(protoNoSplit, fullQuestion, protoForAnswer)
-                    )
-
-        return splitInfos
-
-    def getPrunedQuestionGroups(self, accsForQuestionGroups):
-        return [
-            (labelValuer, [ question for question, _ in accsForQuestions ])
-            for labelValuer, accsForQuestions in accsForQuestionGroups
-        ]
-
-    def getBestAction(self, protoNoSplit, splitInfos):
-        noSplitInfo = SplitInfo(protoNoSplit, None, [protoNoSplit])
-        nearBestSplitInfos = self.threshMax(splitInfos + [noSplitInfo])
-        bestSplitInfos = self.threshMaxZero(nearBestSplitInfos)
-        bestSplitInfo = bestSplitInfos[0]
-        bestSplitInfo.bests = bestSplitInfos
-        bestSplitInfo.nearBests = nearBestSplitInfos
-        return bestSplitInfo
-
     def computeBestSplitAndStateAdj(self, state):
         labels, questionGroups, answerSeq, protoNoSplit = state
 
@@ -324,10 +327,13 @@ class DecisionTreeClusterer(object):
             labels, questionGroups, minCount = self.minCount
         )
 
-        questionGroupsOut = self.getPrunedQuestionGroups(accsForQuestionGroups)
+        questionGroupsOut = getPrunedQuestionGroups(accsForQuestionGroups)
 
-        splitInfos = self.getPossSplits(protoNoSplit, accsForQuestionGroups)
-        bestSplitInfo = self.getBestAction(protoNoSplit, splitInfos)
+        splitInfos = getPossSplits(protoNoSplit, accsForQuestionGroups,
+                                   self.leafEstimator)
+        bestSplitInfo = getBestAction(protoNoSplit, splitInfos,
+                                      self.splitValuer,
+                                      nearBestThresh = self.nearBestThresh)
 
         stateAdj = labels, questionGroupsOut, answerSeq, protoNoSplit
         return bestSplitInfo, stateAdj
@@ -443,7 +449,7 @@ class ClusteringSpec(object):
         self.nearBestThresh = nearBestThresh
         self.verbosity = verbosity
 
-@codeDeps(AccSummer, DecisionTreeClusterer, LeafEstimator, d.Rat,
+@codeDeps(AccSummer, DecisionTreeClusterer, LeafEstimator, constructTree, d.Rat,
     removeTrivialQuestions, timed
 )
 def decisionTreeCluster(clusteringSpec, labels, accForLabel, createAcc):
