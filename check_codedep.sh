@@ -3,11 +3,6 @@ set -e
 set -u
 set -o pipefail
 
-if [[ "`dirname "$0"`" != "." ]]; then
-    echo "check_codedep.sh: this tool is designed to be run from the current directory" 1>&2
-    exit 1
-fi
-
 tmpDir=`mktemp -d`
 echo "(using temporary dir $tmpDir)"
 
@@ -18,7 +13,7 @@ for pyFile in "$@"; do
     echo
     pyFileNew="$tmpDir"/"`basename "$pyFile"`"
 
-    PYTHONPATH=. python check_codedep.py "$moduleName" > "$pyFileNew"
+    PYTHONPATH=. python -m "codedep.check_deps" . "$moduleName" > "$pyFileNew"
 
     if [[ "`diff -q "$pyFile" "$pyFileNew"`" != "" ]]; then
         # (below works around vim's "Input is not from a terminal" warning)

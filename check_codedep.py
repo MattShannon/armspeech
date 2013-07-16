@@ -1,4 +1,13 @@
 #!/usr/bin/python -u
+"""Checks whether code-level dependencies are correctly declared."""
+
+# Copyright 2011, 2012, 2013 Matt Shannon
+
+# This file is part of armspeech.
+# See `License` for details of license and warranty.
+
+
+from __future__ import division
 
 import os
 import sys
@@ -151,8 +160,8 @@ def prettyPrintBisqueDepsStanza(deps, init = '@', maxLineLength = 80):
             return ret
 
 def main(args):
-    srcRootDir = os.path.abspath(os.path.dirname(args[0]))
-    moduleName = args[1]
+    srcRootDir = os.path.abspath(args[1])
+    moduleName = args[2]
 
     sys.stderr.write('(using srcRootDir = %s)\n' % srcRootDir)
 
