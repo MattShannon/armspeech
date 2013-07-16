@@ -45,7 +45,8 @@ def main(rawArgs):
         formatter_class = argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
-        '--verbosity', dest = 'verbosity', type = int, default = 1, metavar = 'VERB',
+        '--verbosity', dest = 'verbosity', type = int, default = 1,
+        metavar = 'VERB',
         help = 'verbosity level'
     )
     parser.add_argument(
@@ -54,7 +55,9 @@ def main(rawArgs):
     )
     args = parser.parse_args(rawArgs[1:])
 
-    testResult = unittest.TextTestRunner(verbosity = args.verbosity).run(suite(deepTest = args.deepTest))
+    testResult = unittest.TextTestRunner(
+        verbosity = args.verbosity
+    ).run(suite(deepTest = args.deepTest))
 
     return 0 if testResult.wasSuccessful() else 1
 
