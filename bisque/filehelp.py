@@ -17,11 +17,12 @@ import tempfile
 
 @codeDeps()
 class TempDir(object):
-    def __init__(self, removeOnException = False):
+    def __init__(self, prefix = 'bisque.', removeOnException = False):
+        self.prefix = prefix
         self.removeOnException = removeOnException
 
     def __enter__(self):
-        self.location = tempfile.mkdtemp(prefix = 'armspeech.')
+        self.location = tempfile.mkdtemp(prefix = self.prefix)
         return self
 
     def remove(self):

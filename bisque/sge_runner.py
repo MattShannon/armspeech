@@ -8,7 +8,7 @@
 
 from __future__ import division
 
-from armspeech.util.timing import timed
+from bisque.timing import timed
 
 import os
 import sys
@@ -16,8 +16,8 @@ import traceback
 from datetime import datetime
 
 def main(args):
-    import armspeech.bisque.queuer as qr
-    from armspeech.util import persist
+    import bisque.queuer as qr
+    from bisque import persist
 
     assert len(args) == 2
     liveJobDir = args[1]

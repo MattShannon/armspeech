@@ -15,12 +15,12 @@ import summarizer
 import transform as xf
 import cluster
 import wnet
-from armspeech.util import persist
 from armspeech.util.mathhelp import logSum
 from armspeech.util.iterhelp import chunkList
 from armspeech.util.mathhelp import assert_allclose
 from armspeech.util.mathhelp import AsArray
 from armspeech.util.util import MapElem
+from bisque import persist
 from codedep import codeDeps, ForwardRef
 
 import test_transform_questions

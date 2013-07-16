@@ -8,7 +8,7 @@
 
 from __future__ import division
 
-from armspeech.util import persist
+from bisque import persist
 from codedep import codeDeps, ForwardRef
 
 import os

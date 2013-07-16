@@ -11,9 +11,9 @@
 from __future__ import division
 
 from expt_hts_demo import experiment
-from armspeech.bisque import distribute
-import armspeech.bisque.queuer as qr
-from armspeech.bisque import sge_queuer
+from bisque import distribute
+import bisque.queuer as qr
+from bisque import sge_queuer
 
 import os
 import sys

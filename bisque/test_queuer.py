@@ -13,12 +13,12 @@ from __future__ import division
 #   jobs don't contain the fully-qualified names for any modules imported below
 #   using implicit relative imports, which leads to problems when these jobs
 #   are unpickled to be run.)
-from armspeech.bisque import distribute
-import armspeech.bisque.queuer as qr
-from armspeech.bisque import sge_queuer
-from armspeech.bisque.distribute import lift
-import armspeech.bisque.test_queuer_jobs as jobs
-from armspeech.util.filehelp import TempDir
+from bisque import distribute
+import bisque.queuer as qr
+from bisque import sge_queuer
+from bisque.distribute import lift
+import bisque.test_queuer_jobs as jobs
+from bisque.filehelp import TempDir
 from codedep import codeDeps
 
 import unittest

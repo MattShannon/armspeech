@@ -22,11 +22,11 @@ from armspeech.speech.features import stdCepDist, stdCepDistIncZero
 from armspeech.speech import draw
 from armspeech.util.util import identityFn, ConstantFn
 from armspeech.util.util import getElem, ElemGetter, AttrGetter
-from armspeech.util import persist
 from armspeech.util.timing import timed, printTime
-from armspeech.modelling.bisque import corpus as corpus_bisque
-from armspeech.modelling.bisque import train as train_bisque
-from armspeech.bisque.distribute import liftLocal, lit, lift
+from armspeech.modelling import jobs_corpus
+from armspeech.modelling import jobs_train
+from bisque import persist
+from bisque.distribute import liftLocal, lit, lift
 from codedep import codeDeps
 
 import phoneset_cmu
@@ -230,20 +230,20 @@ def mixup(dist, accumulate):
     dist = trn.trainEM(dist, accumulate, deltaThresh = 1e-4, minIterations = 4, maxIterations = 8, verbosity = 2)
     return dist
 
-@codeDeps(getMixupEstimate, getReportLogLikeBreakdown, liftLocal, lit,
-    train_bisque.accumulateJobSet, train_bisque.estimateJobSet,
-    train_bisque.trainEMJobSet
+@codeDeps(getMixupEstimate, getReportLogLikeBreakdown,
+    jobs_train.accumulateJobSet, jobs_train.estimateJobSet,
+    jobs_train.trainEMJobSet, liftLocal, lit
 )
 def mixupJobSet(distArt, corpusArt, uttIdChunkArts):
-    accArts = train_bisque.accumulateJobSet(distArt, corpusArt, uttIdChunkArts)
-    distArt = train_bisque.estimateJobSet(
+    accArts = jobs_train.accumulateJobSet(distArt, corpusArt, uttIdChunkArts)
+    distArt = jobs_train.estimateJobSet(
         distArt,
         accArts,
         estimateArt = liftLocal(getMixupEstimate)(),
         afterAccArt = liftLocal(getReportLogLikeBreakdown)(),
         verbosityArt = lit(2)
     )
-    distArt = train_bisque.trainEMJobSet(
+    distArt = jobs_train.trainEMJobSet(
         distArt,
         corpusArt,
         uttIdChunkArts,
@@ -864,21 +864,21 @@ def doGlobalSystem(synthOutDir, figOutDir):
 
     printTime('finished global')
 
-@codeDeps(corpus_bisque.getUttIdChunkArts, d.FloorSetter, evaluateVarious,
-    getBmiForCorpus, getCorpusWithSubLabels, getInitDist1, lift, liftLocal, lit,
-    mixupJobSet, train_bisque.expectationMaximizationJobSet
+@codeDeps(d.FloorSetter, evaluateVarious, getBmiForCorpus,
+    getCorpusWithSubLabels, getInitDist1, jobs_corpus.getUttIdChunkArts,
+    jobs_train.expectationMaximizationJobSet, lift, liftLocal, lit, mixupJobSet
 )
 def doGlobalSystemJobSet(synthOutDirArt, figOutDirArt):
     corpusArt = liftLocal(getCorpusWithSubLabels)()
     bmiArt = liftLocal(getBmiForCorpus)(corpusArt)
 
-    uttIdChunkArts = corpus_bisque.getUttIdChunkArts(corpusArt,
-                                                     numChunksLit = lit(2))
+    uttIdChunkArts = jobs_corpus.getUttIdChunkArts(corpusArt,
+                                                   numChunksLit = lit(2))
 
     distArt = lift(getInitDist1)(bmiArt, corpusArt)
 
     # train global dist while setting floors
-    distArt = train_bisque.expectationMaximizationJobSet(
+    distArt = jobs_train.expectationMaximizationJobSet(
         distArt,
         corpusArt,
         uttIdChunkArts,
@@ -944,22 +944,22 @@ def doMonophoneSystem(synthOutDir, figOutDir):
 
     printTime('finished mono')
 
-@codeDeps(corpus_bisque.getUttIdChunkArts, d.FloorSetter, evaluateVarious,
-    getBmiForCorpus, getCorpusWithSubLabels, getInitDist1,
-    getReportLogLikeBreakdown, globalToMonophoneMap, lift, liftLocal, lit,
-    mixupJobSet, train_bisque.expectationMaximizationJobSet
+@codeDeps(d.FloorSetter, evaluateVarious, getBmiForCorpus,
+    getCorpusWithSubLabels, getInitDist1, getReportLogLikeBreakdown,
+    globalToMonophoneMap, jobs_corpus.getUttIdChunkArts,
+    jobs_train.expectationMaximizationJobSet, lift, liftLocal, lit, mixupJobSet
 )
 def doMonophoneSystemJobSet(synthOutDirArt, figOutDirArt):
     corpusArt = liftLocal(getCorpusWithSubLabels)()
     bmiArt = liftLocal(getBmiForCorpus)(corpusArt)
 
-    uttIdChunkArts = corpus_bisque.getUttIdChunkArts(corpusArt,
-                                                     numChunksLit = lit(2))
+    uttIdChunkArts = jobs_corpus.getUttIdChunkArts(corpusArt,
+                                                   numChunksLit = lit(2))
 
     distArt = lift(getInitDist1)(bmiArt, corpusArt)
 
     # train global dist while setting floors
-    distArt = train_bisque.expectationMaximizationJobSet(
+    distArt = jobs_train.expectationMaximizationJobSet(
         distArt,
         corpusArt,
         uttIdChunkArts,
@@ -969,7 +969,7 @@ def doMonophoneSystemJobSet(synthOutDirArt, figOutDirArt):
 
     distArt = lift(globalToMonophoneMap)(distArt, bmiArt)
 
-    distArt = train_bisque.expectationMaximizationJobSet(
+    distArt = jobs_train.expectationMaximizationJobSet(
         distArt,
         corpusArt,
         uttIdChunkArts,
@@ -1639,26 +1639,27 @@ def doMonophoneNetSystem(synthOutDir, figOutDir):
 
     printTime('finished monoNet')
 
-@codeDeps(corpus_bisque.getUttIdChunkArts, d.FloorSetter,
-    d.getVerboseNetCreateAcc, evaluateVarious, getBmiForCorpus,
-    getCorpusWithSubLabels, getInitDist1, getReportLogLikeBreakdown,
-    globalToMonophoneMap, lift, liftLocal, lit, monoSeqDistToMonoNetDistMap1,
-    train_bisque.expectationMaximizationJobSet, train_bisque.trainEMJobSet
+@codeDeps(d.FloorSetter, d.getVerboseNetCreateAcc, evaluateVarious,
+    getBmiForCorpus, getCorpusWithSubLabels, getInitDist1,
+    getReportLogLikeBreakdown, globalToMonophoneMap,
+    jobs_corpus.getUttIdChunkArts, jobs_train.expectationMaximizationJobSet,
+    jobs_train.trainEMJobSet, lift, liftLocal, lit,
+    monoSeqDistToMonoNetDistMap1
 )
 def doMonophoneNetSystemJobSet(synthOutDirArt, figOutDirArt):
     corpusArt = liftLocal(getCorpusWithSubLabels)()
     bmiArt = liftLocal(getBmiForCorpus)(corpusArt)
 
-    uttIdChunkArts = corpus_bisque.getUttIdChunkArts(corpusArt,
-                                                     numChunksLit = lit(2))
+    uttIdChunkArts = jobs_corpus.getUttIdChunkArts(corpusArt,
+                                                   numChunksLit = lit(2))
 
-    uttIdChunkArtsNet = corpus_bisque.getUttIdChunkArts(corpusArt,
-                                                        numChunksLit = lit(10))
+    uttIdChunkArtsNet = jobs_corpus.getUttIdChunkArts(corpusArt,
+                                                      numChunksLit = lit(10))
 
     distArt = lift(getInitDist1)(bmiArt, corpusArt)
 
     # train global dist while setting floors
-    distArt = train_bisque.expectationMaximizationJobSet(
+    distArt = jobs_train.expectationMaximizationJobSet(
         distArt,
         corpusArt,
         uttIdChunkArts,
@@ -1668,7 +1669,7 @@ def doMonophoneNetSystemJobSet(synthOutDirArt, figOutDirArt):
 
     distArt = lift(globalToMonophoneMap)(distArt, bmiArt)
 
-    distArt = train_bisque.expectationMaximizationJobSet(
+    distArt = jobs_train.expectationMaximizationJobSet(
         distArt,
         corpusArt,
         uttIdChunkArts,
@@ -1682,7 +1683,7 @@ def doMonophoneNetSystemJobSet(synthOutDirArt, figOutDirArt):
 
     distArt = lift(monoSeqDistToMonoNetDistMap1)(distArt, bmiArt)
 
-    distArt = train_bisque.trainEMJobSet(
+    distArt = jobs_train.trainEMJobSet(
         distArt,
         corpusArt,
         uttIdChunkArtsNet,

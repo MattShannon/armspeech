@@ -9,7 +9,7 @@
 from __future__ import division
 
 import armspeech.modelling.dist as d
-from armspeech.bisque.distribute import liftLocal, lit, lift
+from bisque.distribute import liftLocal, lit, lift
 from codedep import codeDeps
 
 @codeDeps()

@@ -14,13 +14,13 @@ from __future__ import division
 import queuer as qr
 import sge_runner
 import mock_sge
-from armspeech.util import persist
+from bisque import persist
 from codedep import codeDeps
 
 import re
 import os
 import sys
-from armspeech.util import subprocesshelp
+from bisque import subprocesshelp
 import inspect
 
 @codeDeps(qr.Queuer)
