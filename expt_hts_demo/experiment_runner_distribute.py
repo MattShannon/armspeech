@@ -22,9 +22,6 @@ import time
 def main(rawArgs):
     buildRepo = qr.BuildRepo(base = os.path.join('expt_hts_demo', 'repo'))
 
-    #queuer = qr.LocalQueuer(buildRepo = buildRepo)
-    queuer = sge_queuer.MockSgeQueuer(buildRepo = buildRepo)
-
     outDir = os.path.join('expt_hts_demo', 'out.d')
     synthOutDir = os.path.join(outDir, 'synth')
     figOutDir = os.path.join(outDir, 'fig')
@@ -38,14 +35,13 @@ def main(rawArgs):
     finalArtifacts = experiment.doMonophoneSystemJobSet(synthOutDirArt,
                                                         figOutDirArt)
 
-    live = queuer.generateArtifacts(finalArtifacts, verbosity = 1)
-
-    finalLiveJobs = [ live[job.secHash()] for art in finalArtifacts
-                                          for job in art.parents()
-                                          if job.secHash() in live ]
-
-    while not all([ liveJob.hasEnded() for liveJob in finalLiveJobs ]):
-        time.sleep(0.1)
+    useLocalQueuer = False
+    if useLocalQueuer:
+        queuer = qr.LocalQueuer(buildRepo = buildRepo)
+        queuer.generateArtifacts(finalArtifacts, verbosity = 1)
+    else:
+        with sge_queuer.MockSgeQueuer(buildRepo = buildRepo) as queuer:
+            queuer.generateArtifacts(finalArtifacts, verbosity = 1)
 
     print 'final values:'
     for art in finalArtifacts:
