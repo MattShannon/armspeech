@@ -280,13 +280,6 @@ def main(args):
     sys.stderr.write('RESULTS:\n')
     sys.stderr.write('\n')
 
-    #for node, loadGlobals in zip(nodeModule.body, loadGlobalss):
-    #    sortedDeps = [ name for name in loadGlobals if name in namesWithinRoot ]
-    #    sys.stderr.write('node = %s\n' % (repr(node)+(' ('+node.name+')' if hasattr(node, 'name') else '')))
-    #    sys.stderr.write('\t %s\n' % sortedDeps)
-    #    sys.stderr.write('\n')
-    #sys.stderr.write('\n')
-
     namesNotYetDefined = set(namesDefinedInModule)
 
     def nameToString(name):
