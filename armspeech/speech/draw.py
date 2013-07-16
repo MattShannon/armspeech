@@ -16,6 +16,13 @@ import numpy as np
 import armspeech.numpy_settings
 import matplotlib
 import matplotlib.transforms as transforms
+# FIXME : below is necessary to avoid errors when drawing graphs when an
+#   X server is not defined, for example when running distributed jobs.
+#   This is dissatisfying, however, since stateful stuff like this should not
+#   be set while importing a module (or even on a per-function-call basis).
+#   The best solution is probably to use the matplotlib API rather than the
+#   pyplot interface, in which case you explicitly specify the backend to use.
+matplotlib.use('Agg')
 
 @codeDeps()
 def partitionSeq(xs, numPartitions):
