@@ -54,12 +54,11 @@ To set-up this directory:
   values appropriate for your corpus.
 - if you want to generate audio, add an appropriate `scripts/Config.pm` file
   (e.g. copied from the HTS demo)
-- if necessary make `print_pickle.py`, `run_expt_hts_demo.sh` and `run_tests.sh`
-  executable (use `chmod u+x`)
+- if necessary make the files in `bin` executable (`chmod u+x bin/*`)
 
 You can then run example experiments using:
 
-    ./run_expt_hts_demo.sh
+    bin/run_expt_hts_demo.sh
 
 Currently `expt_hts_demo` uses the `armspeech` python package as a library, but
 the latter is not intended to be a fully-fledged package suitable for separate
