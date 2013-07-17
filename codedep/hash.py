@@ -12,7 +12,7 @@ import hashlib
 
 def hashString(strr):
     """Computes git-style hash of a string."""
-    m = hashlib.sha1()
-    m.update('blob '+str(len(strr))+'\0')
-    m.update(strr)
-    return m.hexdigest()
+    hasher = hashlib.sha1()
+    hasher.update('blob '+str(len(strr))+'\0')
+    hasher.update(strr)
+    return hasher.hexdigest()

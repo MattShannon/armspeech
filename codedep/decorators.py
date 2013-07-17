@@ -30,11 +30,13 @@ def _updateInfo(fnOrClassOrObj):
     depending on the use case).
     """
     if '_codedepCodeHash' not in fnOrClassOrObj.__dict__:
-        fnOrClassOrObj._codedepCodeHash = hashString(inspect.getsource(fnOrClassOrObj))
+        fnOrClassOrObj._codedepCodeHash = hashString(
+            inspect.getsource(fnOrClassOrObj)
+        )
     if '_codedepCodeDeps' not in fnOrClassOrObj.__dict__:
         fnOrClassOrObj._codedepCodeDeps = []
 
-def codeHash(codeHash):
+def codeHash(hashValue):
     """Returns a decorator which can be used to manually set _codedepCodeHash.
 
     For example:
@@ -46,7 +48,7 @@ def codeHash(codeHash):
             return a * x
     """
     def decorate(fnOrClass):
-        fnOrClass._codedepCodeHash = codeHash
+        fnOrClass._codedepCodeHash = hashValue
         _updateInfo(fnOrClass)
         return fnOrClass
     return decorate
@@ -72,8 +74,8 @@ def codeDeps(*deps):
 class ForwardRef(object):
     """Stores an arbitrary callable for use with getDeps.
 
-    This is useful when codeDeps would otherwise need to use a forward reference
-    to something that hasn't been defined yet.
+    This is useful when codeDeps would otherwise need to use a forward
+    reference to something that hasn't been defined yet.
 
     For example:
         @codeDeps(ForwardRef(lambda: bar))
@@ -91,8 +93,8 @@ def codedepEvalThunk(fnOrClassOrObjThunk):
     """Evaluates a thunk, adding codedep values to the result.
 
     Thunk should evaluate to a newly created function or class or instance of a
-    class. It should be newly created since this function adds codedep values by
-    attaching mutable state to the result of evaluating the thunk.
+    class. It should be newly created since this function adds codedep values
+    by attaching mutable state to the result of evaluating the thunk.
 
     For example:
         @codeDeps():

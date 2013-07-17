@@ -8,5 +8,5 @@
 
 from __future__ import division
 
-from decorators import codeHash, codeDeps, ForwardRef, codedepEvalThunk
-from compute import getHash
+from codedep.decorators import codeHash, codeDeps, ForwardRef, codedepEvalThunk
+from codedep.compute import getHash

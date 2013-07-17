@@ -13,13 +13,16 @@ from codedep.decorators import codeDeps, ForwardRef
 
 @codeDeps()
 def _resolveAnyForwardRefs(deps):
-    return [ dep.thunk() if isinstance(dep, ForwardRef) else dep for dep in deps ]
+    return [ dep.thunk() if isinstance(dep, ForwardRef) else dep
+             for dep in deps ]
 
 @codeDeps(_resolveAnyForwardRefs)
 def getDeps(fnOrClassOrObj):
     if '_codedepCodeDeps' not in fnOrClassOrObj.__dict__:
         raise RuntimeError('codedep values not found for %s' % fnOrClassOrObj)
-    fnOrClassOrObj._codedepCodeDeps = _resolveAnyForwardRefs(fnOrClassOrObj.__dict__['_codedepCodeDeps'])
+    fnOrClassOrObj._codedepCodeDeps = _resolveAnyForwardRefs(
+        fnOrClassOrObj.__dict__['_codedepCodeDeps']
+    )
     return fnOrClassOrObj.__dict__['_codedepCodeDeps']
 
 @codeDeps(getDeps)
@@ -36,11 +39,12 @@ def getAllDeps(fnOrClassOrObj):
             agenda.extend(reversed(getDeps(curr)))
     return ret
 
-# (FIXME : does this guarantee the hash will change if any changes are made to a
-#   set of functions? Can come up with a counter-example?)
+# (FIXME : does this guarantee the hash will change if any changes are made to
+#   a set of functions? Can come up with a counter-example?)
 @codeDeps(getAllDeps)
 def computeHash(fnOrClassOrObj):
-    return hashString(str([ dep.__dict__['_codedepCodeHash'] for dep in getAllDeps(fnOrClassOrObj) ]))
+    return hashString(str([ dep.__dict__['_codedepCodeHash']
+                            for dep in getAllDeps(fnOrClassOrObj) ]))
 
 @codeDeps(computeHash)
 def getHash(fnOrClassOrObj):
