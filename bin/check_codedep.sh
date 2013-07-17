@@ -1,4 +1,18 @@
 #!/bin/bash
+# Checks whether code-level dependencies are correctly declared.
+#
+# This script is just a wrapper around check_deps.py which calls vimdiff so you
+# can see the proposed changes more easily.
+# It also allows many modules to be checked at the same time.
+#
+# This script is a customized version of bin/check_codedep.sh from the codedep
+# package.
+
+# Copyright 2011, 2012, 2013 Matt Shannon
+
+# This file is part of armspeech.
+# See `License` for details of license and warranty.
+
 set -e
 set -u
 set -o pipefail
