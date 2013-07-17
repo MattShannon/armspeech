@@ -33,6 +33,7 @@ armspeech has the following dependencies:
   (for example, by the HTS demo)
 - if you want to generate audio, STRAIGHT vocoder (which requires MATLAB)
 - if you want to generate audio, an appropriate HTS demo-style `Config.pm` file
+- the [codedep][codedep] package for code-level dependency tracking
 - python (>= 2.6) with recent numpy, scipy and matplotlib
 - if using the HTS demo to generate the required files above (recommended),
   you should use the STRAIGHT version of the English speaker dependent training
@@ -95,3 +96,4 @@ The author of armspeech is [Matt Shannon](mailto:matt.shannon@cantab.net).
 [straight]: http://www.wakayama-u.ac.jp/~kawahara/STRAIGHTadv/index_e.html
 [arctic]: http://festvox.org/cmu_arctic/
 [gpml]: http://www.gaussianprocess.org/gpml/code/matlab/doc/index.html
+[codedep]: https://github.com/MattShannon/codedep
