@@ -1,5 +1,5 @@
-armspeech - autoregressive probabilistic modelling for speech synthesis
-=======================================================================
+armspeech
+=========
 
 This software provides a framework and example experiments for investigation
 into probabilistic modelling of speech for statistical speech synthesis.
