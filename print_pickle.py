@@ -15,8 +15,8 @@ import cPickle as pickle
 
 def main(args):
     assert len(args) == 2
-    with open(args[1], 'rb') as f:
-        obj = pickle.load(f)
+    with open(args[1], 'rb') as pickleFile:
+        obj = pickle.load(pickleFile)
     print obj
 
 if __name__ == '__main__':
