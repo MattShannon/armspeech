@@ -1,4 +1,6 @@
 
+^MANIFEST$
+
 ^expt_hts_demo/data/
 
 ^scripts/Config\.pm$

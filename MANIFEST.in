@@ -1,0 +1,5 @@
+include License
+include README.markdown
+include bin/*
+include scripts/*
+include expt_hts_demo/*.py
