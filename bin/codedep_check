@@ -27,7 +27,7 @@ for pyFile in "$@"; do
     echo
     pyFileNew="$tmpDir"/"`basename "$pyFile"`"
 
-    python -m "codedep.check_deps" . "$moduleName" > "$pyFileNew"
+    python -m "codedep.check_deps" --inc_deps_on codedep --inc_deps_on bisque --inc_deps_on armspeech --inc_deps_on expt_hts_demo "$moduleName" > "$pyFileNew"
 
     # below stanza is to ensure eval_local receives correct special treatment
     diffLineExpected=`{ grep -n '^def eval_local(' "$pyFile" || true; } | sed -r 's/:.*//'`

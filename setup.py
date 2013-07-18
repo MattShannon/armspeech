@@ -25,7 +25,7 @@ setup(
     #   suitable for system-wide installation)
     scripts = [],
     # (not actually used for anything with distutils!)
-    requires = ['numpy', 'scipy', 'matplotlib', 'codedep'],
+    requires = ['numpy', 'scipy', 'matplotlib', 'codedep (>=0.3)'],
     provides = ['bisque', 'armspeech'],
     long_description = long_description,
 )
