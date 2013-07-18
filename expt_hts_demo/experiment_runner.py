@@ -18,9 +18,6 @@ import traceback
 import numpy as np
 import armspeech.numpy_settings
 
-import matplotlib
-matplotlib.use('Agg')
-
 # (FIXME : could change this to 'raise' if we extensively test all experiments
 #   to make sure they never fail incorrectly with this setting)
 np.seterr(all = 'ignore')
