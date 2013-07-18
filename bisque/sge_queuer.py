@@ -12,7 +12,6 @@ Requires Sun Grid Engine `qsub` command to work on the local machine.
 from __future__ import division
 
 import queuer as qr
-import sge_runner
 import mock_sge
 from bisque import persist
 from codedep import codeDeps
@@ -39,7 +38,7 @@ class SgeQueuer(qr.Queuer):
 
         return liveJob
 
-@codeDeps(SgeQueuer, mock_sge.getMockSge, persist.secHashObject, sge_runner)
+@codeDeps(SgeQueuer, mock_sge.getMockSge, persist.secHashObject)
 class MockSgeQueuer(SgeQueuer):
     def __init__(self, buildRepo, jointLog = False, pythonExec = None):
         self.buildRepo = buildRepo
@@ -89,7 +88,7 @@ class MockSgeQueuer(SgeQueuer):
 
 qsubRe = re.compile(r'Your job.* ([0-9]+) \("(.*)"\) has been submitted\n$')
 
-@codeDeps(SgeQueuer, persist.secHashObject, qsubRe, sge_runner)
+@codeDeps(SgeQueuer, persist.secHashObject, qsubRe)
 class QsubSgeQueuer(SgeQueuer):
     def __init__(self, buildRepo, project, email = None, emailOpts = 'n',
                  jointLog = False, pythonExec = None):
