@@ -1,4 +1,8 @@
-"""Wrapper to run a job on Sun Grid Engine."""
+"""Wrapper to run a job on Sun Grid Engine.
+
+Currently the only SGE-specific aspect is the use of the magic exit code 100 on
+job failure.
+"""
 
 # Copyright 2011, 2012, 2013 Matt Shannon
 
