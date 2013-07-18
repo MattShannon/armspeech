@@ -34,7 +34,7 @@ armspeech has the following dependencies:
 - if you want to generate audio, STRAIGHT vocoder (which requires MATLAB)
 - if you want to generate audio, an appropriate HTS demo-style `Config.pm` file
 - the [codedep][codedep] package for code-level dependency tracking
-- python (>= 2.6) with recent numpy, scipy and matplotlib
+- python (>= 2.7) with recent numpy, scipy and matplotlib
 - if using the HTS demo to generate the required files above (recommended),
   you should use the STRAIGHT version of the English speaker dependent training
   demo (which requires HTS, which in turn requires HTK).

@@ -20,7 +20,7 @@ from codedep import codeDeps
 import re
 import os
 import sys
-from bisque import subprocesshelp
+import subprocess
 
 @codeDeps(qr.Queuer)
 class SgeQueuer(qr.Queuer):
@@ -89,9 +89,7 @@ class MockSgeQueuer(SgeQueuer):
 
 qsubRe = re.compile(r'Your job.* ([0-9]+) \("(.*)"\) has been submitted\n$')
 
-@codeDeps(SgeQueuer, persist.secHashObject, qsubRe, sge_runner,
-    subprocesshelp.check_output
-)
+@codeDeps(SgeQueuer, persist.secHashObject, qsubRe, sge_runner)
 class QsubSgeQueuer(SgeQueuer):
     def __init__(self, buildRepo, project, email = None, emailOpts = 'n',
                  jointLog = False, pythonExec = None):
@@ -112,7 +110,7 @@ class QsubSgeQueuer(SgeQueuer):
 
         # check there is a grid available for us to use
         try:
-            subprocesshelp.check_output(['qstat'])
+            subprocess.check_output(['qstat'])
         except OSError:
             raise RuntimeError('grid not found (running qstat failed)')
 
@@ -152,7 +150,7 @@ class QsubSgeQueuer(SgeQueuer):
             print 'queuer: command:'
             print '\t', ' '.join(args)
 
-        stdoutdata = subprocesshelp.check_output(args)
+        stdoutdata = subprocess.check_output(args)
 
         match = qsubRe.match(stdoutdata)
         if not match:
