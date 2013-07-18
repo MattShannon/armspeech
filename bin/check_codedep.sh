@@ -5,7 +5,7 @@
 # can see the proposed changes more easily.
 # It also allows many modules to be checked at the same time.
 #
-# This script is a customized version of bin/check_codedep.sh from the codedep
+# This script is a customized version of bin/codedep_check from the codedep
 # package.
 
 # Copyright 2011, 2012, 2013 Matt Shannon
@@ -27,7 +27,7 @@ for pyFile in "$@"; do
     echo
     pyFileNew="$tmpDir"/"`basename "$pyFile"`"
 
-    PYTHONPATH=. python -m "codedep.check_deps" . "$moduleName" > "$pyFileNew"
+    python -m "codedep.check_deps" . "$moduleName" > "$pyFileNew"
 
     # below stanza is to ensure eval_local receives correct special treatment
     diffLineExpected=`{ grep -n '^def eval_local(' "$pyFile" || true; } | sed -r 's/:.*//'`
