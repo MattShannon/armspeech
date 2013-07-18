@@ -21,7 +21,6 @@ import re
 import os
 import sys
 from bisque import subprocesshelp
-import inspect
 
 @codeDeps(qr.Queuer)
 class SgeQueuer(qr.Queuer):
@@ -42,10 +41,14 @@ class SgeQueuer(qr.Queuer):
 
 @codeDeps(SgeQueuer, mock_sge.getMockSge, persist.secHashObject, sge_runner)
 class MockSgeQueuer(SgeQueuer):
-    def __init__(self, buildRepo, jointLog = False, pythonExec = '/usr/bin/python'):
+    def __init__(self, buildRepo, jointLog = False, pythonExec = None):
         self.buildRepo = buildRepo
         self.jointLog = jointLog
         self.pythonExec = pythonExec
+
+        if self.pythonExec is None:
+            self.pythonExec = sys.executable
+            assert self.pythonExec
 
     def __enter__(self):
         self.submitServer, self.runServerProcess = mock_sge.getMockSge()
@@ -60,7 +63,7 @@ class MockSgeQueuer(SgeQueuer):
 
     def qsub(self, jobName, liveJobDir, parentJids, verbosity):
         args = [
-            inspect.getsourcefile(sge_runner),
+            '-m', 'bisque.sge_runner',
             liveJobDir
         ]
 
@@ -90,13 +93,18 @@ qsubRe = re.compile(r'Your job.* ([0-9]+) \("(.*)"\) has been submitted\n$')
     subprocesshelp.check_output
 )
 class QsubSgeQueuer(SgeQueuer):
-    def __init__(self, buildRepo, project, email = None, emailOpts = 'n', jointLog = False, pythonExec = '/usr/bin/python'):
+    def __init__(self, buildRepo, project, email = None, emailOpts = 'n',
+                 jointLog = False, pythonExec = None):
         self.buildRepo = buildRepo
         self.project = project
         self.email = email
         self.emailOpts = emailOpts
         self.jointLog = jointLog
         self.pythonExec = pythonExec
+
+        if self.pythonExec is None:
+            self.pythonExec = sys.executable
+            assert self.pythonExec
 
         # attempt to find name of cell as a way of identifying this grid
         self.cell = os.environ.get('GE_CELL', os.environ.get('SGE_CELL', 'default'))
@@ -109,13 +117,11 @@ class QsubSgeQueuer(SgeQueuer):
             raise RuntimeError('grid not found (running qstat failed)')
 
     def qsub(self, jobName, liveJobDir, parentJids, verbosity):
-        # N.B. SGE copies sge_runner.py to a spool directory. This means
-        #   that if we somehow manage to call this module without PYTHONPATH
-        #   being set (e.g. if we call it from a module defined in the parent
-        #   directory of 'armspeech') then we still need to set PYTHONPATH when
-        #   running the job (and sys.path[0] is just a decent heuristic guess).
-        # FIXME : does sys.path[0] ever do anything here? Should just fail instead?
-        envPythonPath = os.environ['PYTHONPATH'] if 'PYTHONPATH' in os.environ else sys.path[0]
+        env = dict()
+        if 'PYTHONPATH' in os.environ:
+            env['PYTHONPATH'] = os.environ['PYTHONPATH']
+        env['PYTHONUNBUFFERED'] = 'yes'
+
         args = [
             'qsub',
             '-N', jobName,
@@ -124,17 +130,21 @@ class QsubSgeQueuer(SgeQueuer):
         ] + (
             [] if self.email is None else ['-M', self.email]
         ) + [
-            '-S', self.pythonExec,
-            '-v', 'PYTHONPATH='+envPythonPath,
-            '-v', 'PYTHONUNBUFFERED=yes',
+            # specify that command to run is a binary executable, not a script
+            '-b', 'y',
             '-cwd'
+        ] + [
+            token
+            for key, value in env.items()
+            for token in ['-v', '%s=%s' % (key, value)]
         ] + (
             ['-hold_jid', ','.join(parentJids)] if parentJids else []
         ) + [
             '-j', 'y' if self.jointLog else 'n',
             '-o', liveJobDir,
             '-e', liveJobDir,
-            inspect.getsourcefile(sge_runner),
+            self.pythonExec,
+            '-m', 'bisque.sge_runner',
             liveJobDir
         ]
 
