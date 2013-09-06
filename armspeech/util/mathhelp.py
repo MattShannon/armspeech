@@ -22,23 +22,18 @@ def getNegInf():
 _negInf = float('-inf')
 
 @codeDeps()
-def assert_allclose(actual, desired, rtol = 1e-7, atol = 1e-14, msg = 'items not almost equal'):
+def assert_allclose(actual, desired, rtol = 1e-7, atol = 1e-14,
+                    msg = 'items not almost equal'):
     if np.shape(actual) != np.shape(desired):
-        raise AssertionError(
-            msg+' (wrong shape)'+
-            '\n ACTUAL:  '+repr(actual)+
-            '\n DESIRED: '+repr(desired)
-        )
+        raise AssertionError('%s (wrong shape)\n ACTUAL:  %r\n DESIRED: %r' %
+                             (msg, actual, desired))
     if not np.allclose(actual, desired, rtol, atol):
         absErr = np.abs(actual - desired)
         relErr = np.abs((actual - desired) / desired)
-        raise AssertionError(
-            msg+
-            '\n ACTUAL:  '+repr(actual)+
-            '\n DESIRED: '+repr(desired)+
-            '\n ABS ERR: '+repr(absErr)+' (max '+str(np.max(absErr))+')'+
-            '\n REL ERR: '+repr(relErr)+' (max '+str(np.max(relErr))+')'
-        )
+        raise AssertionError('%s\n ACTUAL:  %r\n DESIRED: %r\n'
+                             ' ABS ERR: %r (max %s)\n REL ERR: %r (max %s)' %
+                             (msg, actual, desired,
+                              absErr, np.max(absErr), relErr, np.max(relErr)))
 
 @codeDeps()
 def logAdd(a, b):
@@ -155,7 +150,7 @@ def sampleDiscrete(valueProbList, absTol = 1e-6):
     """
     total = sum([ prob for value, prob in valueProbList ])
     if abs(total - 1.0) > absTol:
-        raise RuntimeError('probabilities should sum to 1.0 not '+str(total))
+        raise RuntimeError('probabilities should sum to 1.0 not %s' % total)
     rand = random.random()
     cumul = 0.0
     for value, prob in valueProbList:
