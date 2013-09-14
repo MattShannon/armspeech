@@ -556,28 +556,40 @@ def reparse(dist, ps):
 @codeDeps(assert_allclose)
 def check_logProbDerivInput(dist, input, output, eps):
     inputDirection = randn(*np.shape(input))
-    numericDeriv = (dist.logProb(input + inputDirection * eps, output) - dist.logProb(input, output)) / eps
+    numericDeriv = (
+        dist.logProb(input + inputDirection * eps, output) -
+        dist.logProb(input - inputDirection * eps, output)
+    ) / (eps * 2.0)
     analyticDeriv = np.sum(inputDirection * dist.logProbDerivInput(input, output))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 
 @codeDeps(assert_allclose)
 def check_logProbDerivInput_hasDiscrete(dist, (disc, input), output, eps):
     inputDirection = randn(*np.shape(input))
-    numericDeriv = (dist.logProb((disc, input + inputDirection * eps), output) - dist.logProb((disc, input), output)) / eps
+    numericDeriv = (
+        dist.logProb((disc, input + inputDirection * eps), output) -
+        dist.logProb((disc, input - inputDirection * eps), output)
+    ) / (eps * 2.0)
     analyticDeriv = np.sum(inputDirection * dist.logProbDerivInput((disc, input), output))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 
 @codeDeps(assert_allclose)
 def check_logProbDerivOutput(dist, input, output, eps):
     outputDirection = randn(*np.shape(output))
-    numericDeriv = (dist.logProb(input, output + outputDirection * eps) - dist.logProb(input, output)) / eps
+    numericDeriv = (
+        dist.logProb(input, output + outputDirection * eps) -
+        dist.logProb(input, output - outputDirection * eps)
+    ) / (eps * 2.0)
     analyticDeriv = np.sum(outputDirection * dist.logProbDerivOutput(input, output))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 
 @codeDeps(assert_allclose)
 def check_logProbDerivOutput_hasDiscrete(dist, input, (disc, output), eps):
     outputDirection = randn(*np.shape(output))
-    numericDeriv = (dist.logProb(input, (disc, output + outputDirection * eps)) - dist.logProb(input, (disc, output))) / eps
+    numericDeriv = (
+        dist.logProb(input, (disc, output + outputDirection * eps)) -
+        dist.logProb(input, (disc, output - outputDirection * eps))
+    ) / (eps * 2.0)
     analyticDeriv = np.sum(outputDirection * dist.logProbDerivOutput(input, (disc, output)))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 
@@ -627,8 +639,11 @@ def check_derivParams(dist, training, ps, eps):
     distNew = ps.parseAll(dist, params + paramsDirection * eps)
     logLikeNew = trainedAccG(distNew, training, ps = ps).logLike()
     assert_allclose(ps.params(distNew), params + paramsDirection * eps)
+    distNew2 = ps.parseAll(dist, params - paramsDirection * eps)
+    logLikeNew2 = trainedAccG(distNew2, training, ps = ps).logLike()
+    assert_allclose(ps.params(distNew2), params - paramsDirection * eps)
 
-    numericDeriv = (logLikeNew - logLike) / eps
+    numericDeriv = (logLikeNew - logLikeNew2) / (eps * 2.0)
     analyticDeriv = np.dot(derivParams, paramsDirection)
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-4, rtol = 1e-4)
 

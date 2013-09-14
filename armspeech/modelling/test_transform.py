@@ -152,28 +152,34 @@ def gen_SumOfTanh1D(numTanh = 3):
 @codeDeps(assert_allclose)
 def check_deriv(transform, x, eps):
     direction = randn(*np.shape(x))
-    numericDeriv = (transform(x + direction * eps) - transform(x)) / eps
+    numericDeriv = (transform(x + direction * eps) -
+                    transform(x - direction * eps)) / (eps * 2.0)
     analyticDeriv = np.dot(direction, transform.deriv(x))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 @codeDeps(assert_allclose)
 def check_derivDeriv(transform, x, eps):
     assert np.shape(x) == ()
     direction = randn()
-    numericDeriv = (transform.deriv(x + direction * eps) - transform.deriv(x)) / eps
+    numericDeriv = (transform.deriv(x + direction * eps) -
+                    transform.deriv(x - direction * eps)) / (eps * 2.0)
     analyticDeriv = np.dot(direction, transform.derivDeriv(x))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 @codeDeps(assert_allclose)
 def check_derivParams(transform, x, eps):
     params = transform.params
     paramsDirection = randn(*np.shape(params))
-    numericDeriv = (transform.parseAll(params + paramsDirection * eps)(x) - transform(x)) / eps
+    numericDeriv = (
+        transform.parseAll(params + paramsDirection * eps)(x) -
+        transform.parseAll(params - paramsDirection * eps)(x)
+    ) / (eps * 2.0)
     analyticDeriv = np.dot(paramsDirection, transform.derivParams(x))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 @codeDeps(assert_allclose)
 def check_derivParamsDeriv(transform, x, eps):
     assert np.shape(x) == ()
     direction = randn()
-    numericDeriv = (transform.derivParams(x + direction * eps) - transform.derivParams(x)) / eps
+    numericDeriv = (transform.derivParams(x + direction * eps) -
+                    transform.derivParams(x - direction * eps)) / (eps * 2.0)
     analyticDeriv = np.dot(direction, transform.derivParamsDeriv(x))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 @codeDeps(logDet)
@@ -195,14 +201,18 @@ def check_logJac(transform, x):
 @codeDeps(assert_allclose)
 def check_logJacDeriv(transform, x, eps):
     direction = randn(*np.shape(x))
-    numericDeriv = (transform.logJac(x + direction * eps) - transform.logJac(x)) / eps
+    numericDeriv = (transform.logJac(x + direction * eps) -
+                    transform.logJac(x - direction * eps)) / (eps * 2.0)
     analyticDeriv = np.dot(direction, transform.logJacDeriv(x))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-5, rtol = 1e-4)
 @codeDeps(assert_allclose)
 def check_logJacDerivParams(transform, x, eps):
     params = transform.params
     paramsDirection = randn(*np.shape(params))
-    numericDerivLJ = (transform.parseAll(params + paramsDirection * eps).logJac(x) - transform.logJac(x)) / eps
+    numericDerivLJ = (
+        transform.parseAll(params + paramsDirection * eps).logJac(x) -
+        transform.parseAll(params - paramsDirection * eps).logJac(x)
+    ) / (eps * 2.0)
     analyticDerivLJ = np.dot(transform.logJacDerivParams(x), paramsDirection)
     assert_allclose(numericDerivLJ, analyticDerivLJ, atol = 1e-6, rtol = 1e-4)
 @codeDeps(assert_allclose)
@@ -389,13 +399,17 @@ def gen_ShiftOutputTransform(shapeInput, shapeOutput):
 @codeDeps(assert_allclose)
 def check_derivInput(outputTransform, input, x, eps):
     direction = randn(*np.shape(input))
-    numericDeriv = (outputTransform(input + direction * eps, x) - outputTransform(input, x)) / eps
+    numericDeriv = (outputTransform(input + direction * eps, x) -
+                    outputTransform(input - direction * eps, x)) / (eps * 2.0)
     analyticDeriv = np.dot(direction, outputTransform.derivInput(input, x))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 @codeDeps(assert_allclose)
 def check_logJacDerivInput(outputTransform, input, x, eps):
     direction = randn(*np.shape(input))
-    numericDeriv = (outputTransform.logJac(input + direction * eps, x) - outputTransform.logJac(input, x)) / eps
+    numericDeriv = (
+        outputTransform.logJac(input + direction * eps, x) -
+        outputTransform.logJac(input - direction * eps, x)
+    ) / (eps * 2.0)
     analyticDeriv = np.dot(direction, outputTransform.logJacDerivInput(input, x))
     assert_allclose(numericDeriv, analyticDeriv, atol = 1e-6, rtol = 1e-4)
 
