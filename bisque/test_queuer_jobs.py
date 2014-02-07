@@ -5,7 +5,7 @@ N.B. this has to be in a separate module and not in test_distribute due to the
   appropriate module) for objects defined in the currently-running script.
 """
 
-# Copyright 2011, 2012, 2013 Matt Shannon
+# Copyright 2011, 2012, 2013, 2014 Matt Shannon
 
 # This file is part of armspeech.
 # See `License` for details of license and warranty.

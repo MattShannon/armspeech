@@ -5,7 +5,7 @@ The standard numpy and scipy linalg routines both cope badly with
 routines to check for these special cases.
 """
 
-# Copyright 2011, 2012, 2013 Matt Shannon
+# Copyright 2011, 2012, 2013, 2014 Matt Shannon
 
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
