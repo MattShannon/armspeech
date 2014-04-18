@@ -30,7 +30,8 @@ def partitionSeq(xs, numPartitions):
     return out
 
 @codeDeps()
-def drawLabelledSeq(dataSeqs, labelSeqs, outPdf, figSizeRate = None,
+def drawLabelledSeq(dataSeqs, labelSeqs, outPdf,
+                    figSizeRate = None, figHeight = 6.0,
                     fillBetween = [], xmin = None, xmax = None, ylims = None,
                     xlabel = None, ylabel = None, legend = None,
                     lineStyles = None,
@@ -45,7 +46,10 @@ def drawLabelledSeq(dataSeqs, labelSeqs, outPdf, figSizeRate = None,
     if figSizeRate is None:
         fig = Figure()
     else:
-        fig = Figure(figsize = ((xmax - xmin) * figSizeRate, 6.0), dpi = 300.0)
+        fig = Figure(
+            figsize = ((xmax - xmin) * figSizeRate, figHeight),
+            dpi = 300.0
+        )
     ax = fig.add_subplot(1, 1, 1)
 
     for x, y1, y2 in fillBetween:
