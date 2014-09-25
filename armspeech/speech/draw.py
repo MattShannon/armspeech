@@ -35,7 +35,8 @@ def drawLabelledSeq(dataSeqs, labelSeqs, outPdf,
                     fillBetween = [], xmin = None, xmax = None, ylims = None,
                     xlabel = None, ylabel = None, legend = None,
                     lineStyles = None,
-                    labelColors = ['red', 'purple', 'orange', 'blue']):
+                    labelColors = ['red', 'purple', 'orange', 'blue'],
+                    tightLayout = False):
     if xmin is None:
         xmin = min([ dataSeq[0][0] for dataSeq in dataSeqs ] +
                    [ labelSeq[0][0] for labelSeq in labelSeqs ])
@@ -86,6 +87,11 @@ def drawLabelledSeq(dataSeqs, labelSeqs, outPdf,
         ax.set_ylabel(ylabel)
     if legend is not None:
         ax.legend(legend)
+
+    if tightLayout:
+        # (FIXME : this seems to produce a warning about falling back to
+        #   a different backend)
+        fig.tight_layout()
 
     canvas = FigureCanvas(fig)
     canvas.print_figure(outPdf)
