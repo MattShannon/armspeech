@@ -7,8 +7,6 @@ Transforms are essentially functions with learnable parameters."""
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-from __future__ import division
-
 import math
 import numpy as np
 
@@ -392,9 +390,9 @@ class Transform1D(Transform):
     def logJac(self, x):
         return math.log(abs(self.deriv(x)))
     def logJacDeriv(self, x):
-        return self.derivDeriv(x) / self.deriv(x)
+        return self.derivDeriv(x) * 1.0 / self.deriv(x)
     def logJacDerivParams(self, x):
-        return self.derivParamsDeriv(x) / self.deriv(x)
+        return self.derivParamsDeriv(x) * 1.0 / self.deriv(x)
     def inv(self, y, length = -100):
         # (FIXME : could consider different starting points (e.g. 0.0))
         def F(x):
@@ -462,7 +460,7 @@ class ScaledSinhTransform1D(Transform1D):
     def derivParamsDeriv(self, x):
         return np.array([2.0 * self.a * math.cosh(self.a * x) + self.a * self.a * x * math.sinh(self.a * x)])
     def inv(self, y):
-        return math.asinh(y / self.a) / self.a
+        return math.asinh(y * 1.0 / self.a) / self.a
 
 @codeDeps(ForwardRef(lambda: TanhTransform1D), Transform1D)
 class TanhTransformLogParam1D(Transform1D):
@@ -552,7 +550,7 @@ class TanhTransform1D(Transform1D):
             self.b * th * 2.0
         ])
     def inv(self, y):
-        return math.atanh(y / self.a) / self.b + self.c
+        return math.atanh(y * 1.0 / self.a) / self.b + self.c
 
 @codeDeps(Transform1D, parseConcat)
 class SumTransform1D(Transform1D):

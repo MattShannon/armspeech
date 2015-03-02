@@ -5,8 +5,6 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-from __future__ import division
-
 import math
 import numpy as np
 
@@ -196,8 +194,8 @@ def drawFor1DInput(debugAcc, subDist, outPdf, xlims, ylims, title = None,
     def subDrawPdfImage(ax, subDist, xlims, ylims, nx = 100, ny = 100):
         xmin, xmax = xlims
         ymin, ymax = ylims
-        dx = (xmax - xmin) / nx
-        dy = (ymax - ymin) / ny
+        dx = (xmax - xmin) * 1.0 / nx
+        dy = (ymax - ymin) * 1.0 / ny
         pdfValues = [ [ math.exp(subDist.logProb(np.array([x]), y))
                         for x in np.linspace(xmin, xmax, nx + 1) ]
                       for y in np.linspace(ymin, ymax, ny + 1) ]

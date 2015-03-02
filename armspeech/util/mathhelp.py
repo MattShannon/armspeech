@@ -5,8 +5,6 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-from __future__ import division
-
 import numpy as np
 import math
 import random
@@ -29,7 +27,7 @@ def assert_allclose(actual, desired, rtol = 1e-7, atol = 1e-14,
                              (msg, actual, desired))
     if not np.allclose(actual, desired, rtol, atol):
         absErr = np.abs(actual - desired)
-        relErr = np.abs((actual - desired) / desired)
+        relErr = np.abs((actual - desired) * 1.0 / desired)
         raise AssertionError('%s\n ACTUAL:  %r\n DESIRED: %r\n'
                              ' ABS ERR: %r (max %s)\n REL ERR: %r (max %s)' %
                              (msg, actual, desired,

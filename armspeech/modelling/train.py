@@ -20,8 +20,6 @@ in the functions below, and are not part of their return values.
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-from __future__ import division
-
 from codedep import codeDeps
 
 from armspeech.util.timing import timed

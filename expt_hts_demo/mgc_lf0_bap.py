@@ -10,8 +10,6 @@ third streams non-"multispace" vectors and second stream a 0/1-dimensional
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-from __future__ import division
-
 import numpy as np
 
 from codedep import codeDeps

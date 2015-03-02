@@ -5,8 +5,6 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-from __future__ import division
-
 import unittest
 import numpy as np
 import numpy.linalg as la
@@ -148,7 +146,7 @@ class TestMathHelp(unittest.TestCase):
             count = np.zeros(n)
             for _ in xrange(numSamples):
                 sample = mathhelp.sampleDiscrete(valueProbList)
-                count[sample] += 1
+                count[sample] += 1.0
             assert_allclose(count / numSamples, probs, rtol = 1e-2, atol = 1e-2)
 
     def test_reprArray(self, numPoints = 200):

@@ -5,8 +5,6 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-from __future__ import division
-
 import re
 
 from codedep import codeDeps
@@ -18,8 +16,8 @@ def readHtkLabFile(labFile, framePeriod, decode = lambda labelString: labelStrin
     alignment = []
     for line in open(labFile):
         startTicks, endTicks, labelString = line.strip().split()
-        startTime = int(int(startTicks) / divisor + 0.5)
-        endTime = int(int(endTicks) / divisor + 0.5)
+        startTime = int(int(startTicks) * 1.0 / divisor + 0.5)
+        endTime = int(int(endTicks) * 1.0 / divisor + 0.5)
         label = decode(labelString)
         alignment.append((startTime, endTime, label, None))
     return alignment
@@ -41,8 +39,8 @@ def readTwoLevelHtkLabFile(labFile, framePeriod, decodeHigh = lambda labelString
                 else:
                     raise RuntimeError(str(labFile)+' does not appear to be a valid two-level label file')
             startTicks, endTicks, lowString, = lineParts
-        startTime = int(int(startTicks) / divisor + 0.5)
-        endTime = int(int(endTicks) / divisor + 0.5)
+        startTime = int(int(startTicks) * 1.0 / divisor + 0.5)
+        endTime = int(int(endTicks) * 1.0 / divisor + 0.5)
         groupedLabels[-1][1].append((startTime, endTime, decodeLow(lowString), None))
     alignment = [ (subAlignment[0][0], subAlignment[-1][1], label, subAlignment) for label, subAlignment in groupedLabels ]
     return alignment

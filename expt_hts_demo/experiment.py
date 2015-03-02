@@ -5,8 +5,6 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-from __future__ import division
-
 import os
 import math
 import numpy as np
@@ -1355,7 +1353,7 @@ def doTransformSystem(synthOutDir, figOutDir, globalPhone = True, studentResidua
         xmin, xmax = corpus.mgcLims[outIndex]
         bins = np.linspace(xmin, xmax, numTanhTransforms + 1)
         binCentres = bins[:-1] + 0.5 * np.diff(bins)
-        width = (xmax - xmin) / numTanhTransforms / 2.0
+        width = (xmax - xmin) / 2.0 / numTanhTransforms
         tanhOutputTransforms = [ xf.TanhTransform1D(np.array([0.0, width, binCentre])) for binCentre in binCentres ]
         outputWarp = xf.SumTransform1D([xf.IdentityTransform()] + tanhOutputTransforms).withTag(('mgcOutputWarp', outIndex))
         mgcOutputTransform[outIndex] = xf.SimpleOutputTransform(outputWarp, checkDerivPositive1D = True).withTag(('mgcOutputTransform', outIndex))

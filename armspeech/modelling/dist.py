@@ -5,8 +5,6 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-from __future__ import division
-
 import logging
 import math
 import numpy as np
@@ -1909,11 +1907,11 @@ class LinearGaussian(TermDist):
 
     def logProbDerivInput(self, input, output):
         mean = np.dot(self.coeff, input)
-        return self.coeff * (output - mean) / self.variance
+        return self.coeff * (output - mean) * 1.0 / self.variance
 
     def logProbDerivOutput(self, input, output):
         mean = np.dot(self.coeff, input)
-        return -(output - mean) / self.variance
+        return -(output - mean) * 1.0 / self.variance
 
     def residual(self, input, output):
         mean = np.dot(self.coeff, input)
@@ -1993,11 +1991,11 @@ class LinearGaussianVec(TermDist):
 
     def logProbDerivInput(self, input, output):
         meanVec = np.sum(self.coeffVec * input.T, axis = 1)
-        return self.coeffVec.T * (output - meanVec) / self.varianceVec
+        return self.coeffVec.T * (output - meanVec) * 1.0 / self.varianceVec
 
     def logProbDerivOutput(self, input, output):
         meanVec = np.sum(self.coeffVec * input.T, axis = 1)
-        return -(output - meanVec) / self.varianceVec
+        return -(output - meanVec) * 1.0 / self.varianceVec
 
     def residualVec(self, input, output):
         meanVec = np.sum(self.coeffVec * input.T, axis = 1)
@@ -2080,7 +2078,7 @@ class GaussianVec(TermDist):
         return np.sum(lps)
 
     def logProbDerivOutput(self, input, output):
-        return -(output - self.meanVec) / self.varianceVec
+        return -(output - self.meanVec) * 1.0 / self.varianceVec
 
     def createAccSingle(self):
         return GaussianVecAcc(distPrev = self, tag = self.tag)
@@ -2143,7 +2141,7 @@ class StudentDist(TermDist):
 
     def logProb(self, input, output):
         assert np.shape(output) == ()
-        a = output * output * self.precision / self.df
+        a = output * output * self.precision * 1.0 / self.df
         return self.gConst - 0.5 * (self.df + 1.0) * math.log(1.0 + a)
 
     def logProbDerivInput(self, input, output):
@@ -2152,11 +2150,11 @@ class StudentDist(TermDist):
 
     def logProbDerivOutput(self, input, output):
         assert np.shape(output) == ()
-        a = output * output * self.precision / self.df
+        a = output * output * self.precision * 1.0 / self.df
         return -(self.df + 1.0) * output * self.precision / self.df / (1.0 + a)
 
     def logProbDerivParams(self, input, output):
-        a = output * output * self.precision / self.df
+        a = output * output * self.precision * 1.0 / self.df
         K = self.df - (1.0 + self.df) / (1.0 + a)
         return np.array([
             0.5 * K + 0.5 * self.df * (special.psi(0.5 * (self.df + 1.0)) +

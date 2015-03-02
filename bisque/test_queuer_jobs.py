@@ -10,8 +10,6 @@ N.B. this has to be in a separate module and not in test_distribute due to the
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-from __future__ import division
-
 from codedep import codeDeps
 
 from bisque import distribute

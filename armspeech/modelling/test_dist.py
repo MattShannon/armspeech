@@ -5,8 +5,6 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-from __future__ import division
-
 import unittest
 import logging
 from collections import deque
@@ -897,7 +895,7 @@ class TestDist(unittest.TestCase):
                     for i in xrange(n):
                         acc.add(i, i)
                     for i in acc.outputs:
-                        count[i] += 1
+                        count[i] += 1.0
                 # (FIXME : thresh hardcoded for 'its' value (and small n, k). Could compute instead.)
                 self.assertTrue(la.norm(count / its * n - k) <= 0.05 * n, msg = 'histogram '+repr(count / its)+' for (n, k) = '+repr((n, k)))
 
