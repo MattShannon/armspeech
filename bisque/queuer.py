@@ -1,6 +1,6 @@
 """Basic definitions for executing distributed computations."""
 
-# Copyright 2011, 2012, 2013, 2014 Matt Shannon
+# Copyright 2011, 2012, 2013, 2014, 2015 Matt Shannon
 
 # This file is part of armspeech.
 # See `License` for details of license and warranty.

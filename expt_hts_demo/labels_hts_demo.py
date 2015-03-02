@@ -1,6 +1,6 @@
 """Representation and I/O for HTS demo-style labels."""
 
-# Copyright 2011, 2012, 2013, 2014 Matt Shannon
+# Copyright 2011, 2012, 2013, 2014, 2015 Matt Shannon
 # The following copyrights may apply to the label format:
 #     Copyright 2001-2008 Nagoya Institute of Technology, Department of Computer Science
 #     Copyright 2001-2008 Tokyo Institute of Technology, Interdisciplinary Graduate School of Science and Engineering

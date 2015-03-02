@@ -15,7 +15,7 @@ occupancy). Special-cased values are used only internally and for logging output
 in the functions below, and are not part of their return values.
 """
 
-# Copyright 2011, 2012, 2013, 2014 Matt Shannon
+# Copyright 2011, 2012, 2013, 2014, 2015 Matt Shannon
 
 # This file is part of armspeech.
 # See `License` for details of license and warranty.

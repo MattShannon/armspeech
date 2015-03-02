@@ -1,6 +1,6 @@
 """CMU phoneset."""
 
-# Copyright 2011, 2012, 2013, 2014 Matt Shannon
+# Copyright 2011, 2012, 2013, 2014, 2015 Matt Shannon
 # The follow copyrights may apply to the list of phone subsets:
 #     Copyright 2001-2008 Nagoya Institute of Technology, Department of Computer Science
 #     Copyright 2001-2008 Tokyo Institute of Technology, Interdisciplinary Graduate School of Science and Engineering
