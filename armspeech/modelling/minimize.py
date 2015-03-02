@@ -6,17 +6,17 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-from codedep import codeDeps, ForwardRef
 
 import sys
 import logging
 import traceback
 from numpy import array, zeros, shape, dot, isnan, isinf, isreal, sqrt, finfo, double
-import armspeech.numpy_settings
 from numpy.random import randn
+
+from codedep import codeDeps, ForwardRef
+
+import armspeech.numpy_settings
 
 @codeDeps(ForwardRef(lambda: checkGradAt))
 def checkGrad(f, dim, drawInput = lambda dim: 2.0 * randn(dim), numPoints = 500, relTol = 1e-2, absTol = 1e-3):

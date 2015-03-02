@@ -5,11 +5,11 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
 
-from armspeech.util.mathhelp import logAdd, logSum
 from codedep import codeDeps
+
+from armspeech.util.mathhelp import logAdd, logSum
 
 # N.B. ldivide should be such that ring.times(a, ring.ldivide(a, b)) == b
 #   (so ldivide(a, b) == a^{-1} b if a is invertible)

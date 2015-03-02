@@ -5,17 +5,17 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-import wnet
-import semiring
-from armspeech.util.memoize import memoize
-from codedep import codeDeps
 
 import unittest
 import random
 from numpy.random import randn, randint
+
+from codedep import codeDeps
+
+from armspeech.util.memoize import memoize
+from armspeech.modelling import wnet
+from armspeech.modelling import semiring
 import armspeech.numpy_settings
 
 @codeDeps()

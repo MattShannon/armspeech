@@ -10,12 +10,12 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
 
-import armspeech.modelling.questions as ques
-from expt_hts_demo import labels_hts_demo
 from codedep import codeDeps
+import armspeech.modelling.questions as ques
+
+from expt_hts_demo import labels_hts_demo
 
 @codeDeps(ques.AttrLabelValuer, ques.getSubsetQuestions)
 def getSubsetQG(labelKey, namedSubsets):

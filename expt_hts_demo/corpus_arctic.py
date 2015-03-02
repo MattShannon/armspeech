@@ -9,18 +9,17 @@ that is produced by the HTS demo with STRAIGHT.
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
 
+import os
+
+from codedep import codeDeps, ForwardRef
 import armspeech.modelling.corpus as cps
 import armspeech.modelling.alignment as align
 import armspeech.speech.labels as lab
 import armspeech.speech.features as feat
 from armspeech.util import iterhelp
-from codedep import codeDeps, ForwardRef
 from armspeech.util.timing import timed
-
-import os
 
 @codeDeps(align.checkAlignment, ForwardRef(lambda: cleanAlignment), cps.Corpus,
     feat.Msd01Encoder, feat.Stream, feat.doHtsDemoWaveformGeneration,

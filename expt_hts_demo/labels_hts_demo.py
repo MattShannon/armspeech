@@ -8,14 +8,13 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-import armspeech.speech.labels as lab
-from codedep import codeDeps, codedepEvalThunk
 
 import re
 import collections
+
+from codedep import codeDeps, codedepEvalThunk
+import armspeech.speech.labels as lab
 
 @codeDeps()
 def getGposList():

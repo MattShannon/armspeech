@@ -5,29 +5,29 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-from armspeech.util.mathhelp import logSum, sigmoid, sampleDiscrete, reprArray
-import nodetree
-import semiring
-import wnet
-from armspeech.util.memoize import memoize
-from armspeech.util.mathhelp import assert_allclose
-from armspeech.util.util import orderedDictRepr
-from codedep import codeDeps, ForwardRef
 
 import logging
 import math
 import numpy as np
-import armspeech.numpy_settings
 import numpy.linalg as la
-import armspeech.util.mylinalg as mla
 from scipy import special
 import random
 from itertools import izip
-from armspeech.util.iterhelp import contextualizeIter
 from collections import deque
+
+from codedep import codeDeps, ForwardRef
+
+from armspeech.util.mathhelp import logSum, sigmoid, sampleDiscrete, reprArray
+from armspeech.util.memoize import memoize
+from armspeech.util.mathhelp import assert_allclose
+from armspeech.util.util import orderedDictRepr
+import armspeech.util.mylinalg as mla
+from armspeech.util.iterhelp import contextualizeIter
+from armspeech.modelling import nodetree
+from armspeech.modelling import semiring
+from armspeech.modelling import wnet
+import armspeech.numpy_settings
 
 # (FIXME : add more checks to validate Dists and Accs on creation (including
 #   checking for NaNs))

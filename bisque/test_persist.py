@@ -5,16 +5,16 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-import persist
-from filehelp import TempDir
-from codedep import codeDeps
 
 import unittest
 import cPickle as pickle
 import os
+
+from codedep import codeDeps
+
+from bisque import persist
+from bisque.filehelp import TempDir
 
 @codeDeps()
 class ShouldNotPickle(object):

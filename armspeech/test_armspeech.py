@@ -5,8 +5,13 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
+
+import unittest
+import sys
+import argparse
+
+from codedep import codeDeps
 
 from armspeech.modelling import test_dist
 from armspeech.modelling import test_minimize
@@ -16,11 +21,6 @@ from armspeech.modelling import test_modelling_jobs
 from armspeech.util import test_iterhelp
 from armspeech.util import test_mathhelp
 from armspeech.util import test_memoize
-from codedep import codeDeps
-
-import unittest
-import sys
-import argparse
 
 @codeDeps(test_dist.suite, test_iterhelp.suite, test_mathhelp.suite,
     test_memoize.suite, test_minimize.suite, test_modelling_jobs.suite,

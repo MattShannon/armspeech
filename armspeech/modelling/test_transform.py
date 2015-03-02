@@ -5,23 +5,22 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-import transform as xf
-from armspeech.util.mathhelp import logDet
-from armspeech.util.mathhelp import assert_allclose
-import cluster
-from codedep import codeDeps, ForwardRef
-
-import test_transform_questions
 
 import unittest
 import math
 import random
 import numpy as np
-import armspeech.numpy_settings
 from numpy.random import randn, randint
+
+from codedep import codeDeps, ForwardRef
+
+from armspeech.util.mathhelp import logDet
+from armspeech.util.mathhelp import assert_allclose
+import armspeech.modelling.transform as xf
+from armspeech.modelling import cluster
+from armspeech.modelling import test_transform_questions
+import armspeech.numpy_settings
 
 # FIXME : add explicit tests for transform_acc
 

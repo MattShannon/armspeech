@@ -5,25 +5,20 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
 
-# N.B. need to use absolute imports below
-#   (This is because otherwise when this module is run as a script, the pickled
-#   jobs don't contain the fully-qualified names for any modules imported below
-#   using implicit relative imports, which leads to problems when these jobs
-#   are unpickled to be run.)
+import unittest
+import logging
+import time
+
+from codedep import codeDeps
+
 from bisque import distribute
 import bisque.queuer as qr
 from bisque import sge_queuer
 from bisque.distribute import lift
 import bisque.test_queuer_jobs as jobs
 from bisque.filehelp import TempDir
-from codedep import codeDeps
-
-import unittest
-import logging
-import time
 
 @codeDeps(distribute.ThunkArtifact, jobs.AddJob, jobs.OneJob, jobs.getOne)
 def simpleTestDag():

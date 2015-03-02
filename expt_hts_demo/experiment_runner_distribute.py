@@ -7,17 +7,17 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-from expt_hts_demo import experiment
-from bisque import distribute
-import bisque.queuer as qr
-from bisque import sge_queuer
 
 import os
 import sys
 import time
+
+from bisque import distribute
+import bisque.queuer as qr
+from bisque import sge_queuer
+
+from expt_hts_demo import experiment
 
 def main(rawArgs):
     buildRepo = qr.BuildRepo(base = os.path.join('expt_hts_demo', 'repo'))

@@ -5,14 +5,13 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-import iterhelp
-from codedep import codeDeps
 
 import unittest
 import random
+import iterhelp
+
+from codedep import codeDeps
 
 @codeDeps()
 def gen_list(length):

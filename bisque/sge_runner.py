@@ -9,15 +9,14 @@ job failure.
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-from bisque.timing import timed
 
 import os
 import sys
 import traceback
 from datetime import datetime
+
+from bisque.timing import timed
 
 def main(args):
     import bisque.queuer as qr

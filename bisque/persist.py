@@ -5,15 +5,14 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-from codedep import codeDeps
 
 import os
 import cPickle as pickle
 import hashlib
 import tempfile
+
+from codedep import codeDeps
 
 @codeDeps()
 def loadPickle(location):

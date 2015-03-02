@@ -8,10 +8,7 @@ Uses multiple cores if available.
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-from codedep import codeDeps
 
 import os
 import logging
@@ -19,6 +16,8 @@ import subprocess
 import multiprocessing
 import socket
 from collections import defaultdict, deque
+
+from codedep import codeDeps
 
 @codeDeps()
 class RunServer(object):

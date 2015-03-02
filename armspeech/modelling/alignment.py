@@ -5,13 +5,13 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
 
-from armspeech.util.util import identityFn
+import sys
+
 from codedep import codeDeps
 
-import sys
+from armspeech.util.util import identityFn
 
 @codeDeps()
 def checkAlignment(alignment, startTimeReq = None, endTimeReq = None,

@@ -5,9 +5,16 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
 
+import os
+import math
+import numpy as np
+from collections import defaultdict
+
+from codedep import codeDeps
+from bisque import persist
+from bisque.distribute import liftLocal, lit, lift
 import armspeech.modelling.alignment as align
 from armspeech.modelling.alignment import StandardizeAlignment
 from armspeech.modelling import nodetree
@@ -25,21 +32,13 @@ from armspeech.util.util import getElem, ElemGetter, AttrGetter
 from armspeech.util.timing import timed, printTime
 from armspeech.modelling import jobs_corpus
 from armspeech.modelling import jobs_train
-from bisque import persist
-from bisque.distribute import liftLocal, lit, lift
-from codedep import codeDeps
-
-import phoneset_cmu
-import labels_hts_demo
-import questions_hts_demo
-import mgc_lf0_bap
-import corpus_arctic
-
-import os
-import math
-import numpy as np
 import armspeech.numpy_settings
-from collections import defaultdict
+
+from expt_hts_demo import phoneset_cmu
+from expt_hts_demo import labels_hts_demo
+from expt_hts_demo import questions_hts_demo
+from expt_hts_demo import mgc_lf0_bap
+from expt_hts_demo import corpus_arctic
 
 @codeDeps(d.AutoregressiveNetAcc, d.accNodeList, getElem,
     nodetree.findTaggedNodes, nodetree.nodeList

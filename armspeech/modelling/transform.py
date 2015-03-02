@@ -7,18 +7,18 @@ Transforms are essentially functions with learnable parameters."""
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-from armspeech.util.mathhelp import logDet, reprArray
-from minimize import solveByMinimize
-from armspeech.util.lazy import lazyproperty
-from codedep import codeDeps, ForwardRef
 
 import math
 import numpy as np
-import armspeech.numpy_settings
+
+from codedep import codeDeps, ForwardRef
+
+from armspeech.modelling.minimize import solveByMinimize
 import armspeech.util.mylinalg as mla
+from armspeech.util.mathhelp import logDet, reprArray
+from armspeech.util.lazy import lazyproperty
+import armspeech.numpy_settings
 
 # (FIXME : current parsing potentially involves _a lot_ of list copying.
 #   Refactor? (Probably never limiting factor in time or memory though.))
@@ -28,7 +28,7 @@ import armspeech.util.mylinalg as mla
 def eval_local(reprString):
     from numpy import array, zeros, dtype, float64
     # (for decision tree stuff in test_transform)
-    from questions import IdLabelValuer, SubsetQuestion
+    from armspeech.modelling.questions import IdLabelValuer, SubsetQuestion
 
     return eval(reprString)
 

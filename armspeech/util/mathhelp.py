@@ -5,15 +5,15 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
+
+import numpy as np
+import math
+import random
 
 from codedep import codeDeps
 
-import numpy as np
 import armspeech.numpy_settings
-import math
-import random
 
 @codeDeps()
 def getNegInf():

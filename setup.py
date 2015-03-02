@@ -6,7 +6,6 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from distutils.core import setup
 
 with open('README.markdown') as readmeFile:

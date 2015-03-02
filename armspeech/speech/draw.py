@@ -5,19 +5,19 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-import armspeech.modelling.dist as d
-from codedep import codeDeps
 
 import math
 import numpy as np
-import armspeech.numpy_settings
+
 from matplotlib.figure import Figure
 from matplotlib import cm
 from matplotlib import transforms
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from codedep import codeDeps
+
+import armspeech.modelling.dist as d
+import armspeech.numpy_settings
 
 # (FIXME : not sure that the matplotlib OO API is completely thread-safe.
 #   It is conceivable that we should really be using explicit locks below.)

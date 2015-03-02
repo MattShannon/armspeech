@@ -5,12 +5,11 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
 
-from codedep import codeDeps
-
 import unittest
+
+from codedep import codeDeps
 
 @codeDeps()
 class TestCorpus(unittest.TestCase):

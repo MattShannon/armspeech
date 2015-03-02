@@ -5,12 +5,12 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
 
-import armspeech.modelling.dist as d
-from bisque.distribute import liftLocal, lit, lift
 from codedep import codeDeps
+from bisque.distribute import liftLocal, lit, lift
+
+import armspeech.modelling.dist as d
 
 @codeDeps()
 def accumulate(distPrev, corpus, uttIds, createAcc):

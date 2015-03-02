@@ -8,18 +8,18 @@ Requires Sun Grid Engine `qsub` command to work on the local machine.
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-import queuer as qr
-import mock_sge
-from bisque import persist
-from codedep import codeDeps
 
 import re
 import os
 import sys
 import subprocess
+
+from codedep import codeDeps
+
+import bisque.queuer as qr
+from bisque import mock_sge
+from bisque import persist
 
 @codeDeps(qr.Queuer)
 class SgeQueuer(qr.Queuer):

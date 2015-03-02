@@ -7,16 +7,16 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-from expt_hts_demo import experiment
 
 import sys
 import tempfile
 import traceback
 import numpy as np
+
 import armspeech.numpy_settings
+
+from expt_hts_demo import experiment
 
 # (FIXME : could change this to 'raise' if we extensively test all experiments
 #   to make sure they never fail incorrectly with this setting)

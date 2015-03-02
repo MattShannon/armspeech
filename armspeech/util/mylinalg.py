@@ -10,15 +10,15 @@ routines to check for these special cases.
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
+
+import numpy as np
+import numpy.linalg as la
+import scipy.linalg as sla
 
 from codedep import codeDeps
 
-import numpy as np
 import armspeech.numpy_settings
-import numpy.linalg as la
-import scipy.linalg as sla
 
 @codeDeps()
 def inv(*args, **kwargs):

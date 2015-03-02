@@ -5,26 +5,7 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-import nodetree
-import dist as d
-import train as trn
-import summarizer
-import transform as xf
-import cluster
-import wnet
-from armspeech.util.mathhelp import logSum
-from armspeech.util.iterhelp import chunkList
-from armspeech.util.mathhelp import assert_allclose
-from armspeech.util.mathhelp import AsArray
-from armspeech.util.util import MapElem
-from bisque import persist
-from codedep import codeDeps, ForwardRef
-
-import test_transform_questions
-import test_transform
 
 import unittest
 import logging
@@ -32,12 +13,30 @@ from collections import deque
 import math
 import random
 import numpy as np
-import armspeech.numpy_settings
 from numpy.random import randn, randint
 import numpy.linalg as la
 from scipy import stats
 import cPickle as pickle
 import string
+
+from codedep import codeDeps, ForwardRef
+from bisque import persist
+
+from armspeech.modelling import nodetree
+import armspeech.modelling.dist as d
+import armspeech.modelling.train as trn
+from armspeech.modelling import summarizer
+import armspeech.modelling.transform as xf
+from armspeech.modelling import cluster
+from armspeech.modelling import wnet
+from armspeech.util.mathhelp import logSum
+from armspeech.util.iterhelp import chunkList
+from armspeech.util.mathhelp import assert_allclose
+from armspeech.util.mathhelp import AsArray
+from armspeech.util.util import MapElem
+from armspeech.modelling import test_transform_questions
+from armspeech.modelling import test_transform
+import armspeech.numpy_settings
 
 @codeDeps()
 def randBool():

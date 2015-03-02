@@ -5,20 +5,20 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-from codedep import codeDeps
 
 import os
 import logging
 import struct
 import math
 import numpy as np
-import armspeech.numpy_settings
 import numpy.linalg as la
 import itertools
 import subprocess
+
+from codedep import codeDeps
+
+import armspeech.numpy_settings
 
 @codeDeps()
 def getMcdConstant():

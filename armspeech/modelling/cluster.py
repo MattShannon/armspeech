@@ -5,20 +5,20 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
-import dist as d
-import transform as xf
-from armspeech.util.util import MapElem
-from armspeech.util.mathhelp import ThreshMax
-from armspeech.util.mathhelp import assert_allclose
-from armspeech.util.timing import timed
-from codedep import codeDeps
-
 import logging
 import math
 from collections import defaultdict
 import itertools
 import heapq
+
+from codedep import codeDeps
+
+import armspeech.modelling.dist as d
+import armspeech.modelling.transform as xf
+from armspeech.util.util import MapElem
+from armspeech.util.mathhelp import ThreshMax
+from armspeech.util.mathhelp import assert_allclose
+from armspeech.util.timing import timed
 
 @codeDeps()
 def partitionLabels(labels, fullQuestion):

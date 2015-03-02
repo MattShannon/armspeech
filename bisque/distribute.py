@@ -5,14 +5,14 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
 
+import os
+
 import codedep
-from bisque import persist
 from codedep import codeDeps, ForwardRef
 
-import os
+from bisque import persist
 
 @codeDeps(ForwardRef(lambda: ancestors))
 class DagNode(object):

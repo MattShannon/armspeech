@@ -3,13 +3,12 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-from codedep import codeDeps
 
 from datetime import datetime
 import time
+
+from codedep import codeDeps
 
 @codeDeps()
 def printTime(msg):

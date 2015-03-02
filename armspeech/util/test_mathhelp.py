@@ -5,20 +5,20 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-import mathhelp
-from mathhelp import ThreshMax
-from armspeech.util.mathhelp import assert_allclose
-from codedep import codeDeps
 
 import unittest
 import numpy as np
-import armspeech.numpy_settings
 import numpy.linalg as la
 import random
 from numpy.random import randn, randint
+
+from codedep import codeDeps
+
+from armspeech.util import mathhelp
+from armspeech.util.mathhelp import ThreshMax
+from armspeech.util.mathhelp import assert_allclose
+import armspeech.numpy_settings
 
 @codeDeps()
 def randBool():

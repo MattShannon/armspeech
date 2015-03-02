@@ -20,14 +20,14 @@ in the functions below, and are not part of their return values.
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
 
-import nodetree
-import dist as d
-from minimize import minimize
-from armspeech.util.timing import timed
 from codedep import codeDeps
+
+from armspeech.util.timing import timed
+from armspeech.modelling import nodetree
+import armspeech.modelling.dist as d
+from armspeech.modelling.minimize import minimize
 
 @codeDeps(d.Rat, d.getDefaultCreateAcc, d.getDefaultEstimateTotAux)
 def expectationMaximization(distPrev, accumulate, createAcc = d.getDefaultCreateAcc(), estimateTotAux = d.getDefaultEstimateTotAux(), afterAcc = None, monotoneAux = True, verbosity = 0):

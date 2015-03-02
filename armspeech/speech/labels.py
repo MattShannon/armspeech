@@ -5,12 +5,11 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
 
-from codedep import codeDeps
-
 import re
+
+from codedep import codeDeps
 
 @codeDeps()
 def readHtkLabFile(labFile, framePeriod, decode = lambda labelString: labelString):

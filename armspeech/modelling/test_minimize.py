@@ -5,17 +5,17 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-from minimize import checkGrad, solveToMinimize, solveByMinimize
-from codedep import codeDeps
 
 import unittest
 import numpy as np
-import armspeech.numpy_settings
 from numpy.random import randn, randint
 import numpy.linalg as la
+
+from codedep import codeDeps
+
+from armspeech.modelling.minimize import checkGrad, solveToMinimize, solveByMinimize
+import armspeech.numpy_settings
 
 # FIXME : add tests for other minimize.py stuff (some manual tests currently exist in other files?)
 

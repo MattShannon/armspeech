@@ -5,16 +5,16 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-from bisque import test_queuer
-from bisque import test_persist
-from codedep import codeDeps
 
 import unittest
 import sys
 import argparse
+
+from codedep import codeDeps
+
+from bisque import test_queuer
+from bisque import test_persist
 
 @codeDeps()
 class ShouldNotPickle(object):

@@ -5,16 +5,16 @@
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-
 from __future__ import division
-
-from bisque import persist
-from codedep import codeDeps, ForwardRef
 
 import os
 import random
 import tempfile
 import time
+
+from codedep import codeDeps, ForwardRef
+
+from bisque import persist
 
 # (FIXME : presumably there are lots of race issues w.r.t. artifact and job
 #   writing and updating status on disk, both below and perhaps elsewhere in
