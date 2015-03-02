@@ -1252,7 +1252,7 @@ def testBinaryLogisticClassifier():
 # (N.B. not a unit test. Just draws pictures to help you assess whether results seem reasonable.)
 @codeDeps(gen_BinaryLogisticClassifier, logProb_occ, trn.trainEM)
 def testBinaryLogisticClassifierFunGraph():
-    import pylab
+    import matplotlib.pyplot as plt
 
     def location(blc):
         coeff = blc.coeff
@@ -1293,17 +1293,17 @@ def testBinaryLogisticClassifierFunGraph():
         xBdy, yBdy = zip(*[bdyPoint - 5 * dir, bdyPoint + 5 * dir])
         xBdy0, yBdy0 = zip(*[bdyPoint - normal / mag - 5 * dir, bdyPoint - normal / mag + 5 * dir])
         xBdy1, yBdy1 = zip(*[bdyPoint + normal / mag - 5 * dir, bdyPoint + normal / mag + 5 * dir])
-        pylab.plot(xBdy, yBdy, 'k-', xBdy0, yBdy0, 'r-', xBdy1, yBdy1, 'b-')
+        plt.plot(xBdy, yBdy, 'k-', xBdy0, yBdy0, 'r-', xBdy1, yBdy1, 'b-')
 
     def plotData():
         x0, y0 = zip(*[ input[:-1] for input, output in trainData if output == 0 ])
         x1, y1 = zip(*[ input[:-1] for input, output in trainData if output == 1 ])
-        pylab.plot(x0, y0, 'r+', x1, y1, 'bx')
-        pylab.xlim(-3.5, 3.5)
-        pylab.ylim(-3.5, 3.5)
-        pylab.xlabel('x')
-        pylab.ylabel('y')
-        pylab.grid(True)
+        plt.plot(x0, y0, 'r+', x1, y1, 'bx')
+        plt.xlim(-3.5, 3.5)
+        plt.ylim(-3.5, 3.5)
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.grid(True)
 
     def afterEst(dist, it):
         plotBdy(dist)
@@ -1317,12 +1317,12 @@ def testBinaryLogisticClassifierFunGraph():
     trainLogProb, trainOcc = logProb_occ(blc, trainData)
     print 'train set log prob = %s (%s frames)' % (trainLogProb / trainOcc, trainOcc)
 
-    pylab.show()
+    plt.show()
 
 # (N.B. not a unit test. Just draws pictures to help you assess whether results seem reasonable.)
 @codeDeps(d.LinearGaussianAcc, d.estimateInitialMixtureOfTwoExperts)
 def testMixtureOfTwoExpertsInitialization():
-    import pylab
+    import matplotlib.pyplot as plt
 
     def location(blc):
         coeff = blc.coeff
@@ -1363,14 +1363,14 @@ def testMixtureOfTwoExpertsInitialization():
         xBdy0, yBdy0 = zip(*[bdyPoint - normal / mag - 5 * dir, bdyPoint - normal / mag + 5 * dir])
         xBdy1, yBdy1 = zip(*[bdyPoint + normal / mag - 5 * dir, bdyPoint + normal / mag + 5 * dir])
         xDir, yDir = zip(*[bdyPoint - 5 * normal, bdyPoint + 5 * normal])
-        pylab.plot(xBdy, yBdy, 'k-', xBdy0, yBdy0, 'r-', xBdy1, yBdy1, 'b-', xDir, yDir, 'g-')
+        plt.plot(xBdy, yBdy, 'k-', xBdy0, yBdy0, 'r-', xBdy1, yBdy1, 'b-', xDir, yDir, 'g-')
 
     def plotData():
         x, y = zip(*[ input[:-1] for input, output in trainData ])
-        pylab.plot(x, y, 'r+')
-        pylab.xlabel('x')
-        pylab.ylabel('y')
-        pylab.grid(True)
+        plt.plot(x, y, 'r+')
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.grid(True)
 
     plotData()
 
@@ -1381,9 +1381,9 @@ def testMixtureOfTwoExpertsInitialization():
     plotBdy(blc)
     print 'DEBUG: w estimated final =', blc.coeff
 
-    pylab.xlim(-10.0, 10.0)
-    pylab.ylim(-10.0, 10.0)
-    pylab.show()
+    plt.xlim(-10.0, 10.0)
+    plt.ylim(-10.0, 10.0)
+    plt.show()
 
 @codeDeps(TestDist)
 def suite(deepTest = False):
