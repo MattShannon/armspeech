@@ -1757,7 +1757,6 @@ class AutoregressiveNetAcc(Acc):
                                         tag = self.tag)
         return distNew, (self.entropy, Rat.LowerBound)
 
-
 @codeDeps(SynthMethod)
 class Dist(object):
     """Conditional probability distribution."""

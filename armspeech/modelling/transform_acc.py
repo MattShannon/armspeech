@@ -47,7 +47,6 @@ class DerivInputTransformAccG(TransformAccG):
     def derivParamsSingle(self):
         return self.derivParams
 
-
 @codeDeps(d.AccG)
 class OutputTransformAccG(d.AccG):
     pass
