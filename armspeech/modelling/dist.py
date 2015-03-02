@@ -31,19 +31,20 @@ import armspeech.numpy_settings
 #   checking for NaNs))
 
 def eval_local(reprString):
-    # (FIXME : the contents of test_dist affects what must be included here)
-    from questions import IdLabelValuer, SubsetQuestion
-    from summarizer import VectorSeqSummarizer
-    from transform import AddBias, ConstantTransform, IdentityTransform
-    from transform import LinearTransform, ShiftOutputTransform
-    from transform import VectorizeTransform, DotProductTransform
-    from transform import PolynomialTransform1D
-    from transform import DecisionTree
-    from wnet import ConcreteNet
+    from numpy import array, zeros, dtype, eye, float64, Inf, inf
+
+    # (FIXME : the contents of armspeech.modelling.test_dist affects what must
+    #   be included here)
+    from armspeech.modelling.questions import IdLabelValuer, SubsetQuestion
+    from armspeech.modelling.summarizer import VectorSeqSummarizer
+    from armspeech.modelling.transform import (
+        AddBias, ConstantTransform, IdentityTransform, LinearTransform,
+        ShiftOutputTransform, VectorizeTransform, DotProductTransform,
+        PolynomialTransform1D, DecisionTree
+    )
+    from armspeech.modelling.wnet import ConcreteNet
     from armspeech.util.mathhelp import AsArray
     from armspeech.util.util import MapElem
-
-    from numpy import array, zeros, dtype, eye, float64, Inf, inf
 
     return eval(reprString)
 

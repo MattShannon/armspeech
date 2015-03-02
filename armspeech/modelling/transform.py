@@ -57,7 +57,7 @@ class Transform(object):
         return self
     def createAccG(self, createAccChild):
         # (FIXME : ugly import!)
-        import transform_acc as xfa
+        import armspeech.modelling.transform_acc as xfa
         return xfa.DerivInputTransformAccG(inputTransform = self, tag = self.tag)
     def paramsSingle(self):
         return self.params
@@ -595,7 +595,7 @@ class OutputTransform(object):
         return self
     def createAccG(self, createAccChild):
         # (FIXME : ugly import!)
-        import transform_acc as xfa
+        import armspeech.modelling.transform_acc as xfa
         return xfa.DerivOutputTransformAccG(outputTransform = self, tag = self.tag)
     def paramsSingle(self):
         return self.params

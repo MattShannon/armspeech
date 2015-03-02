@@ -7,22 +7,23 @@
 
 import unittest
 import random
-import iterhelp
 
 from codedep import codeDeps
+
+import armspeech.util.iterhelp as ih
 
 @codeDeps()
 def gen_list(length):
     return [ random.choice('ABCDEFGHIJKLM') for i in range(length) ]
 
-@codeDeps(gen_list, iterhelp.chunkList)
+@codeDeps(gen_list, ih.chunkList)
 class TestIterHelp(unittest.TestCase):
     def test_chunkList(self, its = 100):
         for it in range(its):
             length = random.randint(0, 20)
             numChunks = random.randint(1, 20)
             xs = gen_list(length)
-            chunks = iterhelp.chunkList(xs, numChunks)
+            chunks = ih.chunkList(xs, numChunks)
             assert len(chunks) == numChunks
             # chunks should partition the original list
             assert [ x for chunk in chunks for x in chunk ] == xs
