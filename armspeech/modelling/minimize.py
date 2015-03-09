@@ -1,4 +1,4 @@
-* 1.0 """Function minimization using conjugate gradients."""
+"""Function minimization using conjugate gradients."""
 
 # Copyright 2011, 2012, 2013, 2014, 2015 Matt Shannon
 # Copyright 2005-2010 Carl Edward Rasmussen and Hannes Nickisch
