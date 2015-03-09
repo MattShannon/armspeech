@@ -12,9 +12,10 @@ that is produced by the HTS demo with STRAIGHT.
 import os
 
 from codedep import codeDeps, ForwardRef
+from htk_io.base import DirReader
+import htk_io.alignment as alio
 import armspeech.modelling.corpus as cps
 import armspeech.modelling.alignment as align
-import armspeech.speech.labels as lab
 import armspeech.speech.features as feat
 from armspeech.util import iterhelp
 from armspeech.util.timing import timed
@@ -22,8 +23,7 @@ from armspeech.util.timing import timed
 @codeDeps(align.checkAlignment, ForwardRef(lambda: cleanAlignment), cps.Corpus,
     feat.Msd01Encoder, feat.Stream, feat.doHtsDemoWaveformGeneration,
     feat.readAcousticGen, feat.writeAcousticSeq,
-    ForwardRef(lambda: getMgcLims40), lab.readHtkLabFile,
-    lab.readTwoLevelHtkLabFile, timed
+    ForwardRef(lambda: getMgcLims40), timed
 )
 class ArcticCorpus(cps.Corpus):
     def __init__(self, trainUttIds, testUttIds, synthUttIds, dataDir, labDir, scriptsDir, parseLabel, subLabels, mgcOrder, framePeriod):
@@ -47,6 +47,18 @@ class ArcticCorpus(cps.Corpus):
         bapStream = feat.Stream('bap', self.bapOrder)
         self.streams = [mgcStream, lf0Stream, bapStream]
 
+        alignmentIo = alio.AlignmentIo(self.framePeriod)
+        if self.subLabels is not None:
+            transform = alio.AlignmentLabelTransform(
+                [self.parseLabel, self.parseSubLabel]
+            )
+        else:
+            transform = alio.AlignmentLabelTransform([self.parseLabel])
+        self.getAlignment = DirReader(
+            alignmentIo, self.labDir, 'lab',
+            transform=transform
+        )
+
         # (FIXME : this should not be part of corpus?)
         self.mgcLims = getMgcLims40()
 
@@ -57,21 +69,6 @@ class ArcticCorpus(cps.Corpus):
         assert subLabel in self.subLabelSet
         return subLabel
 
-    def rawAlignment(self, uttId):
-        if self.subLabels is not None:
-            return lab.readTwoLevelHtkLabFile(
-                os.path.join(self.labDir, uttId+'.lab'),
-                self.framePeriod,
-                decodeHigh = self.parseLabel,
-                decodeLow = self.parseSubLabel,
-            )
-        else:
-            return lab.readHtkLabFile(
-                os.path.join(self.labDir, uttId+'.lab'),
-                self.framePeriod,
-                decode = self.parseLabel,
-            )
-
     def rawAcousticSeq(self, uttId):
         return list(feat.readAcousticGen(
             self.streams,
@@ -79,7 +76,7 @@ class ArcticCorpus(cps.Corpus):
         ))
 
     def data(self, uttId):
-        alignment = self.rawAlignment(uttId)
+        alignment = self.getAlignment(uttId)
         acousticSeq = self.rawAcousticSeq(uttId)
         alignment = cleanAlignment(alignment, acousticSeq, verbose = False)
         align.checkAlignment(alignment)

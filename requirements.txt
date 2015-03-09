@@ -2,3 +2,4 @@ numpy>=1.6.1
 scipy>=0.9.0
 matplotlib>=1.1.0
 codedep>=0.3
+htk_io>=0.2
