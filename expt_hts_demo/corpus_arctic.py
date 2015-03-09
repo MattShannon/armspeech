@@ -14,6 +14,7 @@ import os
 from codedep import codeDeps, ForwardRef
 from htk_io.base import DirReader
 import htk_io.alignment as alio
+import htk_io.vecseq as vsio
 import armspeech.modelling.corpus as cps
 import armspeech.modelling.alignment as align
 import armspeech.speech.features as feat
@@ -21,9 +22,8 @@ from armspeech.util import iterhelp
 from armspeech.util.timing import timed
 
 @codeDeps(align.checkAlignment, ForwardRef(lambda: cleanAlignment), cps.Corpus,
-    feat.Msd01Encoder, feat.Stream, feat.doHtsDemoWaveformGeneration,
-    feat.readAcousticGen, feat.writeAcousticSeq,
-    ForwardRef(lambda: getMgcLims40), timed
+    feat.AcousticSeqIo, feat.Msd01Encoder, feat.Stream,
+    feat.doHtsDemoWaveformGeneration, ForwardRef(lambda: getMgcLims40), timed
 )
 class ArcticCorpus(cps.Corpus):
     def __init__(self, trainUttIds, testUttIds, synthUttIds, dataDir, labDir, scriptsDir, parseLabel, subLabels, mgcOrder, framePeriod):
@@ -59,6 +59,13 @@ class ArcticCorpus(cps.Corpus):
             transform=transform
         )
 
+        self.acousticSeqIo = feat.AcousticSeqIo(
+            self.dataDir,
+            [ vsio.VecSeqIo(stream.order) for stream in self.streams ],
+            [ stream.name for stream in self.streams ],
+            [ stream.encoder for stream in self.streams ],
+        )
+
         # (FIXME : this should not be part of corpus?)
         self.mgcLims = getMgcLims40()
 
@@ -69,15 +76,9 @@ class ArcticCorpus(cps.Corpus):
         assert subLabel in self.subLabelSet
         return subLabel
 
-    def rawAcousticSeq(self, uttId):
-        return list(feat.readAcousticGen(
-            self.streams,
-            lambda stream: os.path.join(self.dataDir, uttId+'.'+stream.name)
-        ))
-
     def data(self, uttId):
         alignment = self.getAlignment(uttId)
-        acousticSeq = self.rawAcousticSeq(uttId)
+        acousticSeq = self.acousticSeqIo.readFiles(uttId)
         alignment = cleanAlignment(alignment, acousticSeq, verbose = False)
         align.checkAlignment(alignment)
         assert alignment[0][0] == 0
@@ -96,17 +97,22 @@ class ArcticCorpus(cps.Corpus):
 
     # (FIXME : this should not be part of corpus?)
     def synthComplete(self, dist, uttIds, method, synthOutDir, exptTag, afterSynth = None, verbosity = 1):
+        synthAcousticSeqIo = feat.AcousticSeqIo(
+            synthOutDir,
+            [ vsio.VecSeqIo(stream.order) for stream in self.streams ],
+            [ '%s.%s' % (exptTag, stream.name) for stream in self.streams ],
+            [ stream.encoder for stream in self.streams ],
+        )
+
         if verbosity >= 1:
             print 'synth: synthesizing to', synthOutDir, 'with tag', exptTag
+
         for uttId in uttIds:
             synthOutput = self.synth(dist, uttId, method)
             if afterSynth is not None:
                 afterSynth(synthOutput = synthOutput, uttId = uttId, exptTag = exptTag)
-            feat.writeAcousticSeq(
-                synthOutput,
-                self.streams,
-                lambda stream: os.path.join(synthOutDir, uttId+'.'+exptTag+'.'+stream.name)
-            )
+            synthAcousticSeqIo.writeFiles(uttId, synthOutput)
+
         (timed(feat.doHtsDemoWaveformGeneration) if verbosity >= 1 else feat.doHtsDemoWaveformGeneration)(
             self.scriptsDir,
             synthOutDir,
