@@ -19,12 +19,9 @@ setup(
     author = 'Matt Shannon',
     author_email = 'matt.shannon@cantab.net',
     license = 'various open source licenses (see License file)',
-    packages = ['bisque', 'armspeech', 'armspeech.modelling', 'armspeech.speech', 'armspeech.util'],
+    packages = ['bisque', 'armspeech', 'expt_hts_demo'],
     # (there are some scripts in the bin directory, but none of them are
     #   suitable for system-wide installation)
     scripts = [],
-    # (not actually used for anything with distutils!)
-    requires = ['numpy', 'scipy', 'matplotlib', 'codedep (>=0.3)'],
-    provides = ['bisque', 'armspeech'],
     long_description = long_description,
 )
