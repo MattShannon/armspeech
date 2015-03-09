@@ -14,11 +14,10 @@ import sys
 import traceback
 from datetime import datetime
 
-from bisque.timing import timed
-
 def main(args):
     import bisque.queuer as qr
     from bisque import persist
+    from bisque.timing import timed
 
     assert len(args) == 2
     liveJobDir = args[1]
