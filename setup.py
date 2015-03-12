@@ -1,15 +1,17 @@
 #!/usr/bin/python
-"""A distutils-based script for distributing and installing armspeech."""
+"""A setuptools-based script for distributing and installing armspeech."""
 
 # Copyright 2011, 2012, 2013, 2014, 2015 Matt Shannon
 
 # This file is part of armspeech.
 # See `License` for details of license and warranty.
 
-from distutils.core import setup
+from setuptools import setup
 
 with open('README.markdown') as readmeFile:
     long_description = readmeFile.read()
+
+requires = [ line.rstrip('\n') for line in open('requirements.txt') ]
 
 setup(
     name = 'armspeech',
@@ -20,6 +22,7 @@ setup(
     author_email = 'matt.shannon@cantab.net',
     license = 'various open source licenses (see License file)',
     packages = ['bisque', 'armspeech', 'expt_hts_demo'],
+    install_requires = requires,
     # (there are some scripts in the bin directory, but none of them are
     #   suitable for system-wide installation)
     scripts = [],
