@@ -1,5 +1,6 @@
 include License
 include README.markdown
+include requirements.txt
 include bin/*
 include scripts/*
 include expt_hts_demo/*.py
